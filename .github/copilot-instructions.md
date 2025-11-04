@@ -49,7 +49,7 @@ This document defines how AI agents and contributors should work in our monorepo
 1. **Framework & Configuration**
    - **Test runner**: Vitest 4.0.6 with Node.js environment
    - **Globals enabled**: `describe`, `it`, `expect` are available without imports
-   - **Coverage provider**: V8 with thresholds set to 80% (lines, functions, branches, statements)
+   - **Coverage provider**: V8 with thresholds set to 70% (lines, functions, branches, statements)
    - **Test pattern**: `tests/**/*.test.ts`
    - **Timeouts**: 10 seconds for tests and hooks
    - Do not add inline Vitest env comments (e.g. `@vitest-environment node`).
