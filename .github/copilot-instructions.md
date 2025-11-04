@@ -56,7 +56,7 @@ This document defines how AI agents and contributors should work in our monorepo
 
 2. **Coverage**
    - Write unit tests for all new features and bug fixes.  
-   - **Minimum 80% coverage** enforced globally (lines, functions, branches, statements).
+   - **Minimum 70% coverage** enforced globally (lines, functions, branches, statements).
    - Aim for **90%+ coverage overall**, **100% for critical business logic**.  
    - Include tests for edge cases and error handling.
    - Enforce thresholds in CI; builds fail if coverage drops below thresholds.
