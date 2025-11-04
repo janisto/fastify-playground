@@ -1,0 +1,51 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.3/schema.json",
+  "root": true,
+  "formatter": {
+    "lineWidth": 150,
+    "formatWithErrors": true,
+    "useEditorconfig": true
+  },
+  "linter": {
+    "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "warn",
+        "noForEach": "off"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "warn",
+        "noUnusedFunctionParameters": "off",
+        "useImportExtensions": {
+          "level": "error",
+          "options": {
+            "forceJsExtensions": true
+          }
+        }
+      },
+      "style": {
+        "noNonNullAssertion": "warn",
+        "useConst": "error",
+        "useTemplate": "error",
+        "useImportType": "error",
+        "useFilenamingConvention": "off",
+        "useNodejsImportProtocol": "error"
+      },
+      "suspicious": {
+        "noDebugger": "error",
+        "noExplicitAny": "warn"
+      },
+      "performance": {
+        "noAccumulatingSpread": "warn"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    },
+    "globals": ["console", "process", "Buffer", "setTimeout", "setInterval", "clearTimeout", "clearInterval"]
+  }
+}
