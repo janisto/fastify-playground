@@ -1,0 +1,67 @@
+name: Run app unit tests and upload coverage report
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/ci-app.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/ci-app.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          cache-dependency-path: "app/package-lock.json"
+          node-version: 24
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run build check
+        run: npm run build:check
+
+      - name: Run tests
+        run: npm run test:coverage
+
+      - name: Report coverage summary
+        if: always()
+        uses: davelosert/vitest-coverage-report-action@v2
+        with:
+          # Search for coverage files inside the app package
+          working-directory: app
+          # Give this report a distinct name so multiple suites don't conflict
+          name: app
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-coverage
+          path: app/coverage

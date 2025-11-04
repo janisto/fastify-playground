@@ -1,0 +1,42 @@
+{
+	"eslint.enable": false,
+	"eslint.format.enable": false,
+	"jest.enable": false,
+	"prettier.requireConfig": true,
+	"editor.rulers": [150],
+	"javascript.preferences.importModuleSpecifierEnding": "js",
+	"typescript.preferences.importModuleSpecifierEnding": "js",
+	"biome.requireConfiguration": true,
+	"editor.formatOnSave": true,
+	"editor.defaultFormatter": "biomejs.biome",
+	"editor.codeActionsOnSave": {
+		"source.organizeImports.biome": "explicit",
+		"source.biome.useSortedKeys": "never",
+		"source.fixAll.biome": "explicit"
+	},
+	"[javascript]": {
+		"editor.defaultFormatter": "biomejs.biome",
+		"editor.codeActionsOnSave": {
+			"source.biome.useSortedKeys": "never"
+		}
+	},
+	"[typescript]": {
+		"editor.defaultFormatter": "biomejs.biome",
+		"editor.codeActionsOnSave": {
+			"source.biome.useSortedKeys": "never"
+		}
+	},
+	"[json]": {
+		"editor.defaultFormatter": "biomejs.biome",
+		"editor.codeActionsOnSave": {
+			"source.biome.useSortedKeys": "never"
+		}
+	},
+	"github.copilot.chat.codeGeneration.useInstructionFiles": true,
+	"github.copilot.nextEditSuggestions.enabled": true,
+	"github.copilot.chat.agent.thinkingTool": true,
+	"chat.mcp.autostart": "newAndOutdated",
+	"chat.agent.enabled": true,
+	"github.copilot.chat.languageContext.typescript.enabled": true,
+	"github.copilot.chat.languageContext.fix.typescript.enabled": true
+}

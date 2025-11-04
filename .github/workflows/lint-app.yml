@@ -1,0 +1,38 @@
+name: App code quality (linting and formatting)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "app/**"
+      - ".github/workflows/lint-app.yml"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "app/**"
+      - ".github/workflows/lint-app.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Biome
+        uses: biomejs/setup-biome@v2
+
+      - name: Run Biome
+        run: biome ci .
