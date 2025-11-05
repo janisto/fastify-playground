@@ -1,70 +1,70 @@
 {
-  "name": "fastify-playground",
-  "author": "Jani Mikkonen",
-  "version": "1.0.0",
-  "description": "A REST API built with Fastify and TypeScript.",
-  "type": "module",
-  "main": "dist/app.js",
-  "private": true,
-  "engines": {
-    "node": "24"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/janisto/fastify-playground.git"
-  },
-  "bugs": {
-    "url": "https://github.com/janisto/fastify-playground/issues"
-  },
-  "license": "MIT",
-  "keywords": [
-    "api",
-    "fastify",
-    "typescript",
-    "rest",
-    "firebase",
-    "openapi"
-  ],
-  "scripts": {
-    "dev": "tsx --watch src/app.ts",
-    "serve": "firebase emulators:start --only apphosting,firestore",
-    "start": "npm run build && fastify start -l info dist/app.js",
-    "deploy": "firebase deploy --only apphosting",
-    "build": "tsc",
-    "build:watch": "tsc --watch",
-    "build:check": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run tests/unit --coverage",
-    "check": "biome check .",
-    "check:fix": "biome check --write .",
-    "lint": "biome lint .",
-    "lint:fix": "biome lint --write .",
-    "format": "biome format .",
-    "format:fix": "biome format --write ."
-  },
-  "dependencies": {
-    "@fastify/autoload": "^6.3.1",
-    "@fastify/cors": "^11.1.0",
-    "@fastify/helmet": "^13.0.2",
-    "@fastify/jwt": "^10.0.0",
-    "@fastify/request-context": "^6.2.1",
-    "@fastify/sensible": "^6.0.3",
-    "@fastify/swagger": "^9.5.2",
-    "@fastify/swagger-ui": "^5.2.3",
-    "fastify": "^5.6.1",
-    "fastify-cli": "^7.4.0",
-    "firebase-admin": "^13.5.0",
-    "undici": "^7.16.0"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.3.3",
-    "@types/node": "^24.10.0",
-    "@vitest/coverage-v8": "^4.0.7",
-    "fastify-tsconfig": "^3.0.0",
-    "msw": "^2.11.6",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.6"
-  }
+	"name": "fastify-playground",
+	"author": "Jani Mikkonen",
+	"version": "1.0.0",
+	"description": "A REST API built with Fastify and TypeScript.",
+	"type": "module",
+	"main": "dist/app.js",
+	"private": true,
+	"engines": {
+		"node": "24"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/janisto/fastify-playground.git"
+	},
+	"bugs": {
+		"url": "https://github.com/janisto/fastify-playground/issues"
+	},
+	"license": "MIT",
+	"keywords": [
+		"api",
+		"fastify",
+		"typescript",
+		"rest",
+		"firebase",
+		"openapi"
+	],
+	"scripts": {
+		"dev": "tsx --watch src/app.ts",
+		"serve": "firebase emulators:start --only apphosting,firestore",
+		"start": "npm run build && fastify start -l info dist/app.js",
+		"deploy": "firebase deploy --only apphosting",
+		"build": "tsc",
+		"build:watch": "tsc --watch",
+		"build:check": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run tests/unit --coverage",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"format": "biome format .",
+		"format:fix": "biome format --write ."
+	},
+	"dependencies": {
+		"@fastify/autoload": "^6.3.1",
+		"@fastify/cors": "^11.1.0",
+		"@fastify/helmet": "^13.0.2",
+		"@fastify/jwt": "^10.0.0",
+		"@fastify/request-context": "^6.2.1",
+		"@fastify/sensible": "^6.0.3",
+		"@fastify/swagger": "^9.5.2",
+		"@fastify/swagger-ui": "^5.2.3",
+		"fastify": "^5.6.1",
+		"fastify-cli": "^7.4.0",
+		"firebase-admin": "^13.5.0",
+		"undici": "^7.16.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.3",
+		"@types/node": "^24.10.0",
+		"@vitest/coverage-v8": "^4.0.7",
+		"fastify-tsconfig": "^3.0.0",
+		"msw": "^2.11.6",
+		"tsx": "^4.20.6",
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.6"
+	}
 }
