@@ -1,5 +1,4 @@
-# Getting Started with [Fastify-CLI](https://www.npmjs.com/package/fastify-cli)
-This project was bootstrapped with Fastify-CLI.
+# Getting Started with [Fastify](https://www.npmjs.com/package/fastify)
 
 ## Available Scripts
 
@@ -21,3 +20,5 @@ Run the test cases.
 ## Learn More
 
 To learn Fastify, check out the [Fastify documentation](https://fastify.dev/docs/latest/).
+
+To learn Vitest, check out the [Vitest documentation](https://vitest.dev/guide/).
