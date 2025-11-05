@@ -28,7 +28,7 @@
 	"scripts": {
 		"dev": "tsx --watch src/app.ts",
 		"serve": "firebase emulators:start --only apphosting,firestore",
-		"start": "fastify start -l info dist/app.js",
+		"start": "npm run build && fastify start -l info dist/app.js",
 		"deploy": "firebase deploy --only apphosting",
 		"build": "tsc",
 		"build:watch": "tsc --watch",
