@@ -3,7 +3,7 @@
 	"extends": ["../biome.json"],
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!**/coverage/**/*", "!**/dist/**/*", "!**/node_modules/**/*"]
+		"includes": ["!**/coverage/**/*", "!**/dist/**/*", "!**/node_modules/**/*"]
 	},
 	"linter": {
 		"rules": {
