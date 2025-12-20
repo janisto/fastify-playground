@@ -4,15 +4,7 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "sunday"
-      time: "09:00"
-      timezone: "Europe/Helsinki"
-
-  - package-ecosystem: "npm"
-    directory: "/functions"
+    directory: "/app"
     schedule:
       interval: "weekly"
       day: "sunday"
