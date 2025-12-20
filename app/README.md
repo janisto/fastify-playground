@@ -22,3 +22,4 @@ Run the test cases.
 To learn Fastify, check out the [Fastify documentation](https://fastify.dev/docs/latest/).
 
 To learn Vitest, check out the [Vitest documentation](https://vitest.dev/guide/).
+
