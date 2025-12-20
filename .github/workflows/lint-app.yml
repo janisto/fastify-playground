@@ -2,15 +2,9 @@ name: App code quality (linting and formatting)
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - "app/**"
-      - ".github/workflows/lint-app.yml"
+    branches: [main]
   pull_request:
-    branches: [ main ]
-    paths:
-      - "app/**"
-      - ".github/workflows/lint-app.yml"
+    branches: [main]
 
 permissions:
   contents: read
