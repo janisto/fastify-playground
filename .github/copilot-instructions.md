@@ -36,7 +36,7 @@ This document defines how AI agents and contributors should work in our monorepo
 - **Avoid `any`**: Use `unknown` if type is uncertain. Prefer existing types over `Record<string, unknown>`.
 - **Async code**: Use async/await. Wrap critical paths in try/catch and include contextual error messages.
 - **Keep it simple**: Avoid over-engineering and premature abstractions. Write idiomatic, maintainable code.
-- **Linting**: Do not use `eslint-disable`. Project enforces linting via Biome 2.3.3.
+- **Linting**: Do not use `eslint-disable`. Project enforces linting via Biome 2.3.10.
 - **TypeScript/build targets**:
   - `app/tsconfig.json`: `target` `ES2024`, `module` `NodeNext`, `moduleResolution` `NodeNext`, extends `fastify-tsconfig`.
   - `app/tests/tsconfig.json`: Extends parent config with `rootDir: ".."` to allow test files outside src/, includes both src and test files.

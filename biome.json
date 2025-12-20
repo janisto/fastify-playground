@@ -1,6 +1,9 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.3/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
   "root": true,
+  "files": {
+    "includes": ["**", "!**/package.json", "!**/package-lock.json", "!**/biome.json"]
+  },
   "formatter": {
     "lineWidth": 150,
     "formatWithErrors": true,
