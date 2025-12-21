@@ -3,119 +3,119 @@ import { describe, expect, it } from "vitest";
 import lifecycle from "../../../src/plugins/lifecycle.js";
 
 describe("Lifecycle Plugin", () => {
-	describe("isShuttingDown Decorator", () => {
-		it("should decorate fastify with isShuttingDown", async () => {
-			const fastify = Fastify();
-			await fastify.register(lifecycle);
-			await fastify.ready();
+  describe("isShuttingDown Decorator", () => {
+    it("should decorate fastify with isShuttingDown", async () => {
+      const fastify = Fastify();
+      await fastify.register(lifecycle);
+      await fastify.ready();
 
-			expect(fastify.isShuttingDown).toBeDefined();
-			expect(fastify.isShuttingDown).toBe(false);
+      expect(fastify.isShuttingDown).toBeDefined();
+      expect(fastify.isShuttingDown).toBe(false);
 
-			await fastify.close();
-		});
+      await fastify.close();
+    });
 
-		it("should allow setting isShuttingDown to true", async () => {
-			const fastify = Fastify();
-			await fastify.register(lifecycle);
-			await fastify.ready();
+    it("should allow setting isShuttingDown to true", async () => {
+      const fastify = Fastify();
+      await fastify.register(lifecycle);
+      await fastify.ready();
 
-			fastify.isShuttingDown = true;
-			expect(fastify.isShuttingDown).toBe(true);
+      fastify.isShuttingDown = true;
+      expect(fastify.isShuttingDown).toBe(true);
 
-			await fastify.close();
-		});
-	});
+      await fastify.close();
+    });
+  });
 
-	it("should register onReady hook", async () => {
-		const fastify = Fastify();
-		let onReadyCalled = false;
+  it("should register onReady hook", async () => {
+    const fastify = Fastify();
+    let onReadyCalled = false;
 
-		await fastify.register(lifecycle);
+    await fastify.register(lifecycle);
 
-		// Override the onReady hook to track if it was called
-		fastify.addHook("onReady", async () => {
-			onReadyCalled = true;
-		});
+    // Override the onReady hook to track if it was called
+    fastify.addHook("onReady", async () => {
+      onReadyCalled = true;
+    });
 
-		await fastify.ready();
-		expect(onReadyCalled).toBe(true);
+    await fastify.ready();
+    expect(onReadyCalled).toBe(true);
 
-		await fastify.close();
-	});
+    await fastify.close();
+  });
 
-	it("should register onClose hook", async () => {
-		const fastify = Fastify();
-		let onCloseCalled = false;
+  it("should register onClose hook", async () => {
+    const fastify = Fastify();
+    let onCloseCalled = false;
 
-		await fastify.register(lifecycle);
+    await fastify.register(lifecycle);
 
-		fastify.addHook("onClose", async () => {
-			onCloseCalled = true;
-		});
+    fastify.addHook("onClose", async () => {
+      onCloseCalled = true;
+    });
 
-		await fastify.ready();
-		await fastify.close();
+    await fastify.ready();
+    await fastify.close();
 
-		expect(onCloseCalled).toBe(true);
-	});
+    expect(onCloseCalled).toBe(true);
+  });
 
-	it("should allow server to start and handle requests", async () => {
-		const fastify = Fastify();
-		await fastify.register(lifecycle);
+  it("should allow server to start and handle requests", async () => {
+    const fastify = Fastify();
+    await fastify.register(lifecycle);
 
-		fastify.get("/test", async () => ({ status: "ok" }));
+    fastify.get("/test", async () => ({ status: "ok" }));
 
-		await fastify.ready();
+    await fastify.ready();
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/test",
-		});
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/test",
+    });
 
-		expect(response.statusCode).toBe(200);
-		expect(response.json()).toEqual({ status: "ok" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: "ok" });
 
-		await fastify.close();
-	});
+    await fastify.close();
+  });
 
-	it("should properly cleanup resources on close", async () => {
-		const fastify = Fastify();
-		const cleanupActions: string[] = [];
+  it("should properly cleanup resources on close", async () => {
+    const fastify = Fastify();
+    const cleanupActions: string[] = [];
 
-		await fastify.register(lifecycle);
+    await fastify.register(lifecycle);
 
-		// Add a custom cleanup hook
-		fastify.addHook("onClose", async () => {
-			cleanupActions.push("cleanup-1");
-		});
+    // Add a custom cleanup hook
+    fastify.addHook("onClose", async () => {
+      cleanupActions.push("cleanup-1");
+    });
 
-		fastify.addHook("onClose", async () => {
-			cleanupActions.push("cleanup-2");
-		});
+    fastify.addHook("onClose", async () => {
+      cleanupActions.push("cleanup-2");
+    });
 
-		await fastify.ready();
-		await fastify.close();
+    await fastify.ready();
+    await fastify.close();
 
-		expect(cleanupActions).toContain("cleanup-1");
-		expect(cleanupActions).toContain("cleanup-2");
-	});
+    expect(cleanupActions).toContain("cleanup-1");
+    expect(cleanupActions).toContain("cleanup-2");
+  });
 
-	it("should execute onReady before onListen", async () => {
-		const fastify = Fastify();
-		const executionOrder: string[] = [];
+  it("should execute onReady before onListen", async () => {
+    const fastify = Fastify();
+    const executionOrder: string[] = [];
 
-		await fastify.register(lifecycle);
+    await fastify.register(lifecycle);
 
-		fastify.addHook("onReady", async () => {
-			executionOrder.push("ready");
-		});
+    fastify.addHook("onReady", async () => {
+      executionOrder.push("ready");
+    });
 
-		// Note: onListen doesn't fire with inject() or ready()
-		// So we just test onReady fires
-		await fastify.ready();
+    // Note: onListen doesn't fire with inject() or ready()
+    // So we just test onReady fires
+    await fastify.ready();
 
-		expect(executionOrder).toContain("ready");
-		await fastify.close();
-	});
+    expect(executionOrder).toContain("ready");
+    await fastify.close();
+  });
 });

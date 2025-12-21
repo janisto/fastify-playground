@@ -22,54 +22,54 @@ import fp from "fastify-plugin";
  * @see https://github.com/fastify/fastify-request-context
  */
 export default fp(
-	async (fastify) => {
-		// Register request context plugin
-		await fastify.register(requestContext);
+  async (fastify) => {
+    // Register request context plugin
+    await fastify.register(requestContext);
 
-		// onRequest: Generate/extract request ID
-		fastify.addHook("onRequest", async (request, reply) => {
-			// Use client-provided request ID or generate a new one
-			const requestId = (request.headers["x-request-id"] as string) || randomUUID();
+    // onRequest: Generate/extract request ID
+    fastify.addHook("onRequest", async (request, reply) => {
+      // Use client-provided request ID or generate a new one
+      const requestId = (request.headers["x-request-id"] as string) || randomUUID();
 
-			// Store request ID
-			request.id = requestId;
+      // Store request ID
+      request.id = requestId;
 
-			// Add request ID to response headers
-			reply.header("X-Request-Id", requestId);
+      // Add request ID to response headers
+      reply.header("X-Request-Id", requestId);
 
-			// Create child logger with request ID for contextual logging
-			request.log = request.log.child({ requestId });
+      // Create child logger with request ID for contextual logging
+      request.log = request.log.child({ requestId });
 
-			// Log incoming request
-			request.log.info(
-				{
-					method: request.method,
-					url: request.url,
-					userAgent: request.headers["user-agent"],
-					ip: request.ip,
-				},
-				"Incoming request",
-			);
-		});
+      // Log incoming request
+      request.log.info(
+        {
+          method: request.method,
+          url: request.url,
+          userAgent: request.headers["user-agent"],
+          ip: request.ip,
+        },
+        "Incoming request",
+      );
+    });
 
-		// onResponse: Log completed requests with timing
-		fastify.addHook("onResponse", async (request, reply) => {
-			const responseTime = reply.elapsedTime;
+    // onResponse: Log completed requests with timing
+    fastify.addHook("onResponse", async (request, reply) => {
+      const responseTime = reply.elapsedTime;
 
-			request.log.info(
-				{
-					method: request.method,
-					url: request.url,
-					statusCode: reply.statusCode,
-					responseTime,
-					contentLength: reply.getHeader("content-length"),
-				},
-				"Request completed",
-			);
-		});
-	},
-	{
-		name: "request-logging",
-		fastify: "5.x",
-	},
+      request.log.info(
+        {
+          method: request.method,
+          url: request.url,
+          statusCode: reply.statusCode,
+          responseTime,
+          contentLength: reply.getHeader("content-length"),
+        },
+        "Request completed",
+      );
+    });
+  },
+  {
+    name: "request-logging",
+    fastify: "5.x",
+  },
 );

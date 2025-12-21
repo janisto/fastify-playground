@@ -1,9 +1,9 @@
 import fp from "fastify-plugin";
 
 declare module "fastify" {
-	interface FastifyInstance {
-		isShuttingDown: boolean;
-	}
+  interface FastifyInstance {
+    isShuttingDown: boolean;
+  }
 }
 
 /**
@@ -24,78 +24,78 @@ declare module "fastify" {
  * @see https://fastify.dev/docs/latest/Reference/Hooks/#application-lifecycle-hooks
  */
 export default fp(
-	async (fastify) => {
-		// Decorate with shutdown state
-		fastify.decorate("isShuttingDown", false);
+  async (fastify) => {
+    // Decorate with shutdown state
+    fastify.decorate("isShuttingDown", false);
 
-		// onReady: Triggered before server starts listening
-		fastify.addHook("onReady", async () => {
-			fastify.log.info("Server is ready and initialized");
-		});
+    // onReady: Triggered before server starts listening
+    fastify.addHook("onReady", async () => {
+      fastify.log.info("Server is ready and initialized");
+    });
 
-		// onListen: Triggered when server starts listening
-		/* v8 ignore start -- @preserve */
-		fastify.addHook("onListen", async () => {
-			fastify.log.info(
-				{
-					address: fastify.server.address(),
-					nodeVersion: process.version,
-					pid: process.pid,
-				},
-				"Server listening",
-			);
-		});
-		/* v8 ignore stop -- @preserve */
+    // onListen: Triggered when server starts listening
+    /* v8 ignore start -- @preserve */
+    fastify.addHook("onListen", async () => {
+      fastify.log.info(
+        {
+          address: fastify.server.address(),
+          nodeVersion: process.version,
+          pid: process.pid,
+        },
+        "Server listening",
+      );
+    });
+    /* v8 ignore stop -- @preserve */
 
-		// onClose: Triggered when fastify.close() is called
-		fastify.addHook("onClose", async (instance) => {
-			instance.log.info("Server closing, cleaning up resources...");
-			// Add cleanup logic here:
-			// - Close database connections
-			// - Close message queue connections
-			// - Flush logs
-			// - Clear caches
-		});
+    // onClose: Triggered when fastify.close() is called
+    fastify.addHook("onClose", async (instance) => {
+      instance.log.info("Server closing, cleaning up resources...");
+      // Add cleanup logic here:
+      // - Close database connections
+      // - Close message queue connections
+      // - Flush logs
+      // - Clear caches
+    });
 
-		// Graceful shutdown handler
-		/* v8 ignore next -- @preserve */
-		const closeGracefully = async (signal: string) => {
-			fastify.log.info(`Received ${signal}, shutting down gracefully`);
-			fastify.isShuttingDown = true;
+    // Graceful shutdown handler
+    /* v8 ignore next -- @preserve */
+    const closeGracefully = async (signal: string) => {
+      fastify.log.info(`Received ${signal}, shutting down gracefully`);
+      fastify.isShuttingDown = true;
 
-			try {
-				// Close the server and trigger onClose hooks
-				await fastify.close();
-				fastify.log.info("Server closed successfully");
-				process.exit(0);
-			} catch (error) {
-				fastify.log.error(error, "Error during graceful shutdown");
-				process.exit(1);
-			}
-		};
+      try {
+        // Close the server and trigger onClose hooks
+        await fastify.close();
+        fastify.log.info("Server closed successfully");
+        process.exit(0);
+      } catch (error) {
+        fastify.log.error(error, "Error during graceful shutdown");
+        process.exit(1);
+      }
+    };
 
-		// Register signal handlers for graceful shutdown - Process signal handlers cannot be reliably tested
-		/* v8 ignore next -- @preserve */
-		process.on("SIGTERM", () => closeGracefully("SIGTERM"));
-		/* v8 ignore next -- @preserve */
-		process.on("SIGINT", () => closeGracefully("SIGINT"));
+    // Register signal handlers for graceful shutdown - Process signal handlers cannot be reliably tested
+    /* v8 ignore next -- @preserve */
+    process.on("SIGTERM", () => closeGracefully("SIGTERM"));
+    /* v8 ignore next -- @preserve */
+    process.on("SIGINT", () => closeGracefully("SIGINT"));
 
-		// Handle uncaught exceptions
-		/* v8 ignore next -- @preserve */
-		process.on("uncaughtException", (error) => {
-			fastify.log.fatal(error, "Uncaught exception");
-			closeGracefully("uncaughtException");
-		});
+    // Handle uncaught exceptions
+    /* v8 ignore next -- @preserve */
+    process.on("uncaughtException", (error) => {
+      fastify.log.fatal(error, "Uncaught exception");
+      closeGracefully("uncaughtException");
+    });
 
-		// Handle unhandled promise rejections
-		/* v8 ignore next -- @preserve */
-		process.on("unhandledRejection", (reason, promise) => {
-			fastify.log.fatal({ reason, promise }, "Unhandled promise rejection");
-			closeGracefully("unhandledRejection");
-		});
-	},
-	{
-		name: "lifecycle",
-		fastify: "5.x",
-	},
+    // Handle unhandled promise rejections
+    /* v8 ignore next -- @preserve */
+    process.on("unhandledRejection", (reason, promise) => {
+      fastify.log.fatal({ reason, promise }, "Unhandled promise rejection");
+      closeGracefully("unhandledRejection");
+    });
+  },
+  {
+    name: "lifecycle",
+    fastify: "5.x",
+  },
 );

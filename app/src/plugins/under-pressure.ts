@@ -18,35 +18,35 @@ import fp from "fastify-plugin";
  * @see https://github.com/fastify/under-pressure
  */
 export default fp(
-	async (fastify) => {
-		await fastify.register(underPressure, {
-			healthCheck: async (fastifyInstance) => {
-				// Return unhealthy during shutdown
-				if (fastifyInstance.isShuttingDown) {
-					return false;
-				}
+  async (fastify) => {
+    await fastify.register(underPressure, {
+      healthCheck: async (fastifyInstance) => {
+        // Return unhealthy during shutdown
+        if (fastifyInstance.isShuttingDown) {
+          return false;
+        }
 
-				// Check Firestore connectivity
-				try {
-					await fastifyInstance.firestore.collection("_health").limit(1).get();
-					return true;
-				} catch (error) {
-					fastifyInstance.log.error(error, "Firestore health check failed");
-					return false;
-				}
-			},
-			healthCheckInterval: 30000,
-			exposeStatusRoute: {
-				url: "/status",
-				routeOpts: {
-					logLevel: "warn",
-				},
-			},
-		});
-	},
-	{
-		name: "under-pressure",
-		fastify: "5.x",
-		dependencies: ["firebase", "lifecycle"],
-	},
+        // Check Firestore connectivity
+        try {
+          await fastifyInstance.firestore.collection("_health").limit(1).get();
+          return true;
+        } catch (error) {
+          fastifyInstance.log.error(error, "Firestore health check failed");
+          return false;
+        }
+      },
+      healthCheckInterval: 30000,
+      exposeStatusRoute: {
+        url: "/status",
+        routeOpts: {
+          logLevel: "warn",
+        },
+      },
+    });
+  },
+  {
+    name: "under-pressure",
+    fastify: "5.x",
+    dependencies: ["firebase", "lifecycle"],
+  },
 );

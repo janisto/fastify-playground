@@ -20,26 +20,26 @@ import fp from "fastify-plugin";
  * @see https://github.com/fastify/fastify-helmet
  */
 export default fp<FastifyHelmetOptions>(
-	async (fastify) => {
-		await fastify.register(helmet, {
-			global: true,
-			contentSecurityPolicy: {
-				directives: {
-					defaultSrc: ["'self'"],
-					styleSrc: ["'self'", "'unsafe-inline'"],
-					scriptSrc: ["'self'"],
-					imgSrc: ["'self'", "data:", "https:"],
-				},
-			},
-			hsts: {
-				maxAge: 31536000, // 1 year
-				includeSubDomains: true,
-				preload: true,
-			},
-		});
-	},
-	{
-		name: "helmet",
-		fastify: "5.x",
-	},
+  async (fastify) => {
+    await fastify.register(helmet, {
+      global: true,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", "data:", "https:"],
+        },
+      },
+      hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+      },
+    });
+  },
+  {
+    name: "helmet",
+    fastify: "5.x",
+  },
 );

@@ -8,109 +8,109 @@ const mockAuth = createFirebaseAuthMock();
 const mockFirestore = createFirestoreMock();
 
 vi.mock("firebase-admin/app", () => ({
-	getApps: vi.fn(() => [mockApp]),
-	initializeApp: vi.fn(() => mockApp),
-	cert: vi.fn(),
+  getApps: vi.fn(() => [mockApp]),
+  initializeApp: vi.fn(() => mockApp),
+  cert: vi.fn(),
 }));
 
 vi.mock("firebase-admin/auth", () => ({
-	getAuth: vi.fn(() => mockAuth),
+  getAuth: vi.fn(() => mockAuth),
 }));
 
 vi.mock("firebase-admin/firestore", () => ({
-	getFirestore: vi.fn(() => mockFirestore),
+  getFirestore: vi.fn(() => mockFirestore),
 }));
 
 describe("Firebase Plugin", () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-	});
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-	afterEach(async () => {
-		vi.resetModules();
-	});
+  afterEach(async () => {
+    vi.resetModules();
+  });
 
-	describe("Plugin Registration", () => {
-		it("should register firebase decorator", async () => {
-			const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-			const fastify = Fastify();
-			await fastify.register(firebasePlugin);
-			await fastify.ready();
+  describe("Plugin Registration", () => {
+    it("should register firebase decorator", async () => {
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.ready();
 
-			expect(fastify.firebase).toBeDefined();
-			expect(fastify.firebase).toBe(mockApp);
+      expect(fastify.firebase).toBeDefined();
+      expect(fastify.firebase).toBe(mockApp);
 
-			await fastify.close();
-		});
+      await fastify.close();
+    });
 
-		it("should register firebaseAuth decorator", async () => {
-			const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-			const fastify = Fastify();
-			await fastify.register(firebasePlugin);
-			await fastify.ready();
+    it("should register firebaseAuth decorator", async () => {
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.ready();
 
-			expect(fastify.firebaseAuth).toBeDefined();
-			expect(fastify.firebaseAuth).toBe(mockAuth);
+      expect(fastify.firebaseAuth).toBeDefined();
+      expect(fastify.firebaseAuth).toBe(mockAuth);
 
-			await fastify.close();
-		});
+      await fastify.close();
+    });
 
-		it("should register firestore decorator", async () => {
-			const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-			const fastify = Fastify();
-			await fastify.register(firebasePlugin);
-			await fastify.ready();
+    it("should register firestore decorator", async () => {
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.ready();
 
-			expect(fastify.firestore).toBeDefined();
-			expect(fastify.firestore).toBe(mockFirestore);
+      expect(fastify.firestore).toBeDefined();
+      expect(fastify.firestore).toBe(mockFirestore);
 
-			await fastify.close();
-		});
-	});
+      await fastify.close();
+    });
+  });
 
-	describe("Cleanup", () => {
-		it("should terminate firestore on close", async () => {
-			const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-			const fastify = Fastify();
-			await fastify.register(firebasePlugin);
-			await fastify.ready();
+  describe("Cleanup", () => {
+    it("should terminate firestore on close", async () => {
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.ready();
 
-			await fastify.close();
+      await fastify.close();
 
-			expect(mockFirestore.terminate).toHaveBeenCalledOnce();
-		});
-	});
+      expect(mockFirestore.terminate).toHaveBeenCalledOnce();
+    });
+  });
 
-	describe("Existing App Detection", () => {
-		it("should reuse existing Firebase app when already initialized", async () => {
-			const { getApps } = await import("firebase-admin/app");
-			const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+  describe("Existing App Detection", () => {
+    it("should reuse existing Firebase app when already initialized", async () => {
+      const { getApps } = await import("firebase-admin/app");
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
 
-			const fastify = Fastify();
-			await fastify.register(firebasePlugin);
-			await fastify.ready();
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.ready();
 
-			expect(getApps).toHaveBeenCalled();
-			expect(fastify.firebase).toBe(mockApp);
+      expect(getApps).toHaveBeenCalled();
+      expect(fastify.firebase).toBe(mockApp);
 
-			await fastify.close();
-		});
+      await fastify.close();
+    });
 
-		it("should initialize new Firebase app when no existing apps", async () => {
-			const { getApps, initializeApp } = await import("firebase-admin/app");
-			vi.mocked(getApps).mockReturnValueOnce([]);
+    it("should initialize new Firebase app when no existing apps", async () => {
+      const { getApps, initializeApp } = await import("firebase-admin/app");
+      vi.mocked(getApps).mockReturnValueOnce([]);
 
-			const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
 
-			const fastify = Fastify();
-			await fastify.register(firebasePlugin);
-			await fastify.ready();
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.ready();
 
-			expect(getApps).toHaveBeenCalled();
-			expect(initializeApp).toHaveBeenCalled();
-			expect(fastify.firebase).toBe(mockApp);
+      expect(getApps).toHaveBeenCalled();
+      expect(initializeApp).toHaveBeenCalled();
+      expect(fastify.firebase).toBe(mockApp);
 
-			await fastify.close();
-		});
-	});
+      await fastify.close();
+    });
+  });
 });

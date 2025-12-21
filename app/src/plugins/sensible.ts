@@ -27,13 +27,13 @@ import fp from "fastify-plugin";
  * @see https://github.com/fastify/fastify-sensible
  */
 export default fp<FastifySensibleOptions>(
-	async (fastify) => {
-		await fastify.register(sensible, {
-			sharedSchemaId: "HttpError",
-		});
-	},
-	{
-		name: "sensible",
-		fastify: "5.x",
-	},
+  async (fastify) => {
+    await fastify.register(sensible, {
+      sharedSchemaId: "HttpError",
+    });
+  },
+  {
+    name: "sensible",
+    fastify: "5.x",
+  },
 );

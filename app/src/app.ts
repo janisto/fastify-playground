@@ -25,45 +25,45 @@ import rootRoutes from "./routes/root.js";
  * 4. Routes: health, root
  */
 export async function buildApp() {
-	const fastify = Fastify({
-		logger: {
-			level: env.LOG_LEVEL,
-			// Cloud Run / Firebase App Hosting optimized configuration:
-			// - Logs to stdout (Pino default)
-			// - JSON format (Pino default)
-			// - No file transport (Pino default)
-			formatters: {
-				level: (label) => {
-					// Cloud Logging severity mapping
-					return { severity: label.toUpperCase() };
-				},
-			},
-		},
-	})
-		.setValidatorCompiler(TypeBoxValidatorCompiler)
-		.withTypeProvider<TypeBoxTypeProvider>();
+  const fastify = Fastify({
+    logger: {
+      level: env.LOG_LEVEL,
+      // Cloud Run / Firebase App Hosting optimized configuration:
+      // - Logs to stdout (Pino default)
+      // - JSON format (Pino default)
+      // - No file transport (Pino default)
+      formatters: {
+        level: (label) => {
+          // Cloud Logging severity mapping
+          return { severity: label.toUpperCase() };
+        },
+      },
+    },
+  })
+    .setValidatorCompiler(TypeBoxValidatorCompiler)
+    .withTypeProvider<TypeBoxTypeProvider>();
 
-	// Layer 1: Core plugins (no dependencies)
-	await fastify.register(sensiblePlugin);
-	await fastify.register(helmetPlugin);
-	await fastify.register(corsPlugin);
+  // Layer 1: Core plugins (no dependencies)
+  await fastify.register(sensiblePlugin);
+  await fastify.register(helmetPlugin);
+  await fastify.register(corsPlugin);
 
-	// Layer 2: Infrastructure plugins
-	await fastify.register(firebasePlugin);
-	await fastify.register(lifecyclePlugin);
-	await fastify.register(underPressurePlugin);
-	await fastify.register(swaggerPlugin);
+  // Layer 2: Infrastructure plugins
+  await fastify.register(firebasePlugin);
+  await fastify.register(lifecyclePlugin);
+  await fastify.register(underPressurePlugin);
+  await fastify.register(swaggerPlugin);
 
-	// Layer 3: Application plugins
-	await fastify.register(authPlugin);
-	await fastify.register(errorHandlerPlugin);
-	await fastify.register(requestLoggingPlugin);
+  // Layer 3: Application plugins
+  await fastify.register(authPlugin);
+  await fastify.register(errorHandlerPlugin);
+  await fastify.register(requestLoggingPlugin);
 
-	// Layer 4: Routes
-	await fastify.register(healthRoutes);
-	await fastify.register(rootRoutes);
+  // Layer 4: Routes
+  await fastify.register(healthRoutes);
+  await fastify.register(rootRoutes);
 
-	return fastify;
+  return fastify;
 }
 
 export { Type };
@@ -72,13 +72,13 @@ export { Type };
 // In production, use: node dist/app.js
 /* v8 ignore start -- @preserve */
 if (import.meta.url === `file://${process.argv[1]}`) {
-	try {
-		const fastify = await buildApp();
+  try {
+    const fastify = await buildApp();
 
-		await fastify.listen({ port: env.PORT, host: env.HOST });
-	} catch (error) {
-		console.error("Failed to start server:", error);
-		process.exit(1);
-	}
+    await fastify.listen({ port: env.PORT, host: env.HOST });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
 }
 /* v8 ignore stop -- @preserve */

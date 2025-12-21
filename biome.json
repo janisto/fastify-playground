@@ -2,12 +2,15 @@
   "$schema": "./app/node_modules/@biomejs/biome/configuration_schema.json",
   "root": true,
   "files": {
-    "includes": ["**", "!**/package.json", "!**/package-lock.json", "!**/biome.json"]
+    "includes": ["**", "!**/package.json", "!**/package-lock.json"]
   },
   "formatter": {
-    "lineWidth": 150,
+    "enabled": true,
     "formatWithErrors": true,
-    "useEditorconfig": true
+    "lineWidth": 120,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf"
   },
   "linter": {
     "rules": {
@@ -47,8 +50,14 @@
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
-      "semicolons": "always"
+      "semicolons": "always",
+      "trailingCommas": "all"
     },
     "globals": ["console", "process", "Buffer", "setTimeout", "setInterval", "clearTimeout", "clearInterval"]
+  },
+  "json": {
+    "formatter": {
+      "trailingCommas": "none"
+    }
   }
 }
