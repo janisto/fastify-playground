@@ -7,11 +7,11 @@ import type { Firestore } from "firebase-admin/firestore";
 import { getFirestore } from "firebase-admin/firestore";
 
 declare module "fastify" {
-  interface FastifyInstance {
-    firebase: App;
-    firebaseAuth: Auth;
-    firestore: Firestore;
-  }
+	interface FastifyInstance {
+		firebase: App;
+		firebaseAuth: Auth;
+		firestore: Firestore;
+	}
 }
 
 /**
@@ -33,51 +33,51 @@ declare module "fastify" {
  * @see https://firebase.google.com/docs/admin/setup
  */
 export default fp(
-  async (fastify) => {
-    let app: App;
+	async (fastify) => {
+		let app: App;
 
-    // Check if Firebase app is already initialized (prevents re-initialization in tests)
-    const existingApps = getApps();
-    if (existingApps.length > 0) {
-      app = existingApps[0];
-      fastify.log.debug("Using existing Firebase app instance");
-    } else {
-      // Initialize with ADC (Application Default Credentials)
-      // In Cloud Run / GCE, this uses the service account automatically
-      // Locally, set GOOGLE_APPLICATION_CREDENTIALS or use emulators
-      /* v8 ignore start -- @preserve */
-      const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      if (serviceAccountPath) {
-        // Dynamic import for service account file
-        const { default: serviceAccount } = (await import(serviceAccountPath, { with: { type: "json" } })) as { default: ServiceAccount };
-        app = initializeApp({
-          credential: cert(serviceAccount),
-        });
-        fastify.log.info("Firebase Admin SDK initialized with service account");
-      } else {
-        // Use ADC (works in Cloud Run, GCE, or with emulators)
-        app = initializeApp();
-        fastify.log.info("Firebase Admin SDK initialized with Application Default Credentials");
-      }
-      /* v8 ignore stop -- @preserve */
-    }
+		// Check if Firebase app is already initialized (prevents re-initialization in tests)
+		const existingApps = getApps();
+		if (existingApps.length > 0) {
+			app = existingApps[0];
+			fastify.log.debug("Using existing Firebase app instance");
+		} else {
+			// Initialize with ADC (Application Default Credentials)
+			// In Cloud Run / GCE, this uses the service account automatically
+			// Locally, set GOOGLE_APPLICATION_CREDENTIALS or use emulators
+			/* v8 ignore start -- @preserve */
+			const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+			if (serviceAccountPath) {
+				// Dynamic import for service account file
+				const { default: serviceAccount } = (await import(serviceAccountPath, { with: { type: "json" } })) as { default: ServiceAccount };
+				app = initializeApp({
+					credential: cert(serviceAccount),
+				});
+				fastify.log.info("Firebase Admin SDK initialized with service account");
+			} else {
+				// Use ADC (works in Cloud Run, GCE, or with emulators)
+				app = initializeApp();
+				fastify.log.info("Firebase Admin SDK initialized with Application Default Credentials");
+			}
+			/* v8 ignore stop -- @preserve */
+		}
 
-    const auth = getAuth(app);
-    const firestore = getFirestore(app);
+		const auth = getAuth(app);
+		const firestore = getFirestore(app);
 
-    // Decorate Fastify instance
-    fastify.decorate("firebase", app);
-    fastify.decorate("firebaseAuth", auth);
-    fastify.decorate("firestore", firestore);
+		// Decorate Fastify instance
+		fastify.decorate("firebase", app);
+		fastify.decorate("firebaseAuth", auth);
+		fastify.decorate("firestore", firestore);
 
-    // Cleanup on close
-    fastify.addHook("onClose", async (instance) => {
-      instance.log.info("Closing Firestore connection...");
-      await firestore.terminate();
-    });
-  },
-  {
-    name: "firebase",
-    fastify: "5.x",
-  },
+		// Cleanup on close
+		fastify.addHook("onClose", async (instance) => {
+			instance.log.info("Closing Firestore connection...");
+			await firestore.terminate();
+		});
+	},
+	{
+		name: "firebase",
+		fastify: "5.x",
+	},
 );
