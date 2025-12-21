@@ -164,7 +164,7 @@ Create an updated README.md file that:
 - Speculative or planned features not yet implemented
 - Hardcoded version numbers that will become stale (prefer "latest" or ranges)
 - Duplicate information already in copilot-instructions.md
-- Emojis in code, comments, documentation, or commit messages (always refactor away if found)
+- Emojis or unicode symbols in code, comments, documentation, or commit messages (always refactor them away if found)
 
 ## Monorepo Awareness
 
