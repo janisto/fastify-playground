@@ -1,14 +1,16 @@
 # fastify-playground
 
-A production-ready REST API built with Fastify, TypeScript, and modern tooling for Node.js 24. Features comprehensive OpenAPI documentation, JWT authentication, structured logging, and graceful shutdown.
+A production-ready REST API built with Fastify, TypeScript, and modern tooling for Node.js 24. Features comprehensive OpenAPI documentation, Firebase Authentication, TypeBox schema validation, structured logging, and graceful shutdown.
 
 ## Tech Stack
 
 - **Runtime**: Node.js 24 (ES2024)
 - **Framework**: Fastify 5.x with TypeScript 5.9
+- **Authentication**: Firebase Admin SDK with ID token verification
+- **Schema Validation**: TypeBox with `@fastify/type-provider-typebox`
 - **Testing**: Vitest 4.x with V8 coverage provider (70% minimum thresholds)
 - **Code Quality**: Biome 2.x (formatting, linting, import organization)
-- **Backend Services**: Firebase Admin SDK (configured for future integration)
+- **Backend Services**: Firebase Admin SDK (Authentication, Firestore)
 - **Package Manager**: npm
 - **Module System**: ESM (`"type": "module"`)
 
@@ -24,7 +26,7 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 │   ├── tests/
 │   │   ├── unit/          # Unit tests (plugins/, routes/)
 │   │   ├── integration/   # Integration tests (app.test.ts)
-│   │   ├── mocks/         # Test mocks (placeholder)
+│   │   ├── mocks/         # Test mocks (firebase.ts)
 │   │   └── helpers/       # Test utilities (placeholder)
 │   ├── package.json
 │   ├── tsconfig.json      # TypeScript config (ES2024, NodeNext)
@@ -38,33 +40,35 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 ## Features
 
 ### Core
-- **Fastify 5.x** with plugin architecture and `@fastify/autoload` (forceESM mode)
+- **Fastify 5.x** with plugin architecture and explicit plugin registration
 - **TypeScript 5.9** with strict mode
+- **TypeBox** for runtime schema validation with compile-time types via `@fastify/type-provider-typebox`
 - **ES2024 target** (modern JavaScript features: `toSorted`, `Object.groupBy`, Set ops, Iterator helpers)
 - **ESM-first** (`"type": "module"` with NodeNext module resolution)
-- **Auto-loading** routes and plugins via `@fastify/autoload` with `forceESM: true`
+- **Layered plugin architecture** with explicit dependency management
 
 ### Documentation & API
 - **OpenAPI 3.1.0** specification via `@fastify/swagger`
 - **Swagger UI** (`@fastify/swagger-ui`) for interactive API documentation
-- **Automated schema generation** from route definitions
-- **Health check endpoint** with OpenAPI documentation
+- **Automated schema generation** from TypeBox route definitions
+- **Health check endpoints** (`/health` for liveness, `/status` for readiness)
 - **Multiple export formats** (JSON, YAML, interactive UI)
 
 ### Security & Middleware
+- **Firebase Authentication** with ID token verification via Firebase Admin SDK
 - **Helmet** (`@fastify/helmet`) for security headers
 - **CORS** (`@fastify/cors`) with configurable origin validation
-- **JWT Authentication** (`@fastify/jwt`) with HS256, 1-hour expiration, environment-based secrets
 - **Sensible** (`@fastify/sensible`) plugin for common utilities and HTTP errors
 - **Global error handler** with structured error responses and proper logging
-- **Request context** (`@fastify/request-context`) for request-scoped data
+- **Request context** with automatic request ID generation
 
 ### Observability & Operations
 - **Structured logging** with automatic request ID generation (UUID v4)
 - **Request/response logging** with timing, user-agent, and IP tracking
 - **Request ID propagation** via `X-Request-Id` header (client-provided or auto-generated)
 - **Lifecycle hooks** for initialization, startup, and shutdown events
-- **Graceful shutdown** handling SIGTERM/SIGINT with cleanup hooks
+- **Graceful shutdown** handling SIGTERM/SIGINT with `isShuttingDown` decorator
+- **Under-pressure monitoring** via `@fastify/under-pressure` for health checks
 - **Child loggers** with request context for distributed tracing
 
 ### Development
@@ -89,16 +93,16 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 
 ### Production (`app/package.json`)
 - **fastify** - Fast and low overhead web framework
-- **@fastify/autoload** - Plugin auto-loading
+- **@fastify/type-provider-typebox** - TypeBox integration for schema validation
+- **@fastify/under-pressure** - Health checks and system pressure monitoring
 - **@fastify/cors** - CORS middleware
 - **@fastify/helmet** - Security headers
-- **@fastify/jwt** - JWT authentication
-- **@fastify/request-context** - Request-scoped context
 - **@fastify/sensible** - Common utilities and HTTP errors
 - **@fastify/swagger** - OpenAPI documentation generation
 - **@fastify/swagger-ui** - Swagger UI integration
-- **fastify-cli** - CLI utilities for Fastify
-- **firebase-admin** - Firebase Admin SDK
+- **firebase-admin** - Firebase Admin SDK for authentication and Firestore
+- **typebox** - Runtime type validation with TypeScript inference
+- **fastify-plugin** - Plugin wrapper for decorator exposure
 - **undici** - HTTP/1.1 client (used by Fastify)
 
 ### Development (`app/package.json`)
@@ -239,13 +243,23 @@ All commands should be run from the `app/` directory. Use `pwd` to verify you're
 
 ### Available Plugins (`app/src/plugins/`)
 
-All plugins are automatically loaded via `@fastify/autoload` with `forceESM: true`. Each plugin is wrapped with `fastify-plugin` to expose decorators globally.
+Plugins are registered explicitly in `app.ts` with a layered architecture. Each plugin is wrapped with `fastify-plugin` to expose decorators globally.
 
-#### Security & Middleware
-- **`cors.ts`** - CORS configuration with configurable origin validation (defaults to localhost in development)
+#### Layer 1: Core (no dependencies)
+- **`sensible.ts`** - Common utilities via `@fastify/sensible` (HTTP errors, assertions, shared HttpError schema)
 - **`helmet.ts`** - Security headers via `@fastify/helmet` v13 (CSP, HSTS, X-Frame-Options, etc.)
-- **`jwt.ts`** - JWT authentication with HS256, 1-hour expiration, environment-based secrets, decorators for sign/verify/decode
-- **`sensible.ts`** - Common utilities via `@fastify/sensible` (HTTP errors, assertions, error utilities)
+- **`cors.ts`** - CORS configuration with configurable origin validation (defaults to localhost in development)
+
+#### Layer 2: Infrastructure
+- **`firebase.ts`** - Firebase Admin SDK initialization with decorators for `firebaseAuth` and `firestore`
+- **`lifecycle.ts`** - Application lifecycle hooks with `isShuttingDown` decorator for graceful shutdown
+- **`under-pressure.ts`** - Health checks via `@fastify/under-pressure` with Firestore connectivity check, exposes `/status` endpoint
+- **`swagger.ts`** - OpenAPI 3.1.0 documentation generation with Swagger UI, JSON/YAML export endpoints
+
+#### Layer 3: Application
+- **`auth.ts`** - Firebase Authentication with `authenticate` decorator for protecting routes, `request.user` decorator
+- **`error-handler.ts`** - Global error handler with structured responses, X-Request-ID header, proper logging
+- **`request-logging.ts`** - Request/response logging with automatic request ID generation (UUID v4), timing calculation
 
 #### Observability
 - **`error-handler.ts`** - Global error handler with structured responses, proper logging, validation error handling, stack traces in development
@@ -257,22 +271,45 @@ All plugins are automatically loaded via `@fastify/autoload` with `forceESM: tru
 
 ### Available Routes (`app/src/routes/`)
 
-All routes are automatically loaded via `@fastify/autoload` with `forceESM: true`.
+Routes are registered explicitly in `app.ts` after plugins.
 
-- **`health.ts`** - Health check endpoint (`GET /health`) with OpenAPI schema, returns `{ status: "healthy" }`
-- **`root.ts`** - Root endpoint (`GET /`) with basic response
+- **`health.ts`** - Simple liveness check endpoint (`GET /health`) with TypeBox schema, returns `{ status: "healthy" }`
+- **`root.ts`** - Root endpoint (`GET /`) with TypeBox schema, returns `{ root: true }`
 
-### Auto-loading Pattern
+### Health Check Endpoints
 
-The app uses `@fastify/autoload` with `forceESM: true` to automatically load:
-1. **Plugins** from `src/plugins/` (support plugins loaded first)
-2. **Routes** from `src/routes/` (route handlers loaded second)
+| Endpoint | Purpose | Response |
+|----------|---------|----------|
+| `/health` | Simple liveness probe for container orchestration | `{ "status": "healthy" }` |
+| `/status` | Readiness check with Firestore connectivity | `{ "status": "ok" }` or 503 on failure |
 
-This enables a clean, modular plugin architecture:
-- Add new plugin → create file in `src/plugins/` → automatically loaded
-- Add new route → create file in `src/routes/` → automatically loaded
-- No manual registration required
-- Consistent loading order (plugins before routes)
+### Plugin Loading Order
+
+The app uses explicit plugin registration with a layered architecture:
+
+```
+Pre-boot: src/env.ts (validates environment before Fastify instance creation)
+
+Layer 1: Core (no dependencies)
+  - sensible    (HTTP errors, assertions, sharedSchemaId)
+  - helmet      (security headers)
+  - cors        (CORS handling)
+
+Layer 2: Infrastructure
+  - firebase       (Firebase Admin SDK, ADC credentials)
+  - lifecycle      (shutdown handling, isShuttingDown decorator)
+  - under-pressure (health checks, depends: firebase, lifecycle)
+  - swagger        (OpenAPI documentation)
+
+Layer 3: Application
+  - auth              (depends: firebase, sensible)
+  - error-handler     (depends: sensible)
+  - request-logging   (no strict deps)
+
+Layer 4: Routes
+  - routes/health     (simple liveness, /health)
+  - routes/root       (demo endpoint)
+```
 
 ## Testing
 
@@ -290,14 +327,17 @@ The project enforces high test coverage standards with comprehensive test suite:
 ### Test Suite Structure
 
 #### Unit Tests (`tests/unit/`)
+- **`env.test.ts`** - Environment configuration validation with TypeBox
+- **`plugins/auth.test.ts`** - Firebase Auth, token verification, request.user decorator
 - **`plugins/cors.test.ts`** - CORS origin validation, preflight requests, allowed methods
+- **`plugins/error-handler.test.ts`** - Error logging, structured responses, validation errors, stack traces
+- **`plugins/firebase.test.ts`** - Firebase Admin SDK initialization, decorators, cleanup
 - **`plugins/helmet.test.ts`** - Security headers, CSP, HSTS, X-Frame-Options
-- **`plugins/jwt.test.ts`** - Sign, verify, decode, expiration, invalid tokens, decorators
+- **`plugins/lifecycle.test.ts`** - onReady, onListen, onClose hooks, isShuttingDown decorator
+- **`plugins/request-logging.test.ts`** - Request ID generation, header propagation, context storage
 - **`plugins/sensible.test.ts`** - HTTP errors, assertions, error utilities, status codes
 - **`plugins/swagger.test.ts`** - JSON/YAML endpoints, Swagger UI, OpenAPI schema
-- **`plugins/error-handler.test.ts`** - Error logging, structured responses, validation errors, stack traces
-- **`plugins/request-logging.test.ts`** - Request ID generation, header propagation, context storage, response logging
-- **`plugins/lifecycle.test.ts`** - onReady, onListen, onClose hooks, graceful shutdown
+- **`plugins/under-pressure.test.ts`** - Health checks, /status endpoint, Firestore connectivity
 - **`routes/health.test.ts`** - Health check endpoint returns `{ status: "healthy" }`
 - **`routes/root.test.ts`** - Root endpoint returns `{ root: true }`
 
@@ -312,7 +352,7 @@ Write tests in `app/tests/` following this structure:
   - `plugins/` - Plugin-specific tests
   - `routes/` - Route-specific tests
 - **`integration/`** - Full-stack integration tests
-- **`mocks/`** - Shared mock data and utilities (placeholder with `.gitkeep`)
+- **`mocks/`** - Shared mock data and utilities (includes `firebase.ts` with mock factories)
 - **`helpers/`** - Test helper functions and utilities (placeholder with `.gitkeep`)
 
 ### Coverage Notes
@@ -325,31 +365,114 @@ Write tests in `app/tests/` following this structure:
 
 ## Environment Variables
 
-The application uses the following environment variables:
+The application validates environment variables at startup using TypeBox in `src/env.ts`. Invalid values cause the application to fail fast before the Fastify instance is created.
 
-| Variable       | Required | Default                                  | Description                                    |
-|---------------|----------|------------------------------------------|------------------------------------------------|
-| `JWT_SECRET`  | No       | `development-secret-change-in-production` | Secret key for JWT signing/verification. **Must be set in production!** A warning is logged in development if using default. |
-| `NODE_ENV`    | No       | (none)                                   | Environment mode (`test`, `development`, `production`) |
-| `PORT`        | No       | `3000`                                   | Server port (typically set by hosting platform like Cloud Run/App Hosting) |
-| `HOST`        | No       | `0.0.0.0`                                | Server host address (bind to all interfaces in production) |
-| `LOG_LEVEL`   | No       | `info`                                   | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
+| Variable                        | Required | Default       | Description                                    |
+|---------------------------------|----------|---------------|------------------------------------------------|
+| `NODE_ENV`                      | No       | `development` | Environment mode (`test`, `development`, `production`) |
+| `PORT`                          | No       | `3000`        | Server port (typically set by hosting platform like Cloud Run/App Hosting) |
+| `HOST`                          | No       | `0.0.0.0`     | Server host address (bind to all interfaces in production) |
+| `LOG_LEVEL`                     | No       | `info`        | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
+| `GOOGLE_APPLICATION_CREDENTIALS`| No       | (none)        | Path to Firebase service account JSON (development only) |
+| `FIRESTORE_EMULATOR_HOST`       | No       | (none)        | Firestore emulator address (e.g., `localhost:8080`) |
+| `FIREBASE_AUTH_EMULATOR_HOST`   | No       | (none)        | Auth emulator address (e.g., `localhost:9099`) |
 
 **Important**: Never commit secrets. Use `.env.local` (gitignored) for local development and proper secrets management in production.
 
+### Environment Validation
+
+Environment variables are validated before the Fastify instance is created:
+
+```typescript
+// src/env.ts
+import Type from "typebox";
+import Value from "typebox/value";
+
+const EnvSchema = Type.Object({
+	NODE_ENV: Type.Union([
+		Type.Literal("development"),
+		Type.Literal("production"),
+		Type.Literal("test"),
+	], { default: "development" }),
+	PORT: Type.Number({ default: 3000 }),
+	HOST: Type.String({ default: "0.0.0.0" }),
+	LOG_LEVEL: Type.Union([
+		Type.Literal("trace"),
+		Type.Literal("debug"),
+		Type.Literal("info"),
+		Type.Literal("warn"),
+		Type.Literal("error"),
+		Type.Literal("fatal"),
+	], { default: "info" }),
+});
+
+export const env = Value.Parse(EnvSchema, {
+	NODE_ENV: process.env.NODE_ENV ?? "development",
+	PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
+	HOST: process.env.HOST,
+	LOG_LEVEL: process.env.LOG_LEVEL,
+});
+```
+
 ## Firebase Integration
 
-The project integrates with Firebase services:
+The project uses Firebase Admin SDK for authentication and database services:
 
-- **Firebase Admin SDK** - Backend SDK for Firestore, Auth, Cloud Storage
+- **Firebase Authentication** - Token verification for API authentication
+- **Cloud Firestore** - Document database for data storage
 - **Firebase App Hosting** - Deployment target for the Fastify application
 - **Firebase Emulators** - Local development environment
+
+### Authentication Flow
+
+1. **Client obtains Firebase ID token**:
+   ```typescript
+   // Client-side (browser/mobile)
+   import { getAuth, getIdToken } from "firebase/auth";
+   const auth = getAuth();
+   const token = await getIdToken(auth.currentUser);
+   ```
+
+2. **Client sends token in Authorization header**:
+   ```typescript
+   fetch("/api/protected", {
+     headers: { Authorization: `Bearer ${token}` },
+   });
+   ```
+
+3. **Server verifies token via Firebase Admin SDK**:
+   ```typescript
+   // Automatically handled by auth plugin
+   const decodedToken = await fastify.firebaseAuth.verifyIdToken(token);
+   request.user = decodedToken; // { uid, email, email_verified, ... }
+   ```
+
+### Protecting Routes
+
+```typescript
+// Use the authenticate decorator for protected routes
+fastify.get(
+  "/protected",
+  { preHandler: [fastify.authenticate] },
+  async (request) => {
+    return { userId: request.user.uid };
+  },
+);
+```
+
+### Firebase Decorators
+
+| Decorator | Type | Description |
+|-----------|------|-------------|
+| `fastify.firebase` | `App` | Firebase Admin App instance |
+| `fastify.firebaseAuth` | `Auth` | Firebase Auth service for token verification |
+| `fastify.firestore` | `Firestore` | Firestore database service |
+| `fastify.authenticate` | `Function` | PreHandler for route authentication |
+| `request.user` | `DecodedIdToken` | Decoded Firebase ID token (after authentication) |
 
 ### Firebase Scripts
 - `npm run serve` - Start Firebase emulators (App Hosting + Firestore)
 - `npm run deploy` - Deploy to Firebase App Hosting
-
-The Firebase Admin SDK is installed as a dependency but not actively used in the current implementation. The project is configured for future integration with Firebase services (Firestore, Authentication, etc.).
 
 ## API Documentation
 
@@ -359,12 +482,23 @@ Once the server is running, access the interactive API documentation:
 - **OpenAPI JSON**: http://localhost:3000/documentation/json
 - **OpenAPI YAML**: http://localhost:3000/documentation/yaml
 
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Root endpoint, returns `{ root: true }` |
+| GET | `/health` | Simple liveness probe, returns `{ status: "healthy" }` |
+| GET | `/status` | Readiness check with Firestore connectivity |
+| GET | `/documentation` | Swagger UI |
+| GET | `/documentation/json` | OpenAPI 3.1.0 spec (JSON) |
+| GET | `/documentation/yaml` | OpenAPI 3.1.0 spec (YAML) |
+
 The OpenAPI 3.1.0 specification includes:
-- Request/response schemas with validation rules
+- TypeBox-generated request/response schemas with validation rules
 - Success and error examples
-- Authentication requirements (JWT Bearer)
+- Authentication requirements (Firebase Bearer token)
 - Detailed endpoint descriptions with HTTP methods
-- Automatic schema generation from route definitions
+- Automatic schema generation from TypeBox route definitions
 
 ## CI/CD & Automation
 
@@ -410,9 +544,9 @@ const fastify = Fastify({
     level: process.env.LOG_LEVEL || "info",
     
     // Cloud Logging optimized defaults:
-    // ✓ JSON format (automatic in Pino)
-    // ✓ stdout output (automatic in Pino)
-    // ✓ No file transport needed
+    // - JSON format (automatic in Pino)
+    // - stdout output (automatic in Pino)
+    // - No file transport needed
     
     formatters: {
       level: (label) => {
@@ -533,8 +667,8 @@ firebase apphosting:secrets:set LOG_LEVEL --project your-project-id
 
 ### Plugin Architecture
 - All plugins use `fastify-plugin` wrapper for global decorator exposure
-- Plugins loaded before routes via `@fastify/autoload`
-- `forceESM: true` ensures proper ESM module loading
+- Plugins registered explicitly in `app.ts` with layered dependency management
+- Routes registered after all plugins are loaded
 - Each plugin is self-contained with JSDoc documentation
 
 ### Request Lifecycle
@@ -545,10 +679,13 @@ firebase apphosting:secrets:set LOG_LEVEL --project your-project-id
 5. **onError** → Global error handler with structured responses
 
 ### Decorators
-- **`fastify.jwt.sign(payload)`** - Sign JWT tokens
-- **`fastify.jwt.verify(token)`** - Verify JWT tokens  
-- **`fastify.jwt.decode(token)`** - Decode JWT tokens
-- **`fastify.authenticate`** - Authentication decorator for protecting routes (use in `onRequest` hook)
+- **`fastify.firebase`** - Firebase Admin App instance
+- **`fastify.firebaseAuth`** - Firebase Auth service for token verification
+- **`fastify.firestore`** - Firestore database service
+- **`fastify.authenticate`** - Authentication decorator for protecting routes (use in `preHandler` hook)
+- **`fastify.isShuttingDown`** - Boolean flag indicating shutdown state
+- **`fastify.isUnderPressure()`** - Check if system is under pressure
+- **`request.user`** - Decoded Firebase ID token (after authentication)
 - **`request.id`** - Request ID (auto-generated UUID v4)
 - **`request.log`** - Child logger with request context
 - **HTTP error helpers** from `@fastify/sensible` (e.g., `reply.notFound()`, `reply.badRequest()`)
@@ -593,11 +730,11 @@ describe("Plugin Name", () => {
 ### ESM Import Extensions
 **CRITICAL**: All relative imports must use `.js` extensions (not `.ts`):
 ```typescript
-// ✅ Correct
+// Correct
 import { foo } from "./utils.js";
 import { bar } from "../../plugins/jwt.js";
 
-// ❌ Wrong - will fail at runtime
+// Wrong - will fail at runtime
 import { foo } from "./utils";
 import { bar } from "../../plugins/jwt.ts";
 ```
@@ -610,11 +747,11 @@ This is enforced by:
 ### Node.js Protocol Prefix
 Built-in Node.js modules must use `node:` prefix:
 ```typescript
-// ✅ Correct
+// Correct
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 
-// ❌ Wrong
+// Wrong
 import * as path from "path";
 ```
 
@@ -623,13 +760,13 @@ Enforced by Biome's `useNodejsImportProtocol` rule (auto-fixable).
 ### Type-Only Imports
 Use `import type` for type imports:
 ```typescript
-// ✅ Correct
+// Correct
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
-// ❌ Wrong
+// Wrong
 import { FastifyInstance, FastifyRequest } from "fastify";
 
-// ❌ Never use inline imports
+// Never use inline imports
 const handler = (req: import("fastify").FastifyRequest) => {};
 ```
 

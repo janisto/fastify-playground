@@ -3,6 +3,30 @@ import { describe, expect, it } from "vitest";
 import lifecycle from "../../../src/plugins/lifecycle.js";
 
 describe("Lifecycle Plugin", () => {
+	describe("isShuttingDown Decorator", () => {
+		it("should decorate fastify with isShuttingDown", async () => {
+			const fastify = Fastify();
+			await fastify.register(lifecycle);
+			await fastify.ready();
+
+			expect(fastify.isShuttingDown).toBeDefined();
+			expect(fastify.isShuttingDown).toBe(false);
+
+			await fastify.close();
+		});
+
+		it("should allow setting isShuttingDown to true", async () => {
+			const fastify = Fastify();
+			await fastify.register(lifecycle);
+			await fastify.ready();
+
+			fastify.isShuttingDown = true;
+			expect(fastify.isShuttingDown).toBe(true);
+
+			await fastify.close();
+		});
+	});
+
 	it("should register onReady hook", async () => {
 		const fastify = Fastify();
 		let onReadyCalled = false;
@@ -50,7 +74,7 @@ describe("Lifecycle Plugin", () => {
 		});
 
 		expect(response.statusCode).toBe(200);
-		expect(JSON.parse(response.payload)).toEqual({ status: "ok" });
+		expect(response.json()).toEqual({ status: "ok" });
 
 		await fastify.close();
 	});

@@ -1,0 +1,39 @@
+import Type from "typebox";
+import Value from "typebox/value";
+
+/**
+ * Environment configuration schema with validation.
+ *
+ * This module provides centralized environment validation that runs
+ * before Fastify instance creation, ensuring fail-fast behavior
+ * for missing or invalid configuration.
+ *
+ * @example
+ * ```typescript
+ * import { env } from './env.js';
+ *
+ * const fastify = Fastify({
+ *   logger: { level: env.LOG_LEVEL }
+ * });
+ * ```
+ */
+const EnvSchema = Type.Object({
+	NODE_ENV: Type.Union([Type.Literal("development"), Type.Literal("production"), Type.Literal("test")], {
+		default: "development",
+	}),
+	PORT: Type.Number({ default: 3000 }),
+	HOST: Type.String({ default: "0.0.0.0" }),
+	LOG_LEVEL: Type.Union(
+		[Type.Literal("trace"), Type.Literal("debug"), Type.Literal("info"), Type.Literal("warn"), Type.Literal("error"), Type.Literal("fatal")],
+		{ default: "info" },
+	),
+});
+
+export const env = Value.Parse(EnvSchema, {
+	NODE_ENV: process.env.NODE_ENV ?? "development",
+	PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
+	HOST: process.env.HOST,
+	LOG_LEVEL: process.env.LOG_LEVEL,
+});
+
+export type Env = typeof env;

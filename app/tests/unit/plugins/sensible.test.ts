@@ -3,6 +3,20 @@ import { describe, expect, it } from "vitest";
 import sensible from "../../../src/plugins/sensible.js";
 
 describe("Sensible Plugin", () => {
+	describe("Plugin Registration", () => {
+		it("should register HttpError shared schema", async () => {
+			const fastify = Fastify();
+			await fastify.register(sensible);
+			await fastify.ready();
+
+			const schema = fastify.getSchema("HttpError");
+			expect(schema).toBeDefined();
+			expect(schema).toHaveProperty("$id", "HttpError");
+
+			await fastify.close();
+		});
+	});
+
 	describe("HTTP Error Utilities on Reply", () => {
 		it("should provide badRequest method", async () => {
 			const fastify = Fastify();

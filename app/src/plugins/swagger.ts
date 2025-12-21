@@ -51,6 +51,7 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
 						type: "http",
 						scheme: "bearer",
 						bearerFormat: "JWT",
+						description: "Firebase ID token. Obtain from Firebase Authentication SDK on the client.",
 					},
 				},
 			},

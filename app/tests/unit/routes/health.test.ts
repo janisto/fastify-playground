@@ -15,7 +15,7 @@ describe("GET /health", () => {
 
 		expect(response.statusCode).toBe(200);
 		expect(response.headers["content-type"]).toContain("application/json");
-		expect(JSON.parse(response.payload)).toEqual({ status: "healthy" });
+		expect(response.json()).toEqual({ status: "healthy" });
 
 		await fastify.close();
 	});

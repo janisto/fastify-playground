@@ -47,14 +47,16 @@
     "@fastify/autoload": "^6.3.1",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
-    "@fastify/jwt": "^10.0.0",
     "@fastify/request-context": "^6.2.1",
     "@fastify/sensible": "^6.0.4",
     "@fastify/swagger": "^9.6.1",
     "@fastify/swagger-ui": "^5.2.3",
+    "@fastify/type-provider-typebox": "^6.1.0",
+    "@fastify/under-pressure": "^9.0.3",
     "fastify": "^5.6.2",
     "fastify-cli": "^7.4.1",
     "firebase-admin": "^13.6.0",
+    "typebox": "^1.0.65",
     "undici": "^7.16.0"
   },
   "devDependencies": {

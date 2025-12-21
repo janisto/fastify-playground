@@ -1,10 +1,17 @@
 import fp from "fastify-plugin";
 
+declare module "fastify" {
+	interface FastifyInstance {
+		isShuttingDown: boolean;
+	}
+}
+
 /**
  * Lifecycle hooks plugin for Fastify.
  *
  * This plugin sets up:
  * - Graceful shutdown handlers for SIGTERM and SIGINT signals
+ * - `isShuttingDown` decorator to track shutdown state
  * - onReady hook for initialization logging
  * - onListen hook for server startup logging
  * - onClose hook for cleanup operations
@@ -18,12 +25,16 @@ import fp from "fastify-plugin";
  */
 export default fp(
 	async (fastify) => {
+		// Decorate with shutdown state
+		fastify.decorate("isShuttingDown", false);
+
 		// onReady: Triggered before server starts listening
 		fastify.addHook("onReady", async () => {
 			fastify.log.info("Server is ready and initialized");
 		});
 
 		// onListen: Triggered when server starts listening
+		/* v8 ignore start -- @preserve */
 		fastify.addHook("onListen", async () => {
 			fastify.log.info(
 				{
@@ -34,6 +45,7 @@ export default fp(
 				"Server listening",
 			);
 		});
+		/* v8 ignore stop -- @preserve */
 
 		// onClose: Triggered when fastify.close() is called
 		fastify.addHook("onClose", async (instance) => {
@@ -49,6 +61,7 @@ export default fp(
 		/* v8 ignore next -- @preserve */
 		const closeGracefully = async (signal: string) => {
 			fastify.log.info(`Received ${signal}, shutting down gracefully`);
+			fastify.isShuttingDown = true;
 
 			try {
 				// Close the server and trigger onClose hooks

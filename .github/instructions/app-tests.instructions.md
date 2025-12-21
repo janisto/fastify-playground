@@ -7,10 +7,11 @@ Use these rules for tests under `app/tests/**` (Node 24, TypeScript, Vitest).
 ## Test Structure
 
 - **Unit tests** → `app/tests/unit/**` (mirror `app/src/**` structure)
-  - `unit/plugins/**` - Plugin tests (cors, helmet, jwt, lifecycle, error-handler, request-logging, sensible, swagger)
+  - `unit/plugins/**` - Plugin tests (cors, helmet, auth, firebase, lifecycle, error-handler, request-logging, sensible, swagger, under-pressure)
   - `unit/routes/**` - Route tests (health, root)
+  - `unit/env.test.ts` - Environment configuration tests
 - **Integration tests** → `app/tests/integration/**` (full-stack API tests)
-- **Mocks** → `app/tests/mocks/**` (MSW for HTTP mocking, currently unused but available)
+- **Mocks** → `app/tests/mocks/**` (Firebase mocks, test utilities)
 - **Helpers** → `app/tests/helpers/**` (shared test utilities)
 
 ## Test Framework (Vitest)
@@ -127,6 +128,161 @@ describe("GET /health", () => {
 });
 ```
 
+### Firebase Admin SDK Mocking
+
+Use the shared Firebase mocks from `tests/mocks/firebase.ts` for all Firebase-related tests.
+
+#### Mock Setup Pattern
+
+```typescript
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createFirebaseAppMock, createFirebaseAuthMock, createFirestoreMock } from "../../mocks/firebase.js";
+
+// Create mock instances
+const mockApp = createFirebaseAppMock();
+const mockAuth = createFirebaseAuthMock();
+const mockFirestore = createFirestoreMock();
+
+// Mock firebase-admin modules before importing plugins
+vi.mock("firebase-admin/app", () => ({
+	getApps: vi.fn(() => [mockApp]),
+	initializeApp: vi.fn(() => mockApp),
+	cert: vi.fn(),
+}));
+
+vi.mock("firebase-admin/auth", () => ({
+	getAuth: vi.fn(() => mockAuth),
+}));
+
+vi.mock("firebase-admin/firestore", () => ({
+	getFirestore: vi.fn(() => mockFirestore),
+}));
+
+describe("Firebase Plugin", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	afterEach(async () => {
+		vi.resetModules();
+	});
+
+	it("should register firebase decorator", async () => {
+		const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+		const fastify = Fastify();
+		await fastify.register(firebasePlugin);
+		await fastify.ready();
+
+		expect(fastify.firebase).toBeDefined();
+		await fastify.close();
+	});
+});
+```
+
+#### Available Mock Helpers
+
+```typescript
+// tests/mocks/firebase.ts provides:
+createFirebaseAppMock()    // Mock Firebase App instance
+createFirebaseAuthMock()   // Mock Firebase Auth with verifyIdToken, getUser, etc.
+createFirestoreMock()      // Mock Firestore with collection, doc, get, etc.
+resetFirebaseMocks()       // Reset all mocks between tests
+```
+
+#### Testing Auth with Mocked Tokens
+
+```typescript
+it("should authenticate with valid token", async () => {
+	const mockDecodedToken = {
+		uid: "test-user-123",
+		email: "test@example.com",
+		email_verified: true,
+	};
+	mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
+
+	// ... register plugins and test route
+	const response = await fastify.inject({
+		method: "GET",
+		url: "/protected",
+		headers: { authorization: "Bearer valid-token" },
+	});
+
+	expect(response.statusCode).toBe(200);
+	expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token");
+});
+```
+
+### Decorator Testing Patterns
+
+Test Fastify decorators by registering the plugin and verifying decorated properties exist.
+
+#### Instance Decorator Testing
+
+```typescript
+it("should decorate fastify with isShuttingDown", async () => {
+	const fastify = Fastify();
+	await fastify.register(lifecycle);
+	await fastify.ready();
+
+	expect(fastify.isShuttingDown).toBeDefined();
+	expect(fastify.isShuttingDown).toBe(false);
+
+	await fastify.close();
+});
+```
+
+#### Request Decorator Testing
+
+```typescript
+it("should decorate request with user property", async () => {
+	const fastify = Fastify();
+	await fastify.register(sensiblePlugin);
+	await fastify.register(firebasePlugin);
+	await fastify.register(authPlugin);
+
+	mockAuth.verifyIdToken.mockResolvedValue({ uid: "test-user" });
+
+	fastify.get("/test", { preHandler: [fastify.authenticate] }, async (request) => {
+		return { userId: request.user?.uid };
+	});
+
+	const response = await fastify.inject({
+		method: "GET",
+		url: "/test",
+		headers: { authorization: "Bearer valid-token" },
+	});
+
+	expect(response.json()).toEqual({ userId: "test-user" });
+	await fastify.close();
+});
+```
+
+### TypeBox Schema Testing
+
+When testing routes that use TypeBox schemas, verify response shapes match the schema.
+
+```typescript
+import { Type } from "@fastify/type-provider-typebox";
+
+it("should return response matching TypeBox schema", async () => {
+	const fastify = Fastify();
+	await fastify.register(healthRoute);
+
+	const response = await fastify.inject({
+		method: "GET",
+		url: "/health",
+	});
+
+	expect(response.statusCode).toBe(200);
+	const body = response.json();
+	
+	// Verify structure matches Type.Object({ status: Type.Literal("healthy") })
+	expect(body).toHaveProperty("status", "healthy");
+
+	await fastify.close();
+});
+```
+
 ### Integration Tests
 - Test full application stack (`app.ts` with all plugins and routes)
 - Validate end-to-end behavior
@@ -193,14 +349,17 @@ npm run test:coverage # With coverage report
 
 **Test files organized by type:**
 
+- `env.test.ts` - Environment configuration validation with TypeBox
+- `plugins/auth.test.ts` - Firebase Auth, token verification, request.user decorator
 - `plugins/cors.test.ts` - CORS origin validation, preflight requests
-- `plugins/helmet.test.ts` - Security headers, CSP, HSTS
-- `plugins/jwt.test.ts` - Sign, verify, decode, expiration, decorators
-- `plugins/sensible.test.ts` - HTTP errors, assertions, error utilities
 - `plugins/error-handler.test.ts` - Error logging, structured responses, validation errors
+- `plugins/firebase.test.ts` - Firebase Admin SDK initialization, decorators
+- `plugins/helmet.test.ts` - Security headers, CSP, HSTS
+- `plugins/lifecycle.test.ts` - onReady, onListen, onClose hooks, isShuttingDown decorator
 - `plugins/request-logging.test.ts` - Request ID generation, header propagation, context
-- `plugins/lifecycle.test.ts` - onReady, onListen, onClose hooks
+- `plugins/sensible.test.ts` - HTTP errors, assertions, error utilities
 - `plugins/swagger.test.ts` - JSON/YAML endpoints, Swagger UI, OpenAPI schema
-- `routes/health.test.ts` - Health check endpoint
+- `plugins/under-pressure.test.ts` - Health checks, /status endpoint, Firestore connectivity
+- `routes/health.test.ts` - Health check endpoint (simple liveness)
 - `routes/root.test.ts` - Root endpoint
-- `integration/app.test.ts` - Full application stack tests
+- `integration/app.test.ts` - Full application stack tests with Firebase mocks

@@ -1,11 +1,38 @@
-import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
-import app from "../../src/app.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createFirebaseAppMock, createFirebaseAuthMock, createFirestoreMock } from "../mocks/firebase.js";
+
+// Mock firebase-admin modules
+const mockApp = createFirebaseAppMock();
+const mockAuth = createFirebaseAuthMock();
+const mockFirestore = createFirestoreMock();
+
+vi.mock("firebase-admin/app", () => ({
+	getApps: vi.fn(() => [mockApp]),
+	initializeApp: vi.fn(() => mockApp),
+	cert: vi.fn(),
+}));
+
+vi.mock("firebase-admin/auth", () => ({
+	getAuth: vi.fn(() => mockAuth),
+}));
+
+vi.mock("firebase-admin/firestore", () => ({
+	getFirestore: vi.fn(() => mockFirestore),
+}));
 
 describe("App Integration", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockFirestore._mocks.get.mockResolvedValue({ docs: [] });
+	});
+
+	afterEach(async () => {
+		vi.resetModules();
+	});
+
 	it("should initialize app successfully and register all routes", async () => {
-		const fastify = Fastify();
-		await fastify.register(app);
+		const { buildApp } = await import("../../src/app.js");
+		const fastify = await buildApp();
 
 		// Verify app is ready without errors
 		await fastify.ready();
@@ -20,8 +47,8 @@ describe("App Integration", () => {
 	});
 
 	it("should handle requests to root endpoint", async () => {
-		const fastify = Fastify();
-		await fastify.register(app);
+		const { buildApp } = await import("../../src/app.js");
+		const fastify = await buildApp();
 
 		const response = await fastify.inject({
 			method: "GET",
@@ -35,8 +62,8 @@ describe("App Integration", () => {
 	});
 
 	it("should handle requests to health endpoint", async () => {
-		const fastify = Fastify();
-		await fastify.register(app);
+		const { buildApp } = await import("../../src/app.js");
+		const fastify = await buildApp();
 
 		const response = await fastify.inject({
 			method: "GET",
@@ -50,8 +77,8 @@ describe("App Integration", () => {
 	});
 
 	it("should have security headers from helmet plugin", async () => {
-		const fastify = Fastify();
-		await fastify.register(app);
+		const { buildApp } = await import("../../src/app.js");
+		const fastify = await buildApp();
 
 		const response = await fastify.inject({
 			method: "GET",
@@ -66,8 +93,8 @@ describe("App Integration", () => {
 	});
 
 	it("should handle CORS for localhost requests", async () => {
-		const fastify = Fastify();
-		await fastify.register(app);
+		const { buildApp } = await import("../../src/app.js");
+		const fastify = await buildApp();
 
 		const response = await fastify.inject({
 			method: "GET",

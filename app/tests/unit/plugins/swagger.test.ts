@@ -18,7 +18,7 @@ describe("Swagger Documentation", () => {
 		expect(response.statusCode).toBe(200);
 		expect(response.headers["content-type"]).toContain("application/json");
 
-		const spec = JSON.parse(response.payload);
+		const spec = response.json();
 		expect(spec.openapi).toBe("3.1.0");
 		expect(spec.info.title).toBe("Fastify Playground API");
 		expect(spec.info.version).toBe("1.0.0");
@@ -75,7 +75,7 @@ describe("Swagger Documentation", () => {
 			url: "/documentation/json",
 		});
 
-		const spec = JSON.parse(response.payload);
+		const spec = response.json();
 
 		// Check that /health endpoint is documented
 		expect(spec.paths).toBeDefined();
