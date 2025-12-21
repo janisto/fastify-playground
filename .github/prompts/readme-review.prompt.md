@@ -1,6 +1,9 @@
 ---
-mode: 'agent'
+name: 'README.md Review and Update'
 description: 'Update README.md Documentation for Fastify Playground'
+argument-hint: 'You are tasked with reviewing and updating the README.md file for this Fastify-based REST API project. This file provides guidance to VS Code Copilot when working with code in this repository.'
+agent: 'agent'
+tools: ['context7/*', 'read', 'edit']
 ---
 # Task: Update README.md Documentation
 
@@ -9,6 +12,17 @@ You are tasked with reviewing and updating the README.md file for this Fastify-b
 ## Your Mission
 
 Conduct a comprehensive analysis of the entire codebase and update the README.md file to ensure it is 100% accurate, complete, and helpful for future VS Code Copilot interactions.
+
+## Required File Reads
+
+Before making any updates, read these files in order:
+1. `app/package.json` - Dependencies, scripts, engines
+2. `app/src/app.ts` - Entry point and AutoLoad configuration
+3. `app/vitest.config.ts` - Test and coverage configuration
+4. `app/tsconfig.json` - TypeScript settings
+5. `.github/copilot-instructions.md` - Coding guidelines
+6. All files in `app/src/plugins/` and `app/src/routes/`
+7. Root `biome.json` and `app/biome.json` - Linting configuration
 
 ## Analysis Requirements
 
@@ -21,7 +35,6 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
 ### 2. Tech Stack Analysis
 - Verify all frameworks and their versions by checking:
   - `app/package.json` for dependencies (Fastify, TypeScript, Vitest, etc.)
-  - `app/package-lock.json` for exact versions
   - Configuration files (`biome.json`, `tsconfig.json`, `vitest.config.ts`)
 - Check Node.js version in `.nvmrc` and `engines` field
 - Verify Fastify plugins (@fastify/cors, @fastify/helmet, @fastify/jwt, @fastify/swagger, etc.)
@@ -29,7 +42,14 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
 - Remove any technologies listed but not actually used
 - Verify folder structure: `app/`, `functions/` (if used)
 
-### 3. Commands Verification
+### 3. Version Verification
+- Run `cd app && npm list --depth=0` to get exact installed versions
+- Verify Biome version in root `biome.json` matches documentation
+- Check Vitest version matches vitest.config.ts patterns
+- Ensure TypeScript version aligns with target features (5.9 for ES2024)
+- Cross-reference `package-lock.json` for actual resolved versions
+
+### 4. Commands Verification
 - Verify all npm scripts in `app/package.json`:
   - `dev` (tsx watch mode)
   - `build`, `build:check`, `build:watch`
@@ -40,7 +60,7 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
 - Ensure command descriptions match actual behavior
 - Add any missing commonly-used commands
 
-### 4. Architecture & Directory Structure
+### 5. Architecture & Directory Structure
 - Scan the directory structure in `app/`:
   - `src/app.ts` (entry point with AutoLoad)
   - `src/plugins/` (Fastify plugins)
@@ -54,13 +74,13 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
 - Document test file organization (one test file per plugin/route)
 - Note @fastify/autoload usage with `forceESM: true`
 
-### 5. Automation
+### 6. Automation
 - Check for GitHub Actions workflows in `.github/workflows/`
 - Document any CI/CD pipelines
 - Verify Firebase deployment scripts if present
 - Document any build or deployment automation
 
-### 6. Configuration Files
+### 7. Configuration Files
 - Document all configuration files and their purposes:
   - `biome.json` (formatting, linting, import organization)
   - `vitest.config.ts` (test configuration, coverage thresholds)
@@ -71,7 +91,7 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
   - Environment variables (JWT_SECRET, NODE_ENV, PORT)
   - `.env.local` pattern (gitignored)
 
-### 7. Development Guidelines
+### 8. Development Guidelines
 - Extract coding conventions from:
   - `.github/copilot-instructions.md` if present
   - Biome rules (double quotes, semicolons, import extensions)
@@ -84,7 +104,7 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
 - Identify test patterns (Vitest globals, structure)
 - Note V8 coverage ignore comments (`/* v8 ignore next -- @preserve */`)
 
-### 8. Integration Points
+### 9. Integration Points
 - Document Fastify plugin integrations:
   - JWT authentication flow
   - CORS origin validation
@@ -92,9 +112,29 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
   - OpenAPI documentation generation
   - Request logging and context
   - Lifecycle hooks and graceful shutdown
-- Identify environment variables needed (JWT_SECRET, NODE_ENV, PORT)
-- Document OpenAPI endpoints (/documentation, /documentation/json, /documentation/yaml)
 - Note any external APIs or Firebase integration
+
+### 10. Environment Variables Verification
+- Document all required/optional environment variables by checking actual usage:
+  - `JWT_SECRET` - Required for JWT authentication
+  - `NODE_ENV` - development/production
+  - `PORT` - Server port (default: 3000)
+  - `LOG_LEVEL` - Pino log level (if used)
+- Search for `process.env` usage across all source files
+- Verify `.env.example` or `.env.local` patterns if present
+
+### 11. OpenAPI Endpoints Verification
+- Verify these endpoints are documented and accurate:
+  - `GET /documentation` - Swagger UI
+  - `GET /documentation/json` - OpenAPI JSON spec
+  - `GET /documentation/yaml` - OpenAPI YAML spec
+- Verify the OpenAPI version (3.1.0 vs 3.0.x) in swagger.ts
+
+### 12. Test Count Verification
+- Run `cd app && npm run test` to get current test count
+- Do NOT assume a specific test count - always verify with actual execution
+- Update test file count by checking `tests/unit/` and `tests/integration/` directories
+- Verify coverage thresholds in `vitest.config.ts`
 
 ## Output Requirements
 
@@ -106,6 +146,33 @@ Create an updated README.md file that:
 4. **Uses clear, concise language** appropriate for AI assistance
 5. **Includes specific examples** where helpful (Fastify plugin usage, test patterns)
 6. **Prioritizes information** most useful for Fastify development and Copilot
+
+## Markdown Quality Guidelines
+
+- Use consistent heading levels (h2 for sections, h3 for subsections)
+- Add a table of contents for README > 200 lines
+- Use collapsible sections (`<details>`) for lengthy content like full command lists
+- Ensure all code blocks have language identifiers (```typescript, ```bash, etc.)
+- Verify all internal links work
+- Use badges sparingly and only for meaningful metrics (build status, coverage)
+
+## What NOT to Include
+
+- Firebase-specific content if `functions/` is empty/placeholder
+- Dependencies that are only devDependencies unless relevant to development workflow
+- Deprecated plugins or removed features
+- Speculative or planned features not yet implemented
+- Hardcoded version numbers that will become stale (prefer "latest" or ranges)
+- Duplicate information already in copilot-instructions.md
+- Emojis or unicode symbols in code, comments, documentation, or commit messages (always refactor them away if found)
+
+## Monorepo Awareness
+
+- This is a monorepo with `app/` and `functions/` directories
+- README.md is at root level and should primarily document `app/`
+- Always clarify which directory commands should be run from
+- Document root `biome.json` vs `app/biome.json` hierarchy
+- Note if `functions/` is a placeholder or active
 
 ## Important Notes
 
@@ -119,7 +186,6 @@ Create an updated README.md file that:
   - Integration tests exist but don't affect coverage metrics
 - Document both what exists AND how it should be used
 - If you find discrepancies between documentation and reality, always favor reality
-- Verify actual test count (should be 73 tests across 11 test files)
 - Update plugin list to match actual files in `src/plugins/`
 
 ## Process
@@ -130,12 +196,27 @@ Create an updated README.md file that:
    - Verify all npm scripts in `app/package.json`
    - Review configuration files (biome.json, vitest.config.ts, tsconfig.json)
    - Check `.github/copilot-instructions.md` for coding guidelines
-2. Compare your findings with the current README.md
-3. Create an updated version that reflects the true state of the Fastify project
-4. Ensure all paths, commands, technical details, and plugin names are verified and accurate
-5. Update test count and coverage metrics to match current state
-6. Document any new plugins or routes that have been added
-7. Remove references to deleted files (e.g., `support.ts` if no longer exists)
+2. Run `cd app && npm run test` to get actual test count
+3. Run `cd app && npm list --depth=0` to verify dependency versions
+4. Compare your findings with the current README.md
+5. Create an updated version that reflects the true state of the Fastify project
+6. Ensure all paths, commands, technical details, and plugin names are verified and accurate
+7. Update test count and coverage metrics to match current state
+8. Document any new plugins or routes that have been added
+9. Remove references to deleted files (e.g., `support.ts` if no longer exists)
+
+## Final Verification Checklist
+
+After generating the updated README, verify:
+- [ ] All file paths mentioned actually exist
+- [ ] All npm scripts listed are valid (check `app/package.json`)
+- [ ] Test count matches actual test run output
+- [ ] Dependency versions are current (or described generically)
+- [ ] No orphaned sections documenting non-existent features
+- [ ] Plugin list matches files in `app/src/plugins/`
+- [ ] Route list matches files in `app/src/routes/`
+- [ ] Environment variables match actual `process.env` usage
+- [ ] OpenAPI endpoints are accurate
 
 ## Fastify-Specific Considerations
 

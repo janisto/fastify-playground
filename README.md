@@ -4,11 +4,11 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 
 ## Tech Stack
 
-- **Runtime**: Node.js 24.11.0 (ES2024)
-- **Framework**: Fastify 5.6.1 with TypeScript 5.9.3
-- **Testing**: Vitest 4.0.6 with V8 coverage provider (70% minimum thresholds)
-- **Code Quality**: Biome 2.3.3 (formatting, linting, import organization)
-- **Backend Services**: Firebase Admin SDK 13.5.0 (Firestore, Auth, App Hosting)
+- **Runtime**: Node.js 24 (ES2024)
+- **Framework**: Fastify 5.x with TypeScript 5.9
+- **Testing**: Vitest 4.x with V8 coverage provider (70% minimum thresholds)
+- **Code Quality**: Biome 2.x (formatting, linting, import organization)
+- **Backend Services**: Firebase Admin SDK (configured for future integration)
 - **Package Manager**: npm
 - **Module System**: ESM (`"type": "module"`)
 
@@ -22,100 +22,100 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 │   │   ├── plugins/       # Fastify plugins
 │   │   └── routes/        # Route handlers
 │   ├── tests/
-│   │   ├── unit/          # Unit tests
-│   │   ├── integration/   # Integration tests
-│   │   ├── mocks/         # Test mocks
-│   │   └── helpers/       # Test utilities
+│   │   ├── unit/          # Unit tests (plugins/, routes/)
+│   │   ├── integration/   # Integration tests (app.test.ts)
+│   │   ├── mocks/         # Test mocks (placeholder)
+│   │   └── helpers/       # Test utilities (placeholder)
 │   ├── package.json
 │   ├── tsconfig.json      # TypeScript config (ES2024, NodeNext)
 │   ├── vitest.config.ts   # Vitest config with coverage
 │   └── biome.json         # App-specific Biome overrides
-├── functions/             # Firebase Cloud Functions (placeholder)
+├── functions/             # Firebase Cloud Functions (placeholder, not implemented)
 ├── biome.json             # Root Biome configuration
-└── .nvmrc                 # Node version (24.11.0)
+└── .nvmrc                 # Node version
 ```
 
 ## Features
 
 ### Core
-- ✅ **Fastify 5.x** with plugin architecture and `@fastify/autoload` (forceESM mode)
-- ✅ **TypeScript 5.9** with strict mode
-- ✅ **ES2024 target** (modern JavaScript features: `toSorted`, `Object.groupBy`, Set ops, Iterator helpers)
-- ✅ **ESM-first** (`"type": "module"` with NodeNext module resolution)
-- ✅ **Auto-loading** routes and plugins via `@fastify/autoload` with `forceESM: true`
+- **Fastify 5.x** with plugin architecture and `@fastify/autoload` (forceESM mode)
+- **TypeScript 5.9** with strict mode
+- **ES2024 target** (modern JavaScript features: `toSorted`, `Object.groupBy`, Set ops, Iterator helpers)
+- **ESM-first** (`"type": "module"` with NodeNext module resolution)
+- **Auto-loading** routes and plugins via `@fastify/autoload` with `forceESM: true`
 
 ### Documentation & API
-- ✅ **OpenAPI 3.1.0** specification via `@fastify/swagger`
-- ✅ **Swagger UI** (`@fastify/swagger-ui`) for interactive API documentation
-- ✅ **Automated schema generation** from route definitions
-- ✅ **Health check endpoint** with OpenAPI documentation
-- ✅ **Multiple export formats** (JSON, YAML, interactive UI)
+- **OpenAPI 3.1.0** specification via `@fastify/swagger`
+- **Swagger UI** (`@fastify/swagger-ui`) for interactive API documentation
+- **Automated schema generation** from route definitions
+- **Health check endpoint** with OpenAPI documentation
+- **Multiple export formats** (JSON, YAML, interactive UI)
 
 ### Security & Middleware
-- ✅ **Helmet** (`@fastify/helmet` v13) for security headers
-- ✅ **CORS** (`@fastify/cors` v11) with configurable origin validation
-- ✅ **JWT Authentication** (`@fastify/jwt` v10) with HS256, 1-hour expiration, environment-based secrets
-- ✅ **Sensible** (`@fastify/sensible` v6) plugin for common utilities and HTTP errors
-- ✅ **Global error handler** with structured error responses and proper logging
-- ✅ **Request context** (`@fastify/request-context` v6) for request-scoped data
+- **Helmet** (`@fastify/helmet`) for security headers
+- **CORS** (`@fastify/cors`) with configurable origin validation
+- **JWT Authentication** (`@fastify/jwt`) with HS256, 1-hour expiration, environment-based secrets
+- **Sensible** (`@fastify/sensible`) plugin for common utilities and HTTP errors
+- **Global error handler** with structured error responses and proper logging
+- **Request context** (`@fastify/request-context`) for request-scoped data
 
 ### Observability & Operations
-- ✅ **Structured logging** with automatic request ID generation (UUID v4)
-- ✅ **Request/response logging** with timing, user-agent, and IP tracking
-- ✅ **Request ID propagation** via `X-Request-Id` header (client-provided or auto-generated)
-- ✅ **Lifecycle hooks** for initialization, startup, and shutdown events
-- ✅ **Graceful shutdown** handling SIGTERM/SIGINT with cleanup hooks
-- ✅ **Child loggers** with request context for distributed tracing
+- **Structured logging** with automatic request ID generation (UUID v4)
+- **Request/response logging** with timing, user-agent, and IP tracking
+- **Request ID propagation** via `X-Request-Id` header (client-provided or auto-generated)
+- **Lifecycle hooks** for initialization, startup, and shutdown events
+- **Graceful shutdown** handling SIGTERM/SIGINT with cleanup hooks
+- **Child loggers** with request context for distributed tracing
 
 ### Development
-- ✅ **Hot reload** with tsx 4.20.6 watch mode
-- ✅ **Vitest** for testing with 70% minimum coverage requirement (73 tests across 11 files)
-- ✅ **Biome 2.3.3** for fast formatting and linting
-- ✅ **EditorConfig** support (2-space indentation, LF line endings)
-- ✅ **MSW 2.11.6+** for HTTP mocking in tests
-- ✅ **Firebase Emulator** support for local development
+- **Hot reload** with tsx watch mode
+- **Vitest** for testing with 70% minimum coverage requirement
+- **Biome** for fast formatting and linting
+- **EditorConfig** support (2-space indentation, LF line endings)
+- **MSW** available for HTTP mocking in tests (not currently used)
+- **Firebase Emulator** support for local development
 
 ### Code Quality & Standards
-- ✅ **Strict unused imports/variables** detection and auto-removal
-- ✅ **Import extensions** enforced (`.js` for relative imports via `useImportExtensions`)
-- ✅ **Node.js protocol** enforced (`node:` prefix for built-ins)
-- ✅ **Type-only imports** enforced (`import type` syntax)
-- ✅ **Template literals** preferred over string concatenation
-- ✅ **No debugger** statements in production
-- ✅ **Explicit `any`** warnings
-- ✅ **Double quotes** and **semicolons** enforced
+- **Strict unused imports/variables** detection and auto-removal
+- **Import extensions** enforced (`.js` for relative imports via `useImportExtensions`)
+- **Node.js protocol** enforced (`node:` prefix for built-ins)
+- **Type-only imports** enforced (`import type` syntax)
+- **Template literals** preferred over string concatenation
+- **No debugger** statements in production
+- **Explicit `any`** warnings
+- **Double quotes** and **semicolons** enforced
 
 ## Key Dependencies
 
 ### Production (`app/package.json`)
-- **fastify** (^5.6.1) - Fast and low overhead web framework
-- **@fastify/autoload** (^6.3.1) - Plugin auto-loading
-- **@fastify/cors** (^11.1.0) - CORS middleware
-- **@fastify/helmet** (^13.0.2) - Security headers
-- **@fastify/jwt** (^10.0.0) - JWT authentication
-- **@fastify/request-context** (^6.2.1) - Request-scoped context
-- **@fastify/sensible** (^6.0.3) - Common utilities and HTTP errors
-- **@fastify/swagger** (^9.5.2) - OpenAPI documentation generation
-- **@fastify/swagger-ui** (^5.2.3) - Swagger UI integration
-- **fastify-cli** (^7.4.0) - CLI utilities for Fastify
-- **firebase-admin** (^13.5.0) - Firebase Admin SDK
-- **undici** (^7.16.0) - HTTP/1.1 client (used by Fastify)
+- **fastify** - Fast and low overhead web framework
+- **@fastify/autoload** - Plugin auto-loading
+- **@fastify/cors** - CORS middleware
+- **@fastify/helmet** - Security headers
+- **@fastify/jwt** - JWT authentication
+- **@fastify/request-context** - Request-scoped context
+- **@fastify/sensible** - Common utilities and HTTP errors
+- **@fastify/swagger** - OpenAPI documentation generation
+- **@fastify/swagger-ui** - Swagger UI integration
+- **fastify-cli** - CLI utilities for Fastify
+- **firebase-admin** - Firebase Admin SDK
+- **undici** - HTTP/1.1 client (used by Fastify)
 
 ### Development (`app/package.json`)
-- **@biomejs/biome** (2.3.3) - Fast formatter and linter
-- **@types/node** (^24.10.0) - Node.js type definitions
-- **@vitest/coverage-v8** (^4.0.6) - V8 coverage provider for Vitest
-- **fastify-tsconfig** (^3.0.0) - Shared TypeScript config for Fastify
-- **msw** (^2.11.6) - HTTP mocking for tests
-- **tsx** (^4.20.6) - TypeScript execution with hot reload
-- **typescript** (^5.9.3) - TypeScript compiler
-- **vitest** (^4.0.6) - Testing framework
+- **@biomejs/biome** - Fast formatter and linter
+- **@types/node** - Node.js type definitions
+- **@vitest/coverage-v8** - V8 coverage provider for Vitest
+- **fastify-tsconfig** - Shared TypeScript config for Fastify
+- **msw** - HTTP mocking for tests
+- **tsx** - TypeScript execution with hot reload
+- **typescript** - TypeScript compiler
+- **vitest** - Testing framework
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 24.11.0 (use `nvm use` to switch to the correct version from `.nvmrc`)
+- Node.js 24 (use `nvm use` to switch to the correct version from `.nvmrc`)
 - npm (comes with Node.js)
 
 ### Installation
@@ -125,7 +125,7 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 git clone https://github.com/janisto/fastify-playground.git
 cd fastify-playground
 
-# Switch to Node 24.11.0 (uses .nvmrc)
+# Switch to Node 24 (uses .nvmrc)
 nvm use
 
 # Install dependencies
@@ -245,7 +245,7 @@ All plugins are automatically loaded via `@fastify/autoload` with `forceESM: tru
 - **`cors.ts`** - CORS configuration with configurable origin validation (defaults to localhost in development)
 - **`helmet.ts`** - Security headers via `@fastify/helmet` v13 (CSP, HSTS, X-Frame-Options, etc.)
 - **`jwt.ts`** - JWT authentication with HS256, 1-hour expiration, environment-based secrets, decorators for sign/verify/decode
-- **`sensible.ts`** - Common utilities via `@fastify/sensible` (HTTP errors, assertions, to/getHttpError)
+- **`sensible.ts`** - Common utilities via `@fastify/sensible` (HTTP errors, assertions, error utilities)
 
 #### Observability
 - **`error-handler.ts`** - Global error handler with structured responses, proper logging, validation error handling, stack traces in development
@@ -259,7 +259,7 @@ All plugins are automatically loaded via `@fastify/autoload` with `forceESM: tru
 
 All routes are automatically loaded via `@fastify/autoload` with `forceESM: true`.
 
-- **`health.ts`** - Health check endpoint (`GET /health`) with OpenAPI schema, returns `{ status: "ok" }`
+- **`health.ts`** - Health check endpoint (`GET /health`) with OpenAPI schema, returns `{ status: "healthy" }`
 - **`root.ts`** - Root endpoint (`GET /`) with basic response
 
 ### Auto-loading Pattern
@@ -278,31 +278,31 @@ This enables a clean, modular plugin architecture:
 
 The project enforces high test coverage standards with comprehensive test suite:
 
-- **Framework**: Vitest 4.0.6 with V8 coverage provider
+- **Framework**: Vitest with V8 coverage provider
 - **Minimum coverage**: 70% across all metrics (lines, functions, branches, statements) - enforced globally
 - **Test structure**: Separate directories for unit, integration, mocks, and helpers
 - **Mock management**: Automatic clearing, resetting, and restoration between tests
 - **Globals**: Vitest globals enabled (`describe`, `it`, `expect`, etc.) - no imports needed
-- **HTTP mocking**: MSW (v2.11.6+) for stubbing external HTTP calls
+- **HTTP mocking**: MSW available for stubbing external HTTP calls (not currently used)
 - **Isolation**: Tests run in isolated environments with 10-second timeouts
 - **Fastify testing**: Uses `fastify.inject()` for HTTP request simulation without network
 
-### Current Test Suite (73 tests across 11 files, all passing)
+### Test Suite Structure
 
 #### Unit Tests (`tests/unit/`)
-- **`plugins/cors.test.ts`**: 6 tests - CORS origin validation, preflight requests, allowed methods
-- **`plugins/helmet.test.ts`**: 6 tests - Security headers, CSP, HSTS, X-Frame-Options
-- **`plugins/jwt.test.ts`**: 14 tests - Sign, verify, decode, expiration, invalid tokens, decorators
-- **`plugins/sensible.test.ts`**: 18 tests - HTTP errors, assertions, error utilities, status codes
-- **`plugins/swagger.test.ts`**: 4 tests - JSON/YAML endpoints, Swagger UI, OpenAPI schema
-- **`plugins/error-handler.test.ts`**: 7 tests - Error logging, structured responses, validation errors, stack traces
-- **`plugins/request-logging.test.ts`**: 6 tests - Request ID generation, header propagation, context storage, response logging
-- **`plugins/lifecycle.test.ts`**: 5 tests - onReady, onListen, onClose hooks, graceful shutdown
-- **`routes/health.test.ts`**: 1 test - Health check endpoint returns `{ status: "ok" }`
-- **`routes/root.test.ts`**: 1 test - Root endpoint returns welcome message
+- **`plugins/cors.test.ts`** - CORS origin validation, preflight requests, allowed methods
+- **`plugins/helmet.test.ts`** - Security headers, CSP, HSTS, X-Frame-Options
+- **`plugins/jwt.test.ts`** - Sign, verify, decode, expiration, invalid tokens, decorators
+- **`plugins/sensible.test.ts`** - HTTP errors, assertions, error utilities, status codes
+- **`plugins/swagger.test.ts`** - JSON/YAML endpoints, Swagger UI, OpenAPI schema
+- **`plugins/error-handler.test.ts`** - Error logging, structured responses, validation errors, stack traces
+- **`plugins/request-logging.test.ts`** - Request ID generation, header propagation, context storage, response logging
+- **`plugins/lifecycle.test.ts`** - onReady, onListen, onClose hooks, graceful shutdown
+- **`routes/health.test.ts`** - Health check endpoint returns `{ status: "healthy" }`
+- **`routes/root.test.ts`** - Root endpoint returns `{ root: true }`
 
 #### Integration Tests (`tests/integration/`)
-- **`app.test.ts`**: 5 tests - Full application stack with all plugins, route loading, error handling
+- **`app.test.ts`** - Full application stack with all plugins, route loading, error handling
 
 ### Test Organization
 
@@ -312,8 +312,8 @@ Write tests in `app/tests/` following this structure:
   - `plugins/` - Plugin-specific tests
   - `routes/` - Route-specific tests
 - **`integration/`** - Full-stack integration tests
-- **`mocks/`** - Shared mock data and utilities (MSW handlers, fixtures)
-- **`helpers/`** - Test helper functions and utilities
+- **`mocks/`** - Shared mock data and utilities (placeholder with `.gitkeep`)
+- **`helpers/`** - Test helper functions and utilities (placeholder with `.gitkeep`)
 
 ### Coverage Notes
 
@@ -341,7 +341,7 @@ The application uses the following environment variables:
 
 The project integrates with Firebase services:
 
-- **Firebase Admin SDK** (v13.5.0) - Backend SDK for Firestore, Auth, Cloud Storage
+- **Firebase Admin SDK** - Backend SDK for Firestore, Auth, Cloud Storage
 - **Firebase App Hosting** - Deployment target for the Fastify application
 - **Firebase Emulators** - Local development environment
 
@@ -349,7 +349,7 @@ The project integrates with Firebase services:
 - `npm run serve` - Start Firebase emulators (App Hosting + Firestore)
 - `npm run deploy` - Deploy to Firebase App Hosting
 
-The Firebase Admin SDK is available but not actively used in the current implementation. It's configured for future integration with Firestore, Authentication, and other Firebase services.
+The Firebase Admin SDK is installed as a dependency but not actively used in the current implementation. The project is configured for future integration with Firebase services (Firestore, Authentication, etc.).
 
 ## API Documentation
 
@@ -380,9 +380,9 @@ The project includes comprehensive CI/CD automation in `.github/workflows/`:
   - Coverage report generation (via `vitest-coverage-report-action`)
   - Artifact upload for coverage reports
 
-- **`ci-functions.yml`** - Functions pipeline (triggered on `functions/**` changes)
-- **`lint-app.yml`** - Linting checks for app code
-- **`labeler.yml`** + **`labeler-manual.yml`** - Automatic PR labeling
+- **`lint-app.yml`** - Linting checks for app code (Biome CI)
+- **`labeler.yml`** - Automatic PR labeling (on pull_request_target)
+- **`labeler-manual.yml`** - Manual PR labeling workflow (workflow_dispatch)
 
 ### Deployment
 
@@ -548,6 +548,7 @@ firebase apphosting:secrets:set LOG_LEVEL --project your-project-id
 - **`fastify.jwt.sign(payload)`** - Sign JWT tokens
 - **`fastify.jwt.verify(token)`** - Verify JWT tokens  
 - **`fastify.jwt.decode(token)`** - Decode JWT tokens
+- **`fastify.authenticate`** - Authentication decorator for protecting routes (use in `onRequest` hook)
 - **`request.id`** - Request ID (auto-generated UUID v4)
 - **`request.log`** - Child logger with request context
 - **HTTP error helpers** from `@fastify/sensible` (e.g., `reply.notFound()`, `reply.badRequest()`)

@@ -2,7 +2,7 @@
 applyTo: "app/tests/**"
 ---
 
-Use these rules for tests under `app/tests/**` (Node 24, TS 5.9, Vitest 4.0.6).
+Use these rules for tests under `app/tests/**` (Node 24, TypeScript, Vitest).
 
 ## Test Structure
 
@@ -10,10 +10,10 @@ Use these rules for tests under `app/tests/**` (Node 24, TS 5.9, Vitest 4.0.6).
   - `unit/plugins/**` - Plugin tests (cors, helmet, jwt, lifecycle, error-handler, request-logging, sensible, swagger)
   - `unit/routes/**` - Route tests (health, root)
 - **Integration tests** → `app/tests/integration/**` (full-stack API tests)
-- **Mocks** → `app/tests/mocks/**` (MSW 2.11.6+ for HTTP mocking, currently unused but available)
+- **Mocks** → `app/tests/mocks/**` (MSW for HTTP mocking, currently unused but available)
 - **Helpers** → `app/tests/helpers/**` (shared test utilities)
 
-## Test Framework (Vitest 4.0.6)
+## Test Framework (Vitest)
 
 ### Configuration (`app/vitest.config.ts`)
 - **Environment**: Node.js
@@ -59,17 +59,20 @@ process.on("SIGINT", handler);
 
 ### General Rules
 - **No real external dependencies in unit tests**: Mock network calls, filesystem, databases
-- **MSW for HTTP mocking**: Available (v2.11.6+) but use judiciously; prefer small adapters
+- **MSW for HTTP mocking**: Available but use judiciously; prefer small adapters
 - **Each source file has a matching test file**: Mirror directory structure in `tests/unit/`
 - **Import extensions required**: All relative imports must use `.js` extensions (e.g., `import foo from "../../../src/plugins/cors.js"`)
 - **Type imports**: Use explicit `import type { ... } from "pkg"` (enforced by Biome's `useImportType` rule)
 - **No inline Vitest env comments**: Do not add `// @vitest-environment node` comments (repository rules prohibit them)
 - **Realistic fixtures**: Use realistic data; avoid PII
+- **Parse JSON responses**: Use `response.json()` to parse JSON responses in assertions
 
 ### Plugin Tests
 - Test plugin registration and functionality
 - Use `Fastify()` instance and register plugin via `fastify.register(plugin)`
-- Test decorators, hooks, and middleware behavior
+- Wrap plugins with `fastify-plugin` (`fp`) to expose decorators to parent scope
+- Test decorators by registering the plugin and verifying decorated properties exist
+- Test hooks and middleware behavior
 - Verify integration with other plugins where applicable
 - Call `await fastify.ready()` before testing
 - Always `await fastify.close()` after tests
@@ -186,18 +189,18 @@ npm run test:coverage # With coverage report
 - **100% for critical paths**: Authentication, authorization, data validation, error handling
 - **CI enforcement**: Builds fail if coverage drops below 70% threshold
 
-## Current Test Suite
+## Test Suite Structure
 
-**73 tests across 11 test files:**
+**Test files organized by type:**
 
-- `plugins/cors.test.ts` - 6 tests
-- `plugins/helmet.test.ts` - 6 tests
-- `plugins/jwt.test.ts` - 14 tests
-- `plugins/sensible.test.ts` - 18 tests
-- `plugins/error-handler.test.ts` - 7 tests
-- `plugins/request-logging.test.ts` - 6 tests
-- `plugins/lifecycle.test.ts` - 5 tests
-- `plugins/swagger.test.ts` - 4 tests
-- `routes/health.test.ts` - 1 test
-- `routes/root.test.ts` - 1 test
-- `integration/app.test.ts` - 5 tests
+- `plugins/cors.test.ts` - CORS origin validation, preflight requests
+- `plugins/helmet.test.ts` - Security headers, CSP, HSTS
+- `plugins/jwt.test.ts` - Sign, verify, decode, expiration, decorators
+- `plugins/sensible.test.ts` - HTTP errors, assertions, error utilities
+- `plugins/error-handler.test.ts` - Error logging, structured responses, validation errors
+- `plugins/request-logging.test.ts` - Request ID generation, header propagation, context
+- `plugins/lifecycle.test.ts` - onReady, onListen, onClose hooks
+- `plugins/swagger.test.ts` - JSON/YAML endpoints, Swagger UI, OpenAPI schema
+- `routes/health.test.ts` - Health check endpoint
+- `routes/root.test.ts` - Root endpoint
+- `integration/app.test.ts` - Full application stack tests
