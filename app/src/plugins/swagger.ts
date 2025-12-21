@@ -27,48 +27,49 @@ import fp from "fastify-plugin";
  * @see https://github.com/fastify/fastify-swagger-ui
  */
 const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
-	await fastify.register(fastifySwagger, {
-		openapi: {
-			openapi: "3.1.0",
-			info: {
-				title: "Fastify Playground API",
-				description: "A REST API built with Fastify and TypeScript",
-				version: "1.0.0",
-			},
-			servers: [
-				{
-					url: "http://localhost:3000",
-					description: "Development server",
-				},
-			],
-			tags: [
-				{ name: "health", description: "Health check endpoints" },
-				{ name: "user", description: "User management endpoints" },
-			],
-			components: {
-				securitySchemes: {
-					bearerAuth: {
-						type: "http",
-						scheme: "bearer",
-						bearerFormat: "JWT",
-					},
-				},
-			},
-		},
-	});
+  await fastify.register(fastifySwagger, {
+    openapi: {
+      openapi: "3.1.0",
+      info: {
+        title: "Fastify Playground API",
+        description: "A REST API built with Fastify and TypeScript",
+        version: "1.0.0",
+      },
+      servers: [
+        {
+          url: "http://localhost:3000",
+          description: "Development server",
+        },
+      ],
+      tags: [
+        { name: "health", description: "Health check endpoints" },
+        { name: "user", description: "User management endpoints" },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Firebase ID token. Obtain from Firebase Authentication SDK on the client.",
+          },
+        },
+      },
+    },
+  });
 
-	await fastify.register(fastifySwaggerUi, {
-		routePrefix: "/documentation",
-		uiConfig: {
-			docExpansion: "list",
-			deepLinking: true,
-		},
-		staticCSP: true,
-		transformStaticCSP: (header) => header,
-	});
+  await fastify.register(fastifySwaggerUi, {
+    routePrefix: "/documentation",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: true,
+    },
+    staticCSP: true,
+    transformStaticCSP: (header) => header,
+  });
 };
 
 export default fp(swaggerPlugin, {
-	name: "swagger",
-	fastify: "5.x",
+  name: "swagger",
+  fastify: "5.x",
 });

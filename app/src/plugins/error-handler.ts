@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
+import { env } from "../env.js";
 
 /**
  * Global error handler plugin for Fastify.
@@ -26,44 +27,50 @@ import fp from "fastify-plugin";
  * @see https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
  */
 export default fp(
-	async (fastify) => {
-		fastify.setErrorHandler((error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
-			// Determine status code (Fastify automatically sets <400 to 500)
-			const statusCode = error.statusCode ?? 500;
+  async (fastify) => {
+    fastify.setErrorHandler((error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
+      // Determine status code (Fastify automatically sets <400 to 500)
+      const statusCode = error.statusCode ?? 500;
 
-			// Log errors based on severity
-			if (statusCode >= 500) {
-				request.log.error(error, `Server error: ${error.message}`);
-			} else if (statusCode >= 400) {
-				request.log.warn(error, `Client error: ${error.message}`);
-			}
+      // Add request ID to response headers for tracing
+      reply.header("X-Request-ID", request.id);
 
-			// Handle validation errors specifically
-			if (error.validation) {
-				return reply.status(422).send({
-					error: {
-						message: "Validation failed",
-						code: error.code || "VALIDATION_ERROR",
-						statusCode: 422,
-						validation: error.validation,
-						...(process.env.NODE_ENV !== "production" && { stack: error.stack }),
-					},
-				});
-			}
+      // Log errors based on severity
+      // Note: Fastify normalizes all error status codes to >= 400, so no else branch is needed
+      if (statusCode >= 500) {
+        request.log.error(error, `Server error: ${error.message}`);
+      } else {
+        request.log.warn(error, `Client error: ${error.message}`);
+      }
 
-			// Structured error response
-			return reply.status(statusCode).send({
-				error: {
-					message: error.message,
-					code: error.code,
-					statusCode,
-					...(process.env.NODE_ENV !== "production" && { stack: error.stack }),
-				},
-			});
-		});
-	},
-	{
-		name: "error-handler",
-		fastify: "5.x",
-	},
+      // Handle validation errors specifically
+      if (error.validation) {
+        return reply.status(422).send({
+          error: {
+            message: "Validation failed",
+            code: error.code || "VALIDATION_ERROR",
+            statusCode: 422,
+            validation: error.validation,
+            ...(env.NODE_ENV !== "production" && { stack: error.stack }),
+          },
+        });
+      }
+
+      // Structured error response
+      return reply.status(statusCode).send({
+        error: {
+          message: error.message,
+          code: error.code,
+          statusCode,
+          ...(env.NODE_ENV !== "production" && { stack: error.stack }),
+        },
+      });
+    });
+  },
+  {
+    name: "error-handler",
+    fastify: "5.x",
+    dependencies: ["sensible"],
+    decorators: { fastify: ["httpErrors"] },
+  },
 );

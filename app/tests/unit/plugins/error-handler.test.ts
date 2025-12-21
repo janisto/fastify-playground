@@ -1,174 +1,332 @@
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import errorHandler from "../../../src/plugins/error-handler.js";
+import sensiblePlugin from "../../../src/plugins/sensible.js";
+
+vi.mock("../../../src/env.js", () => ({
+  env: {
+    NODE_ENV: "test",
+    PORT: 3000,
+    HOST: "0.0.0.0",
+    LOG_LEVEL: "info",
+  },
+}));
 
 describe("Error Handler Plugin", () => {
-	it("should handle server errors (500+) with proper logging", async () => {
-		const fastify = Fastify();
-		await fastify.register(errorHandler);
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
-		fastify.get("/error", async () => {
-			throw new Error("Internal server error");
-		});
+  it("should handle server errors (500+) with proper logging", async () => {
+    const fastify = Fastify();
+    await fastify.register(sensiblePlugin);
+    await fastify.register(errorHandler);
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/error",
-		});
+    fastify.get("/error", async () => {
+      throw new Error("Internal server error");
+    });
 
-		expect(response.statusCode).toBe(500);
-		const body = JSON.parse(response.payload);
-		expect(body.error).toBeDefined();
-		expect(body.error.message).toBe("Internal server error");
-		expect(body.error.statusCode).toBe(500);
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/error",
+    });
 
-		await fastify.close();
-	});
+    expect(response.statusCode).toBe(500);
+    expect(response.headers["x-request-id"]).toBeDefined();
+    const body = response.json();
+    expect(body.error).toBeDefined();
+    expect(body.error.message).toBe("Internal server error");
+    expect(body.error.statusCode).toBe(500);
 
-	it("should handle client errors (400+) with proper status code", async () => {
-		const fastify = Fastify();
-		await fastify.register(errorHandler);
+    await fastify.close();
+  });
 
-		fastify.get("/client-error", async (_request, reply) => {
-			const error = new Error("Bad request") as Error & { statusCode?: number };
-			error.statusCode = 400;
-			throw error;
-		});
+  it("should handle client errors (400+) with proper status code", async () => {
+    const fastify = Fastify();
+    await fastify.register(sensiblePlugin);
+    await fastify.register(errorHandler);
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/client-error",
-		});
+    fastify.get("/client-error", async (_request, reply) => {
+      const error = new Error("Bad request") as Error & { statusCode?: number };
+      error.statusCode = 400;
+      throw error;
+    });
 
-		expect(response.statusCode).toBe(400);
-		const body = JSON.parse(response.payload);
-		expect(body.error.message).toBe("Bad request");
-		expect(body.error.statusCode).toBe(400);
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/client-error",
+    });
 
-		await fastify.close();
-	});
+    expect(response.statusCode).toBe(400);
+    const body = response.json();
+    expect(body.error.message).toBe("Bad request");
+    expect(body.error.statusCode).toBe(400);
 
-	it("should handle validation errors with 422 status code", async () => {
-		const fastify = Fastify();
-		await fastify.register(errorHandler);
+    await fastify.close();
+  });
 
-		fastify.get(
-			"/validate",
-			{
-				schema: {
-					querystring: {
-						type: "object",
-						required: ["name"],
-						properties: {
-							name: { type: "string" },
-						},
-					},
-				},
-			},
-			async () => ({ success: true }),
-		);
+  it("should handle validation errors with 422 status code", async () => {
+    const fastify = Fastify();
+    await fastify.register(sensiblePlugin);
+    await fastify.register(errorHandler);
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/validate",
-		});
+    fastify.get(
+      "/validate",
+      {
+        schema: {
+          querystring: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string" },
+            },
+          },
+        },
+      },
+      async () => ({ success: true }),
+    );
 
-		expect(response.statusCode).toBe(422);
-		const body = JSON.parse(response.payload);
-		expect(body.error.message).toBe("Validation failed");
-		expect(body.error.statusCode).toBe(422);
-		expect(body.error.validation).toBeDefined();
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/validate",
+    });
 
-		await fastify.close();
-	});
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.statusCode).toBe(422);
+    expect(body.error.validation).toBeDefined();
 
-	it("should include stack traces in development", async () => {
-		const originalEnv = process.env.NODE_ENV;
-		delete process.env.NODE_ENV;
+    await fastify.close();
+  });
 
-		const fastify = Fastify();
-		await fastify.register(errorHandler);
+  it("should use VALIDATION_ERROR code when error.code is not set", async () => {
+    const fastify = Fastify();
+    await fastify.register(sensiblePlugin);
+    await fastify.register(errorHandler);
 
-		fastify.get("/dev-error", async () => {
-			throw new Error("Development error");
-		});
+    fastify.get("/validation-no-code", async () => {
+      const error = new Error("Custom validation") as Error & {
+        validation?: unknown[];
+        statusCode?: number;
+        code?: string;
+      };
+      error.validation = [{ message: "field is required" }];
+      error.statusCode = 400;
+      throw error;
+    });
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/dev-error",
-		});
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/validation-no-code",
+    });
 
-		const body = JSON.parse(response.payload);
-		expect(body.error.stack).toBeDefined();
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
 
-		process.env.NODE_ENV = originalEnv;
-		await fastify.close();
-	});
+    await fastify.close();
+  });
 
-	it("should not include stack traces in production", async () => {
-		const originalEnv = process.env.NODE_ENV;
-		process.env.NODE_ENV = "production";
+  it("should include stack traces in development", async () => {
+    vi.doMock("../../../src/env.js", () => ({
+      env: {
+        NODE_ENV: "development",
+        PORT: 3000,
+        HOST: "0.0.0.0",
+        LOG_LEVEL: "info",
+      },
+    }));
 
-		const fastify = Fastify();
-		await fastify.register(errorHandler);
+    const { default: errorHandlerDev } = await import("../../../src/plugins/error-handler.js");
+    const { default: sensiblePluginDev } = await import("../../../src/plugins/sensible.js");
 
-		fastify.get("/prod-error", async () => {
-			throw new Error("Production error");
-		});
+    const fastify = Fastify();
+    await fastify.register(sensiblePluginDev);
+    await fastify.register(errorHandlerDev);
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/prod-error",
-		});
+    fastify.get("/dev-error", async () => {
+      throw new Error("Development error");
+    });
 
-		const body = JSON.parse(response.payload);
-		expect(body.error.stack).toBeUndefined();
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/dev-error",
+    });
 
-		process.env.NODE_ENV = originalEnv;
-		await fastify.close();
-	});
+    const body = response.json();
+    expect(body.error.stack).toBeDefined();
 
-	it("should handle errors with custom error codes", async () => {
-		const fastify = Fastify();
-		await fastify.register(errorHandler);
+    await fastify.close();
+  });
 
-		fastify.get("/custom-error", async () => {
-			const error = new Error("Custom error") as Error & { code?: string; statusCode?: number };
-			error.code = "CUSTOM_ERROR_CODE";
-			error.statusCode = 403;
-			throw error;
-		});
+  it("should include stack traces in validation errors in development", async () => {
+    vi.doMock("../../../src/env.js", () => ({
+      env: {
+        NODE_ENV: "development",
+        PORT: 3000,
+        HOST: "0.0.0.0",
+        LOG_LEVEL: "info",
+      },
+    }));
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/custom-error",
-		});
+    const { default: errorHandlerDev } = await import("../../../src/plugins/error-handler.js");
+    const { default: sensiblePluginDev } = await import("../../../src/plugins/sensible.js");
 
-		expect(response.statusCode).toBe(403);
-		const body = JSON.parse(response.payload);
-		expect(body.error.code).toBe("CUSTOM_ERROR_CODE");
-		expect(body.error.statusCode).toBe(403);
+    const fastify = Fastify();
+    await fastify.register(sensiblePluginDev);
+    await fastify.register(errorHandlerDev);
 
-		await fastify.close();
-	});
+    fastify.get(
+      "/validate-dev",
+      {
+        schema: {
+          querystring: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string" },
+            },
+          },
+        },
+      },
+      async () => ({ success: true }),
+    );
 
-	it("should default to 500 for errors without status code", async () => {
-		const fastify = Fastify();
-		await fastify.register(errorHandler);
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/validate-dev",
+    });
 
-		fastify.get("/no-status", async () => {
-			throw new Error("No status code");
-		});
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.stack).toBeDefined();
 
-		const response = await fastify.inject({
-			method: "GET",
-			url: "/no-status",
-		});
+    await fastify.close();
+  });
 
-		expect(response.statusCode).toBe(500);
-		const body = JSON.parse(response.payload);
-		expect(body.error.statusCode).toBe(500);
+  it("should not include stack traces in production", async () => {
+    vi.doMock("../../../src/env.js", () => ({
+      env: {
+        NODE_ENV: "production",
+        PORT: 3000,
+        HOST: "0.0.0.0",
+        LOG_LEVEL: "info",
+      },
+    }));
 
-		await fastify.close();
-	});
+    const { default: errorHandlerProd } = await import("../../../src/plugins/error-handler.js");
+    const { default: sensiblePluginProd } = await import("../../../src/plugins/sensible.js");
+
+    const fastify = Fastify();
+    await fastify.register(sensiblePluginProd);
+    await fastify.register(errorHandlerProd);
+
+    fastify.get("/prod-error", async () => {
+      throw new Error("Production error");
+    });
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/prod-error",
+    });
+
+    const body = response.json();
+    expect(body.error.stack).toBeUndefined();
+
+    await fastify.close();
+  });
+
+  it("should not include stack traces in validation errors in production", async () => {
+    vi.doMock("../../../src/env.js", () => ({
+      env: {
+        NODE_ENV: "production",
+        PORT: 3000,
+        HOST: "0.0.0.0",
+        LOG_LEVEL: "info",
+      },
+    }));
+
+    const { default: errorHandlerProd } = await import("../../../src/plugins/error-handler.js");
+    const { default: sensiblePluginProd } = await import("../../../src/plugins/sensible.js");
+
+    const fastify = Fastify();
+    await fastify.register(sensiblePluginProd);
+    await fastify.register(errorHandlerProd);
+
+    fastify.get(
+      "/validate-prod",
+      {
+        schema: {
+          querystring: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string" },
+            },
+          },
+        },
+      },
+      async () => ({ success: true }),
+    );
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/validate-prod",
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.stack).toBeUndefined();
+
+    await fastify.close();
+  });
+
+  it("should handle errors with custom error codes", async () => {
+    const fastify = Fastify();
+    await fastify.register(sensiblePlugin);
+    await fastify.register(errorHandler);
+
+    fastify.get("/custom-error", async () => {
+      const error = new Error("Custom error") as Error & { code?: string; statusCode?: number };
+      error.code = "CUSTOM_ERROR_CODE";
+      error.statusCode = 403;
+      throw error;
+    });
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/custom-error",
+    });
+
+    expect(response.statusCode).toBe(403);
+    const body = response.json();
+    expect(body.error.code).toBe("CUSTOM_ERROR_CODE");
+    expect(body.error.statusCode).toBe(403);
+
+    await fastify.close();
+  });
+
+  it("should default to 500 for errors without status code", async () => {
+    const fastify = Fastify();
+    await fastify.register(sensiblePlugin);
+    await fastify.register(errorHandler);
+
+    fastify.get("/no-status", async () => {
+      throw new Error("No status code");
+    });
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/no-status",
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = response.json();
+    expect(body.error.statusCode).toBe(500);
+
+    await fastify.close();
+  });
 });

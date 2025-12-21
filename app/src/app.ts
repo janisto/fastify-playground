@@ -1,76 +1,84 @@
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
-import AutoLoad, { type AutoloadPluginOptions } from "@fastify/autoload";
-import Fastify, { type FastifyPluginAsync } from "fastify";
+import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import { Type, TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
+import Fastify from "fastify";
+import { env } from "./env.js";
+import authPlugin from "./plugins/auth.js";
+import corsPlugin from "./plugins/cors.js";
+import errorHandlerPlugin from "./plugins/error-handler.js";
+import firebasePlugin from "./plugins/firebase.js";
+import helmetPlugin from "./plugins/helmet.js";
+import lifecyclePlugin from "./plugins/lifecycle.js";
+import requestLoggingPlugin from "./plugins/request-logging.js";
+import sensiblePlugin from "./plugins/sensible.js";
+import swaggerPlugin from "./plugins/swagger.js";
+import underPressurePlugin from "./plugins/under-pressure.js";
+import healthRoutes from "./routes/health.js";
+import rootRoutes from "./routes/root.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+/**
+ * Build and configure the Fastify application.
+ *
+ * Plugins are registered in dependency order:
+ * 1. Core: sensible, helmet, cors (no dependencies)
+ * 2. Infrastructure: firebase, lifecycle, under-pressure, swagger
+ * 3. Application: auth, error-handler, request-logging
+ * 4. Routes: health, root
+ */
+export async function buildApp() {
+  const fastify = Fastify({
+    logger: {
+      level: env.LOG_LEVEL,
+      // Cloud Run / Firebase App Hosting optimized configuration:
+      // - Logs to stdout (Pino default)
+      // - JSON format (Pino default)
+      // - No file transport (Pino default)
+      formatters: {
+        level: (label) => {
+          // Cloud Logging severity mapping
+          return { severity: label.toUpperCase() };
+        },
+      },
+    },
+  })
+    .setValidatorCompiler(TypeBoxValidatorCompiler)
+    .withTypeProvider<TypeBoxTypeProvider>();
 
-export type AppOptions = {
-	// Place your custom options for app below here.
-} & Partial<AutoloadPluginOptions>;
+  // Layer 1: Core plugins (no dependencies)
+  await fastify.register(sensiblePlugin);
+  await fastify.register(helmetPlugin);
+  await fastify.register(corsPlugin);
 
-// Pass --options via CLI arguments in command to enable these options.
-const options: AppOptions = {};
+  // Layer 2: Infrastructure plugins
+  await fastify.register(firebasePlugin);
+  await fastify.register(lifecyclePlugin);
+  await fastify.register(underPressurePlugin);
+  await fastify.register(swaggerPlugin);
 
-const app: FastifyPluginAsync<AppOptions> = async (fastify, opts): Promise<void> => {
-	// Place here your custom code!
+  // Layer 3: Application plugins
+  await fastify.register(authPlugin);
+  await fastify.register(errorHandlerPlugin);
+  await fastify.register(requestLoggingPlugin);
 
-	// Do not touch the following lines
+  // Layer 4: Routes
+  await fastify.register(healthRoutes);
+  await fastify.register(rootRoutes);
 
-	// This loads all plugins defined in plugins
-	// those should be support plugins that are reused
-	// through your application
-	void fastify.register(AutoLoad, {
-		dir: path.join(__dirname, "plugins"),
-		options: opts,
-		forceESM: true,
-	});
+  return fastify;
+}
 
-	// This loads all plugins defined in routes
-	// define your routes in one of these
-	void fastify.register(AutoLoad, {
-		dir: path.join(__dirname, "routes"),
-		options: opts,
-		forceESM: true,
-	});
-};
-
-export default app;
-export { app, options };
+export { Type };
 
 // Start server when run directly (development mode with tsx)
-// In production, use fastify-cli: `fastify start -l info dist/app.js`
+// In production, use: node dist/app.js
+/* v8 ignore start -- @preserve */
 if (import.meta.url === `file://${process.argv[1]}`) {
-	const fastify = Fastify({
-		logger: {
-			level: process.env.LOG_LEVEL || "info",
+  try {
+    const fastify = await buildApp();
 
-			// Cloud Run / Firebase App Hosting optimized configuration:
-			// - Logs to stdout ✓ (Pino default)
-			// - JSON format ✓ (Pino default)
-			// - No file transport ✓ (Pino default)
-
-			// Customize for Google Cloud Logging compatibility
-			formatters: {
-				level: (label) => {
-					// Cloud Logging severity mapping
-					// Maps Pino levels to Cloud Logging severity levels
-					return { severity: label.toUpperCase() };
-				},
-			},
-		},
-	});
-
-	await fastify.register(app, options);
-
-	const port = Number(process.env.PORT || 3000);
-	const host = process.env.HOST || "0.0.0.0";
-
-	try {
-		await fastify.listen({ port, host });
-	} catch (error) {
-		fastify.log.error(error);
-		process.exit(1);
-	}
+    await fastify.listen({ port: env.PORT, host: env.HOST });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
 }
+/* v8 ignore stop -- @preserve */

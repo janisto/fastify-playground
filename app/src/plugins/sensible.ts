@@ -10,6 +10,7 @@ import fp from "fastify-plugin";
  * - Assert utility: fastify.assert(condition, statusCode, message)
  * - Request helpers: request.forwarded (IP info), request.is() (content-type check)
  * - Reply helpers: reply.vary() (cache control), reply.getHeader(), reply.hasHeader()
+ * - Shared HttpError schema for OpenAPI documentation
  *
  * Usage examples:
  * ```typescript
@@ -25,6 +26,14 @@ import fp from "fastify-plugin";
  *
  * @see https://github.com/fastify/fastify-sensible
  */
-export default fp<FastifySensibleOptions>(async (fastify) => {
-	fastify.register(sensible);
-});
+export default fp<FastifySensibleOptions>(
+  async (fastify) => {
+    await fastify.register(sensible, {
+      sharedSchemaId: "HttpError",
+    });
+  },
+  {
+    name: "sensible",
+    fastify: "5.x",
+  },
+);

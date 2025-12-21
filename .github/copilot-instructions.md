@@ -61,6 +61,217 @@ Keep output and code/doc comments minimal and purposeful.
 
 ---
 
+## TypeBox Schema Conventions
+
+Use `@fastify/type-provider-typebox` for all route schemas. TypeBox provides compile-time TypeScript types and runtime JSON Schema validation.
+
+### Route Schemas (Fastify context)
+
+```typescript
+import { Type } from "@fastify/type-provider-typebox";
+
+fastify.get(
+	"/endpoint",
+	{
+		schema: {
+			description: "Endpoint description",
+			tags: ["tag-name"],
+			summary: "Short summary",
+			response: {
+				200: Type.Object({
+					status: Type.Literal("ok"),
+					data: Type.String({ description: "Response data" }),
+				}),
+			},
+		},
+	},
+	async (request, reply) => {
+		return { status: "ok", data: "value" };
+	},
+);
+```
+
+### Environment Validation (pre-Fastify)
+
+Use TypeBox standalone for environment validation before Fastify instance creation:
+
+```typescript
+import Type from "typebox";
+import Value from "typebox/value";
+
+const EnvSchema = Type.Object({
+	NODE_ENV: Type.Union([Type.Literal("development"), Type.Literal("production"), Type.Literal("test")], { default: "development" }),
+	PORT: Type.Number({ default: 3000 }),
+});
+
+export const env = Value.Parse(EnvSchema, {
+	NODE_ENV: process.env.NODE_ENV ?? "development",
+	PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
+});
+```
+
+### Import Conventions
+
+```typescript
+// Route schemas - use Fastify's type provider
+import { Type } from "@fastify/type-provider-typebox";
+
+// Environment validation - use standalone typebox
+import Type from "typebox";
+import Value from "typebox/value";
+
+// NEVER use the legacy import
+// import { Type } from "@sinclair/typebox";  // Do not use
+```
+
+---
+
+## Firebase Authentication
+
+Use Firebase Admin SDK for authentication instead of `@fastify/jwt`. Firebase Auth provides secure token verification with automatic key rotation.
+
+### Auth Plugin Pattern
+
+```typescript
+// src/plugins/auth.ts
+import type { DecodedIdToken } from "firebase-admin/auth";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import fp from "fastify-plugin";
+
+declare module "fastify" {
+	interface FastifyInstance {
+		authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+	}
+	interface FastifyRequest {
+		user: DecodedIdToken;
+	}
+}
+
+export default fp(async (fastify) => {
+	const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
+		const authHeader = request.headers.authorization;
+		if (!authHeader?.startsWith("Bearer ")) {
+			throw fastify.httpErrors.unauthorized("Missing or invalid authorization header");
+		}
+
+		const token = authHeader.slice(7);
+		const decodedToken = await fastify.firebaseAuth.verifyIdToken(token);
+		request.user = decodedToken;
+	};
+
+	fastify.decorate("authenticate", authenticate);
+	fastify.decorateRequest("user", null);
+});
+```
+
+### Protecting Routes
+
+```typescript
+fastify.get(
+	"/protected",
+	{ preHandler: [fastify.authenticate] },
+	async (request) => {
+		return { userId: request.user.uid };
+	},
+);
+```
+
+### Client-Side Token Acquisition
+
+Clients obtain Firebase ID tokens using Firebase Authentication SDK:
+
+```typescript
+// Client-side (browser/mobile)
+import { getAuth, getIdToken } from "firebase/auth";
+
+const auth = getAuth();
+const token = await getIdToken(auth.currentUser);
+
+// Send token in Authorization header
+fetch("/api/protected", {
+	headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+---
+
+## Health Check Patterns
+
+Use `@fastify/under-pressure` for comprehensive health checks with system pressure monitoring.
+
+### Endpoints
+
+| Endpoint | Purpose | Response |
+|----------|---------|----------|
+| `/health` | Simple liveness probe | `{ "status": "healthy" }` |
+| `/status` | Detailed health check with dependencies | `{ "status": "ok" }` or 503 on failure |
+
+### Under-Pressure Configuration
+
+```typescript
+import underPressure from "@fastify/under-pressure";
+import fp from "fastify-plugin";
+
+export default fp(
+	async (fastify) => {
+		await fastify.register(underPressure, {
+			healthCheck: async (fastifyInstance) => {
+				if (fastifyInstance.isShuttingDown) return false;
+
+				// Check Firestore connectivity
+				await fastifyInstance.firestore.collection("_health").limit(1).get();
+				return true;
+			},
+			healthCheckInterval: 30000,
+			exposeStatusRoute: "/status",
+		});
+	},
+	{ dependencies: ["firebase", "lifecycle"] },
+);
+```
+
+---
+
+## Decorator Patterns
+
+Use Fastify decorators for shared state across plugins and routes.
+
+### Instance Decorator
+
+```typescript
+declare module "fastify" {
+	interface FastifyInstance {
+		isShuttingDown: boolean;
+	}
+}
+
+fastify.decorate("isShuttingDown", false);
+
+// Usage in hooks
+fastify.addHook("onClose", async () => {
+	fastify.isShuttingDown = true;
+});
+```
+
+### Request Decorator
+
+```typescript
+declare module "fastify" {
+	interface FastifyRequest {
+		user: DecodedIdToken;
+	}
+}
+
+fastify.decorateRequest("user", null);
+
+// Usage in preHandler
+fastify.addHook("preHandler", async (request) => {
+	request.user = await verifyToken(request);
+});
+```
+
+---
+
 ## Unit Testing Guidelines
 
 1. **Framework & Configuration**
@@ -164,11 +375,13 @@ This repository contains multiple apps:
 - Do not log secrets or PII; ensure logs redact sensitive fields.
 - Document required env vars for integration tests and how to provide them locally and in CI.
 - **Project-specific variables**:
-  - `JWT_SECRET` - Required in production for JWT signing (defaults to development secret with warning)
   - `NODE_ENV` - Environment mode (`test`, `development`, `production`)
   - `PORT` - Server port (default: 3000)
   - `HOST` - Server host (default: 0.0.0.0)
   - `LOG_LEVEL` - Pino log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`)
+  - `GOOGLE_APPLICATION_CREDENTIALS` - Path to Firebase service account JSON (development only)
+  - `FIRESTORE_EMULATOR_HOST` - Firestore emulator address (e.g., `localhost:8080`)
+  - `FIREBASE_AUTH_EMULATOR_HOST` - Auth emulator address (e.g., `localhost:9099`)
 
 ---
 
