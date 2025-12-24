@@ -2,6 +2,13 @@ import cors, { type FastifyCorsOptions } from "@fastify/cors";
 import fp from "fastify-plugin";
 
 /**
+ * Precompiled regex for extracting hostname from origin URLs.
+ * Matches http(s)://hostname:port or http(s)://hostname patterns.
+ * Performance optimization: avoids creating URL objects on every request.
+ */
+const ORIGIN_HOSTNAME_REGEX = /^https?:\/\/([^/:]+)/;
+
+/**
  * CORS (Cross-Origin Resource Sharing) plugin for Fastify.
  *
  * This plugin configures CORS to:
@@ -28,8 +35,11 @@ export default fp<FastifyCorsOptions>(
           return;
         }
 
+        // Extract hostname using regex (faster than new URL())
+        const match = ORIGIN_HOSTNAME_REGEX.exec(origin);
+        const hostname = match?.[1];
+
         // Allow localhost in development
-        const hostname = new URL(origin).hostname;
         if (hostname === "localhost" || hostname === "127.0.0.1") {
           callback(null, true);
           return;

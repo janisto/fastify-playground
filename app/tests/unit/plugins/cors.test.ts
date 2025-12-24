@@ -98,6 +98,24 @@ describe("CORS Plugin", () => {
     await fastify.close();
   });
 
+  it("should reject malformed origins", async () => {
+    const fastify = Fastify();
+    await fastify.register(cors);
+
+    const response = await fastify.inject({
+      method: "OPTIONS",
+      url: "/",
+      headers: {
+        origin: "not-a-valid-url",
+        "access-control-request-method": "GET",
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+
+    await fastify.close();
+  });
+
   it("should work with actual GET request after preflight", async () => {
     const fastify = Fastify();
     await fastify.register(cors);
