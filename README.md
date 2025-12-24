@@ -443,7 +443,7 @@ The project uses Firebase Admin SDK for authentication and database services:
 3. **Server verifies token via Firebase Admin SDK**:
    ```typescript
    // Automatically handled by auth plugin
-   const decodedToken = await fastify.firebaseAuth.verifyIdToken(token);
+   const decodedToken = await fastify.firebaseAuth.verifyIdToken(token, checkRevoked);
    request.user = decodedToken; // { uid, email, email_verified, ... }
    ```
 
@@ -459,6 +459,26 @@ fastify.get(
   },
 );
 ```
+
+### Auth Plugin Options
+
+The auth plugin accepts the following options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `checkRevoked` | `boolean` | `false` | When true, verifies the token hasn't been revoked. Adds an extra database lookup for enhanced security. |
+
+```typescript
+// Enable token revocation checking for high-security routes
+await fastify.register(authPlugin, { checkRevoked: true });
+```
+
+When `checkRevoked` is enabled:
+- Tokens that have been revoked return a 401 with "Token has been revoked" message
+- Users must sign in again after their session is invalidated
+- Adds an extra database lookup per request (use only when needed)
+
+For more information, see [Firebase Session Management](https://firebase.google.com/docs/auth/admin/manage-sessions).
 
 ### Firebase Decorators
 
