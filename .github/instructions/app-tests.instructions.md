@@ -217,8 +217,9 @@ it("should authenticate with valid token", async () => {
 
 ```typescript
 it("should return 401 when token is revoked", async () => {
-	const revokedError = new Error("Token has been revoked");
-	revokedError.code = "auth/id-token-revoked";
+	const revokedError = Object.assign(new Error("Token has been revoked"), {
+		code: "auth/id-token-revoked",
+	});
 	mockAuth.verifyIdToken.mockRejectedValue(revokedError);
 
 	// Register auth plugin with checkRevoked: true

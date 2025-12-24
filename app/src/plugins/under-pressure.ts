@@ -50,25 +50,26 @@ export default fp<UnderPressurePluginOptions>(
         }
 
         // Check Firestore connectivity with timeout
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const createTimeoutPromise = (timeoutMs: number) => {
+          let timeoutId: ReturnType<typeof setTimeout>;
+          const promise = new Promise<never>((_resolve, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(new Error(`Firestore health check timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+          });
+          return { promise, clear: () => clearTimeout(timeoutId) };
+        };
+
+        const timeout = createTimeoutPromise(healthCheckTimeout);
         try {
           const healthCheckPromise = fastifyInstance.firestore.collection("_health").limit(1).get();
-
-          const timeoutPromise = new Promise<never>((_resolve, reject) => {
-            timeoutId = setTimeout(() => {
-              reject(new Error(`Firestore health check timed out after ${healthCheckTimeout}ms`));
-            }, healthCheckTimeout);
-          });
-
-          await Promise.race([healthCheckPromise, timeoutPromise]);
+          await Promise.race([healthCheckPromise, timeout.promise]);
           return true;
         } catch (error) {
           fastifyInstance.log.error({ error, timeout: healthCheckTimeout }, "Firestore health check failed");
           return false;
         } finally {
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
+          timeout.clear();
         }
       },
       healthCheckInterval,
