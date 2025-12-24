@@ -183,7 +183,7 @@ describe("Under Pressure Plugin", () => {
       const fastify = Fastify();
       await fastify.register(firebasePlugin);
       await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin, { healthCheckInterval: 10000 });
+      await fastify.register(underPressurePlugin, { healthCheckInterval: 30000 });
       await fastify.ready();
 
       const response = await fastify.inject({

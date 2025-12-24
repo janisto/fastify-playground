@@ -290,7 +290,7 @@ The under-pressure plugin accepts the following options:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `healthCheckTimeout` | `number` | `5000` | Timeout in milliseconds for Firestore connectivity check. Prevents health checks from hanging. |
-| `healthCheckInterval` | `number` | `30000` | Interval in milliseconds between background health checks. |
+| `healthCheckInterval` | `number` | `60000` | Interval in milliseconds between background health checks. |
 
 ```typescript
 // Custom health check configuration

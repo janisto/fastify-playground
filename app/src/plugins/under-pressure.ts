@@ -16,7 +16,7 @@ export interface UnderPressurePluginOptions {
   /**
    * Interval in milliseconds between background health checks.
    *
-   * @default 30000
+   * @default 60000
    */
   healthCheckInterval?: number;
 }
@@ -34,13 +34,13 @@ export interface UnderPressurePluginOptions {
  * - Returns unhealthy when `fastify.isShuttingDown` is true
  * - Checks Firestore connectivity by querying `_health` collection
  * - Includes configurable timeout to prevent hanging health checks
- * - Runs every 30 seconds in background (configurable)
+ * - Runs every 60 seconds in background (configurable)
  *
  * @see https://github.com/fastify/under-pressure
  */
 export default fp<UnderPressurePluginOptions>(
   async (fastify, options) => {
-    const { healthCheckTimeout = 5000, healthCheckInterval = 30000 } = options;
+    const { healthCheckTimeout = 5000, healthCheckInterval = 60000 } = options;
 
     await fastify.register(underPressure, {
       healthCheck: async (fastifyInstance) => {
