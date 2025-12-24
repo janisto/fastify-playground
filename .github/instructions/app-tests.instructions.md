@@ -382,7 +382,7 @@ npm run test:coverage # With coverage report
 - `plugins/request-logging.test.ts` - Request ID generation, header propagation, context
 - `plugins/sensible.test.ts` - HTTP errors, assertions, error utilities
 - `plugins/swagger.test.ts` - JSON/YAML endpoints, Swagger UI, OpenAPI schema
-- `plugins/under-pressure.test.ts` - Health checks, /status endpoint, Firestore connectivity
+- `plugins/under-pressure.test.ts` - Health checks, /status endpoint, Firestore connectivity, timeout handling
 - `routes/health.test.ts` - Health check endpoint (simple liveness)
 - `routes/root.test.ts` - Root endpoint
 - `integration/app.test.ts` - Full application stack tests with Firebase mocks

@@ -2,6 +2,26 @@ import underPressure from "@fastify/under-pressure";
 import fp from "fastify-plugin";
 
 /**
+ * Options for the Under Pressure plugin.
+ */
+export interface UnderPressurePluginOptions {
+  /**
+   * Timeout in milliseconds for the Firestore health check.
+   * If the check doesn't complete within this time, it's considered unhealthy.
+   *
+   * @default 5000
+   */
+  healthCheckTimeout?: number;
+
+  /**
+   * Interval in milliseconds between background health checks.
+   *
+   * @default 30000
+   */
+  healthCheckInterval?: number;
+}
+
+/**
  * Under Pressure plugin for Fastify.
  *
  * This plugin provides:
@@ -13,12 +33,15 @@ import fp from "fastify-plugin";
  * Health check behavior:
  * - Returns unhealthy when `fastify.isShuttingDown` is true
  * - Checks Firestore connectivity by querying `_health` collection
- * - Runs every 30 seconds in background
+ * - Includes configurable timeout to prevent hanging health checks
+ * - Runs every 30 seconds in background (configurable)
  *
  * @see https://github.com/fastify/under-pressure
  */
-export default fp(
-  async (fastify) => {
+export default fp<UnderPressurePluginOptions>(
+  async (fastify, options) => {
+    const { healthCheckTimeout = 5000, healthCheckInterval = 30000 } = options;
+
     await fastify.register(underPressure, {
       healthCheck: async (fastifyInstance) => {
         // Return unhealthy during shutdown
@@ -26,16 +49,29 @@ export default fp(
           return false;
         }
 
-        // Check Firestore connectivity
+        // Check Firestore connectivity with timeout
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
-          await fastifyInstance.firestore.collection("_health").limit(1).get();
+          const healthCheckPromise = fastifyInstance.firestore.collection("_health").limit(1).get();
+
+          const timeoutPromise = new Promise<never>((_resolve, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(new Error(`Firestore health check timed out after ${healthCheckTimeout}ms`));
+            }, healthCheckTimeout);
+          });
+
+          await Promise.race([healthCheckPromise, timeoutPromise]);
           return true;
         } catch (error) {
-          fastifyInstance.log.error(error, "Firestore health check failed");
+          fastifyInstance.log.error({ error, timeout: healthCheckTimeout }, "Firestore health check failed");
           return false;
+        } finally {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
         }
       },
-      healthCheckInterval: 30000,
+      healthCheckInterval,
       exposeStatusRoute: {
         url: "/status",
         routeOpts: {

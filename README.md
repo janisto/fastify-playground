@@ -283,6 +283,23 @@ Routes are registered explicitly in `app.ts` after plugins.
 | `/health` | Simple liveness probe for container orchestration | `{ "status": "healthy" }` |
 | `/status` | Readiness check with Firestore connectivity | `{ "status": "ok" }` or 503 on failure |
 
+### Health Check Plugin Options
+
+The under-pressure plugin accepts the following options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `healthCheckTimeout` | `number` | `5000` | Timeout in milliseconds for Firestore connectivity check. Prevents health checks from hanging. |
+| `healthCheckInterval` | `number` | `30000` | Interval in milliseconds between background health checks. |
+
+```typescript
+// Custom health check configuration
+await fastify.register(underPressurePlugin, {
+  healthCheckTimeout: 3000,    // 3 second timeout
+  healthCheckInterval: 15000,  // Check every 15 seconds
+});
+```
+
 ### Plugin Loading Order
 
 The app uses explicit plugin registration with a layered architecture:
