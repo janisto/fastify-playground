@@ -37,7 +37,12 @@ export default fp<FastifyCorsOptions>(
 
         // Extract hostname using regex (faster than new URL())
         const match = ORIGIN_HOSTNAME_REGEX.exec(origin);
-        const hostname = match?.[1];
+        if (!match) {
+          callback(new Error("Not allowed by CORS"), false);
+          return;
+        }
+
+        const hostname = match[1];
 
         // Allow localhost in development
         if (hostname === "localhost" || hostname === "127.0.0.1") {
