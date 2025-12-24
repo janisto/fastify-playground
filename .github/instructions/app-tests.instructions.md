@@ -208,7 +208,31 @@ it("should authenticate with valid token", async () => {
 	});
 
 	expect(response.statusCode).toBe(200);
-	expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token");
+	// Note: verifyIdToken is called with (token, checkRevoked) where checkRevoked defaults to false
+	expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", false);
+});
+```
+
+#### Testing Token Revocation
+
+```typescript
+it("should return 401 when token is revoked", async () => {
+	const revokedError = Object.assign(new Error("Token has been revoked"), {
+		code: "auth/id-token-revoked",
+	});
+	mockAuth.verifyIdToken.mockRejectedValue(revokedError);
+
+	// Register auth plugin with checkRevoked: true
+	await fastify.register(authPlugin, { checkRevoked: true });
+
+	const response = await fastify.inject({
+		method: "GET",
+		url: "/protected",
+		headers: { authorization: "Bearer revoked-token" },
+	});
+
+	expect(response.statusCode).toBe(401);
+	expect(response.json().message).toContain("Token has been revoked");
 });
 ```
 
@@ -350,7 +374,7 @@ npm run test:coverage # With coverage report
 **Test files organized by type:**
 
 - `env.test.ts` - Environment configuration validation with TypeBox
-- `plugins/auth.test.ts` - Firebase Auth, token verification, request.user decorator
+- `plugins/auth.test.ts` - Firebase Auth, token verification, request.user decorator, checkRevoked option
 - `plugins/cors.test.ts` - CORS origin validation, preflight requests
 - `plugins/error-handler.test.ts` - Error logging, structured responses, validation errors
 - `plugins/firebase.test.ts` - Firebase Admin SDK initialization, decorators
@@ -359,7 +383,7 @@ npm run test:coverage # With coverage report
 - `plugins/request-logging.test.ts` - Request ID generation, header propagation, context
 - `plugins/sensible.test.ts` - HTTP errors, assertions, error utilities
 - `plugins/swagger.test.ts` - JSON/YAML endpoints, Swagger UI, OpenAPI schema
-- `plugins/under-pressure.test.ts` - Health checks, /status endpoint, Firestore connectivity
+- `plugins/under-pressure.test.ts` - Health checks, /status endpoint, Firestore connectivity, timeout handling
 - `routes/health.test.ts` - Health check endpoint (simple liveness)
 - `routes/root.test.ts` - Root endpoint
 - `integration/app.test.ts` - Full application stack tests with Firebase mocks

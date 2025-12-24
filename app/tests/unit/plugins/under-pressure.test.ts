@@ -145,6 +145,56 @@ describe("Under Pressure Plugin", () => {
 
       await fastify.close();
     });
+
+    it("should return unhealthy when health check times out", async () => {
+      // Mock a slow Firestore response that will exceed the timeout
+      mockFirestore._mocks.get.mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ docs: [] }), 200)),
+      );
+
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
+      const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
+
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.register(lifecyclePlugin);
+      // Set a very short timeout to trigger timeout behavior
+      await fastify.register(underPressurePlugin, { healthCheckTimeout: 50 });
+      await fastify.ready();
+
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/status",
+      });
+
+      expect(response.statusCode).toBe(503);
+
+      await fastify.close();
+    });
+
+    it("should use custom health check interval", async () => {
+      mockFirestore._mocks.get.mockResolvedValue({ docs: [] });
+
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
+      const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
+
+      const fastify = Fastify();
+      await fastify.register(firebasePlugin);
+      await fastify.register(lifecyclePlugin);
+      await fastify.register(underPressurePlugin, { healthCheckInterval: 30000 });
+      await fastify.ready();
+
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/status",
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await fastify.close();
+    });
   });
 
   describe("Memory Usage", () => {

@@ -283,6 +283,23 @@ Routes are registered explicitly in `app.ts` after plugins.
 | `/health` | Simple liveness probe for container orchestration | `{ "status": "healthy" }` |
 | `/status` | Readiness check with Firestore connectivity | `{ "status": "ok" }` or 503 on failure |
 
+### Health Check Plugin Options
+
+The under-pressure plugin accepts the following options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `healthCheckTimeout` | `number` | `5000` | Timeout in milliseconds for Firestore connectivity check. Prevents health checks from hanging. |
+| `healthCheckInterval` | `number` | `60000` | Interval in milliseconds between background health checks. |
+
+```typescript
+// Custom health check configuration
+await fastify.register(underPressurePlugin, {
+  healthCheckTimeout: 3000,    // 3 second timeout
+  healthCheckInterval: 15000,  // Check every 15 seconds
+});
+```
+
 ### Plugin Loading Order
 
 The app uses explicit plugin registration with a layered architecture:
@@ -443,7 +460,7 @@ The project uses Firebase Admin SDK for authentication and database services:
 3. **Server verifies token via Firebase Admin SDK**:
    ```typescript
    // Automatically handled by auth plugin
-   const decodedToken = await fastify.firebaseAuth.verifyIdToken(token);
+   const decodedToken = await fastify.firebaseAuth.verifyIdToken(token, checkRevoked);
    request.user = decodedToken; // { uid, email, email_verified, ... }
    ```
 
@@ -459,6 +476,26 @@ fastify.get(
   },
 );
 ```
+
+### Auth Plugin Options
+
+The auth plugin accepts the following options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `checkRevoked` | `boolean` | `false` | When true, verifies the token hasn't been revoked. Adds an extra database lookup for enhanced security. |
+
+```typescript
+// Enable token revocation checking for high-security routes
+await fastify.register(authPlugin, { checkRevoked: true });
+```
+
+When `checkRevoked` is enabled:
+- Tokens that have been revoked return a 401 with "Token has been revoked" message
+- Users must sign in again after their session is invalidated
+- Adds an extra database lookup per request (use only when needed)
+
+For more information, see [Firebase Session Management](https://firebase.google.com/docs/auth/admin/manage-sessions).
 
 ### Firebase Decorators
 

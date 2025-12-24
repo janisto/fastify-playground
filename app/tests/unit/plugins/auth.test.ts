@@ -244,7 +244,7 @@ describe("Auth Plugin", () => {
         success: true,
         email: "valid@example.com",
       });
-      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token-here");
+      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token-here", false);
 
       await fastify.close();
     });
@@ -275,7 +275,105 @@ describe("Auth Plugin", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("lowercase-token");
+      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("lowercase-token", false);
+
+      await fastify.close();
+    });
+  });
+
+  describe("Token Revocation Check", () => {
+    it("should pass checkRevoked=true when option is enabled", async () => {
+      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
+
+      const mockDecodedToken = { uid: "user-123" };
+      mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
+
+      const fastify = Fastify();
+      await fastify.register(sensiblePlugin);
+      await fastify.register(firebasePlugin);
+      await fastify.register(authPlugin, { checkRevoked: true });
+
+      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
+        return { success: true };
+      });
+
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/protected",
+        headers: {
+          authorization: "Bearer valid-token",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", true);
+
+      await fastify.close();
+    });
+
+    it("should return 401 with specific message when token is revoked", async () => {
+      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
+
+      const revokedError = Object.assign(new Error("Token has been revoked"), {
+        code: "auth/id-token-revoked",
+      });
+      mockAuth.verifyIdToken.mockRejectedValue(revokedError);
+
+      const fastify = Fastify();
+      await fastify.register(sensiblePlugin);
+      await fastify.register(firebasePlugin);
+      await fastify.register(authPlugin, { checkRevoked: true });
+
+      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
+        return { success: true };
+      });
+
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/protected",
+        headers: {
+          authorization: "Bearer revoked-token",
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.message).toContain("Token has been revoked");
+
+      await fastify.close();
+    });
+
+    it("should default to checkRevoked=false when option is not provided", async () => {
+      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
+
+      const mockDecodedToken = { uid: "user-123" };
+      mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
+
+      const fastify = Fastify();
+      await fastify.register(sensiblePlugin);
+      await fastify.register(firebasePlugin);
+      await fastify.register(authPlugin);
+
+      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
+        return { success: true };
+      });
+
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/protected",
+        headers: {
+          authorization: "Bearer valid-token",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", false);
 
       await fastify.close();
     });
