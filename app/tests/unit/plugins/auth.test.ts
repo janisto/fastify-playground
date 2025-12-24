@@ -318,8 +318,9 @@ describe("Auth Plugin", () => {
       const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
       const { default: authPlugin } = await import("../../../src/plugins/auth.js");
 
-      const revokedError = new Error("Token has been revoked");
-      (revokedError as Error & { code: string }).code = "auth/id-token-revoked";
+      const revokedError = Object.assign(new Error("Token has been revoked"), {
+        code: "auth/id-token-revoked",
+      });
       mockAuth.verifyIdToken.mockRejectedValue(revokedError);
 
       const fastify = Fastify();
