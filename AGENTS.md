@@ -1,22 +1,22 @@
-# Copilot Instructions
+# AGENTS.md
 
-**GitHub** is used for version control and CI/CD workflows.  
+**GitHub** is used for version control and CI/CD workflows.
 This document defines how AI agents and contributors should work in our monorepo.
 
 ---
 
 ## Workflow Principles
 
-- **Correctness first** → Prioritize correctness, then readability/maintainability, then performance. Optimize only when correctness and clarity are ensured.
-- **Reflect before acting** → After receiving tool results, summarize insights, outline possible next steps, and pick the best one. Avoid rushing to execution.
-- **Parallelize independent steps** → When multiple operations are unrelated, execute them in parallel to maximize efficiency.
-- **No leftovers** → Clean up all temporary files, helper scripts, and debug outputs before finishing. Ensure `git status` is clean aside from intended changes.
-- **Ask when unsure** → If requirements are ambiguous, seek clarification instead of making assumptions.
-- **Well-supported dependencies** → Use only widely used, well-documented libraries with active maintenance.
+- **Correctness first** - Prioritize correctness, then readability/maintainability, then performance. Optimize only when correctness and clarity are ensured.
+- **Reflect before acting** - After receiving tool results, summarize insights, outline possible next steps, and pick the best one. Avoid rushing to execution.
+- **Parallelize independent steps** - When multiple operations are unrelated, execute them in parallel to maximize efficiency.
+- **No leftovers** - Clean up all temporary files, helper scripts, and debug outputs before finishing. Ensure `git status` is clean aside from intended changes.
+- **Ask when unsure** - If requirements are ambiguous, seek clarification instead of making assumptions.
+- **Well-supported dependencies** - Use only widely used, well-documented libraries with active maintenance.
 
 ---
 
-## Comment & Output Restraint
+## Comment and Output Restraint
 
 Keep output and code/doc comments minimal and purposeful.
 
@@ -27,7 +27,7 @@ Keep output and code/doc comments minimal and purposeful.
 - Remove obsolete/stale comments when changing related code.
 - Avoid speculative TODOs; only leave a TODO if it is immediately actionable, clearly scoped, and required.
 - Do not insert review-style remarks ("nit:", "consider:") inside committed files.
-- Keep examples free of progress chatter — only the example code and essential annotations.
+- Keep examples free of progress chatter - only the example code and essential annotations.
 - Violations should be removed before a PR is marked ready. Default to silence unless a comment adds enduring value.
 
 ---
@@ -48,8 +48,8 @@ Keep output and code/doc comments minimal and purposeful.
 - **Naming**: Use camelCase for variables/functions, PascalCase for classes/types.
 - **Comments**: Add only when logic is non-trivial; avoid stating the obvious.
 - **Types**: Use TypeScript types/interfaces for all data structures and function signatures.
-  - Do not use inline `import("pkg").Type`.  
-  - Always use `import type { … } from "pkg"`.
+  - Do not use inline `import("pkg").Type`.
+  - Always use `import type { ... } from "pkg"`.
 - **Avoid `any`**: Use `unknown` if type is uncertain. Prefer existing types over `Record<string, unknown>`.
 - **Async code**: Use async/await. Wrap critical paths in try/catch and include contextual error messages.
 - **Keep it simple**: Avoid over-engineering and premature abstractions. Write idiomatic, maintainable code.
@@ -274,7 +274,7 @@ fastify.addHook("preHandler", async (request) => {
 
 ## Unit Testing Guidelines
 
-1. **Framework & Configuration**
+1. **Framework and Configuration**
    - **Test runner**: Vitest with Node.js environment
    - **Globals enabled**: `describe`, `it`, `expect` are available without imports
    - **Coverage provider**: V8 with thresholds set to 70% (lines, functions, branches, statements)
@@ -283,26 +283,26 @@ fastify.addHook("preHandler", async (request) => {
    - Do not add inline Vitest env comments (e.g. `@vitest-environment node`).
 
 2. **Coverage**
-   - Write unit tests for all new features and bug fixes.  
+   - Write unit tests for all new features and bug fixes.
    - **Minimum 70% coverage** enforced globally (lines, functions, branches, statements).
-   - Aim for **90%+ coverage overall**, **100% for critical business logic**.  
+   - Aim for **90%+ coverage overall**, **100% for critical business logic**.
    - Include tests for edge cases and error handling.
    - Enforce thresholds in CI; builds fail if coverage drops below thresholds.
    - Coverage excludes: test files, config files, entry points, and placeholder files.
 
 3. **Structure**
-   - Each source file has a matching test file.  
+   - Each source file has a matching test file.
    - Integration tests mirror the same folder structure under `tests/integration/`.
    - Apply the same mirroring for `utils/`, `services/`, and `middleware/`.
 
 4. **Folder conventions**
-   - Unit tests → `tests/unit/`  
-   - Integration tests → `tests/integration/`  
-   - Mocks → `tests/mocks/`  
-   - Helpers → `tests/helpers/`
+   - Unit tests: `tests/unit/`
+   - Integration tests: `tests/integration/`
+   - Mocks: `tests/mocks/`
+   - Helpers: `tests/helpers/`
 
 5. **Test style**
-   - Unit tests must not depend on real network, filesystem, or DB. Use mocks/stubs.  
+   - Unit tests must not depend on real network, filesystem, or DB. Use mocks/stubs.
    - Integration tests may touch real services when appropriate.
    - Prefer MSW to stub HTTP; isolate external dependencies behind small adapters.
    - Mocks are automatically cleared, reset, and restored between tests.
@@ -320,8 +320,8 @@ fastify.addHook("preHandler", async (request) => {
    - For multi-line blocks, use `/* v8 ignore start -- @preserve */` and `/* v8 ignore stop -- @preserve */`.
 
 8. **Type imports**
-   - Do not use inline `import("pkg").Type`.  
-   - Always use `import type { … } from "pkg"`.
+   - Do not use inline `import("pkg").Type`.
+   - Always use `import type { ... } from "pkg"`.
 
 ---
 
@@ -329,12 +329,12 @@ fastify.addHook("preHandler", async (request) => {
 
 This repository contains multiple apps:
 
-- `./app/` → The main application (Node.js 24, ES2024, TypeScript).
-- `./functions/` → Firebase Functions (Node.js 24, ES2024, TypeScript, serverless backend).
+- `./app/` - The main application (Node.js 24, ES2024, TypeScript).
+- `./functions/` - Firebase Functions (Node.js 24, ES2024, TypeScript, serverless backend).
 
-**Important:**  
-- When working with the main application, always `cd app` before running commands like `npm run build` or `npm run test`.  
-- When working with Firebase functions, use `cd functions`.  
+**Important:**
+- When working with the main application, always `cd app` before running commands like `npm run build` or `npm run test`.
+- When working with Firebase functions, use `cd functions`.
 - Do **not** assume project-level scripts from the repo root unless explicitly defined in `package.json`.
 - Use npm consistently; do not use Yarn or pnpm for this repo.
 - Each package.json must declare `engines.node` (app: 24, functions: 24) and provide an `.nvmrc`. CI should enforce Node versions via `nvm use`.
@@ -369,7 +369,7 @@ This repository contains multiple apps:
 
 ---
 
-## Secrets & environment variables
+## Secrets and Environment Variables
 
 - Never commit secrets. Use environment files like `.env.local` (gitignored).
 - Do not log secrets or PII; ensure logs redact sensitive fields.
@@ -397,7 +397,7 @@ pwd  # expect path ending in /fastify-playground/functions before functions comm
 cd functions && npm run test
 ```
 
-Never assume you're already in the right directory—always check with `pwd` first to avoid running the wrong toolchain or producing misleading build/test results.
+Never assume you're already in the right directory. Always check with `pwd` first to avoid running the wrong toolchain or producing misleading build/test results.
 
 | Command                           | Purpose                                                      |
 | --------------------------------- | ------------------------------------------------------------ |
@@ -419,7 +419,8 @@ Always `cd` into the correct app directory before running commands (`cd app` or 
 
 ---
 
-## CI required checks
+## CI Required Checks
+
 - App and Functions must each pass their own pipelines.
 - Required checks per affected package:
    - Typecheck
@@ -427,9 +428,12 @@ Always `cd` into the correct app directory before running commands (`cd app` or 
    - Unit tests (with coverage thresholds enforced)
    - Lint/format (`npm run check`)
 
+---
+
 ## Biome Configuration
 
 ### Formatting Rules
+
 - **Line width**: 150 characters
 - **Format with errors**: Enabled (formats even if syntax errors exist)
 - **EditorConfig integration**: Enabled (respects `.editorconfig` for indent style/size)
@@ -437,6 +441,7 @@ Always `cd` into the correct app directory before running commands (`cd app` or 
 - **Semicolons**: Always required
 
 ### Linter Rules
+
 - **Complexity**:
   - `noExcessiveCognitiveComplexity`: warn
   - `noForEach`: off
@@ -460,8 +465,7 @@ Always `cd` into the correct app directory before running commands (`cd app` or 
   - `noAccumulatingSpread`: warn
 
 ### Important Notes
+
 - Keep imports sorted/grouped per Biome; do not disable rules.
 - The `useImportExtensions` rule with `forceJsExtensions: true` automatically enforces `.js` extensions on relative imports.
 - Run `npm run check:fix` to auto-fix all linting and formatting issues.
-
----
