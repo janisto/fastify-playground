@@ -138,11 +138,11 @@ it("should decorate fastify instance", async () => {
 Use `/* v8 ignore next -- @preserve */` to exclude untestable code:
 
 ```typescript
-// Ignore single statement
+// ignore single statement
 /* v8 ignore next -- @preserve */
 process.on("SIGTERM", () => gracefulShutdown());
 
-// Ignore block
+// ignore block
 /* v8 ignore start -- @preserve */
 const handler = setupHandler();
 process.on("SIGINT", handler);

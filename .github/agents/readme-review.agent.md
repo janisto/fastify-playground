@@ -1,6 +1,7 @@
 ---
 name: readme-review
 description: Update README.md Documentation for Fastify Playground
+mode: agent
 ---
 
 # Task: Update README.md Documentation
