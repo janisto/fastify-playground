@@ -2,8 +2,7 @@
 name: 'README.md Review and Update'
 description: 'Update README.md Documentation for Fastify Playground'
 argument-hint: 'You are tasked with reviewing and updating the README.md file for this Fastify-based REST API project. This file provides guidance to VS Code Copilot when working with code in this repository.'
-agent: 'agent'
-tools: ['context7/*', 'read', 'edit']
+mode: 'agent'
 ---
 # Task: Update README.md Documentation
 
