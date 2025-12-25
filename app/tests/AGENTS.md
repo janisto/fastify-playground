@@ -1,22 +1,21 @@
----
-applyTo: "app/tests/**"
----
+# AGENTS.md
 
-Use these rules for tests under `app/tests/**` (Node 24, TypeScript, Vitest).
+Use these rules for tests under `app/tests/` (Node 24, TypeScript, Vitest).
 
 ## Test Structure
 
-- **Unit tests** → `app/tests/unit/**` (mirror `app/src/**` structure)
+- **Unit tests** - `app/tests/unit/**` (mirror `app/src/**` structure)
   - `unit/plugins/**` - Plugin tests (cors, helmet, auth, firebase, lifecycle, error-handler, request-logging, sensible, swagger, under-pressure)
   - `unit/routes/**` - Route tests (health, root)
   - `unit/env.test.ts` - Environment configuration tests
-- **Integration tests** → `app/tests/integration/**` (full-stack API tests)
-- **Mocks** → `app/tests/mocks/**` (Firebase mocks, test utilities)
-- **Helpers** → `app/tests/helpers/**` (shared test utilities)
+- **Integration tests** - `app/tests/integration/**` (full-stack API tests)
+- **Mocks** - `app/tests/mocks/**` (Firebase mocks, test utilities)
+- **Helpers** - `app/tests/helpers/**` (shared test utilities)
 
 ## Test Framework (Vitest)
 
 ### Configuration (`app/vitest.config.ts`)
+
 - **Environment**: Node.js
 - **Globals enabled**: `describe`, `it`, `expect` available without imports
 - **Coverage provider**: V8
@@ -26,6 +25,7 @@ Use these rules for tests under `app/tests/**` (Node 24, TypeScript, Vitest).
 - **Mock behavior**: Auto-clear, reset, and restore between tests
 
 ### Coverage Requirements
+
 - **Provider**: V8 (fast, accurate with AST-aware remapping since Vitest 3.2)
 - **Minimum thresholds**: 70% (lines, functions, branches, statements) - enforced globally
 - **Target**: Aim for 90%+ overall, 100% for critical business logic
@@ -34,6 +34,7 @@ Use these rules for tests under `app/tests/**` (Node 24, TypeScript, Vitest).
 - **Reporters**: text, json, json-summary, html, lcov
 
 ### V8 Coverage Ignore
+
 Use `/* v8 ignore next -- @preserve */` to exclude statements from coverage:
 
 ```typescript
@@ -59,6 +60,7 @@ process.on("SIGINT", handler);
 ## Testing Conventions
 
 ### General Rules
+
 - **No real external dependencies in unit tests**: Mock network calls, filesystem, databases
 - **MSW for HTTP mocking**: Available but use judiciously; prefer small adapters
 - **Each source file has a matching test file**: Mirror directory structure in `tests/unit/`
@@ -69,6 +71,7 @@ process.on("SIGINT", handler);
 - **Parse JSON responses**: Use `response.json()` to parse JSON responses in assertions
 
 ### Plugin Tests
+
 - Test plugin registration and functionality
 - Use `Fastify()` instance and register plugin via `fastify.register(plugin)`
 - Wrap plugins with `fastify-plugin` (`fp`) to expose decorators to parent scope
@@ -79,6 +82,7 @@ process.on("SIGINT", handler);
 - Always `await fastify.close()` after tests
 
 Example:
+
 ```typescript
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
@@ -96,6 +100,7 @@ describe("CORS Plugin", () => {
 ```
 
 ### Route Tests
+
 - Test all HTTP methods and status codes
 - Test validation errors (query params, body, headers)
 - Test success cases with expected response shapes
@@ -104,6 +109,7 @@ describe("CORS Plugin", () => {
 - Verify OpenAPI schema compliance (status codes, response shapes)
 
 Example:
+
 ```typescript
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
@@ -299,7 +305,7 @@ it("should return response matching TypeBox schema", async () => {
 
 	expect(response.statusCode).toBe(200);
 	const body = response.json();
-	
+
 	// Verify structure matches Type.Object({ status: Type.Literal("healthy") })
 	expect(body).toHaveProperty("status", "healthy");
 
@@ -308,6 +314,7 @@ it("should return response matching TypeBox schema", async () => {
 ```
 
 ### Integration Tests
+
 - Test full application stack (`app.ts` with all plugins and routes)
 - Validate end-to-end behavior
 - Test authentication flows, error handling, request/response logging
