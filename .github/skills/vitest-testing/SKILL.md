@@ -155,7 +155,10 @@ The `-- @preserve` suffix prevents esbuild from stripping comments.
 
 - Use `.js` extensions for relative imports
 - Use `import type { ... } from "pkg"` for type-only imports
-- Vitest globals are available without imports: `describe`, `it`, `expect`, `vi`
+- Vitest globals are enabled but explicit imports are preferred for IDE support:
+  ```typescript
+  import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+  ```
 
 ## Commands
 

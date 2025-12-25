@@ -184,8 +184,10 @@ it("should get a document", async () => {
 ## Key Patterns
 
 1. **Mock before import**: Use `vi.mock()` at module level before importing tested modules
-2. **Dynamic imports**: Use `await import()` after mocks are set up
-3. **Reset between tests**: Use `vi.clearAllMocks()` in beforeEach and `vi.resetModules()` in afterEach
+2. **Dynamic imports**: Use `await import()` after mocks are set up to ensure mocks are applied
+3. **Reset between tests**:
+   - `vi.clearAllMocks()` in beforeEach - clears mock call history
+   - `vi.resetModules()` in afterEach - clears module cache so dynamic imports get fresh mocked modules
 4. **Realistic data**: Use realistic mock data that matches Firebase structures
 
 ## Commands
