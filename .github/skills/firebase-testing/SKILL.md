@@ -51,6 +51,7 @@ describe("Firebase Plugin", () => {
   });
 
   afterEach(async () => {
+    // Clear module cache so dynamic imports get fresh mocked modules
     vi.resetModules();
   });
 

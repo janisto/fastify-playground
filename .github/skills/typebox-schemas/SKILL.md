@@ -101,11 +101,12 @@ export const env = Value.Parse(EnvSchema, {
 // Route schemas - use Fastify's type provider
 import { Type } from "@fastify/type-provider-typebox";
 
-// Environment validation - use standalone typebox
+// Environment validation - use standalone typebox package alias
 import Type from "typebox";
 import Value from "typebox/value";
 
-// NEVER use the legacy import
+// Do not use the direct @sinclair/typebox import - this project
+// uses a package alias for consistency with Fastify's type provider
 // import { Type } from "@sinclair/typebox";  // Do not use
 ```
 
