@@ -92,17 +92,19 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 ## Key Dependencies
 
 ### Production (`app/package.json`)
-- **fastify** - Fast and low overhead web framework
-- **@fastify/type-provider-typebox** - TypeBox integration for schema validation
-- **@fastify/under-pressure** - Health checks and system pressure monitoring
+- **@fastify/autoload** - Auto-loading of plugins and routes
 - **@fastify/cors** - CORS middleware
 - **@fastify/helmet** - Security headers
+- **@fastify/request-context** - Request context storage for async operations
 - **@fastify/sensible** - Common utilities and HTTP errors
 - **@fastify/swagger** - OpenAPI documentation generation
 - **@fastify/swagger-ui** - Swagger UI integration
+- **@fastify/type-provider-typebox** - TypeBox integration for schema validation
+- **@fastify/under-pressure** - Health checks and system pressure monitoring
+- **fastify** - Fast and low overhead web framework
+- **fastify-cli** - CLI for running Fastify applications
 - **firebase-admin** - Firebase Admin SDK for authentication and Firestore
 - **typebox** - Runtime type validation with TypeScript inference
-- **fastify-plugin** - Plugin wrapper for decorator exposure
 - **undici** - HTTP/1.1 client (used by Fastify)
 
 ### Development (`app/package.json`)
@@ -172,7 +174,7 @@ All commands should be run from the `app/` directory. Use `pwd` to verify you're
 |-------------------------|-------------------------------------------------------|
 | `npm run dev`           | Start development server with hot reload (tsx watch)  |
 | `npm run serve`         | Start Firebase emulators (App Hosting, Firestore)     |
-| `npm start`             | Run compiled application (node dist/app.js)           |
+| `npm start`             | Build and run application (fastify start)             |
 | `npm run deploy`        | Deploy to Firebase App Hosting                        |
 | `npm run build`         | Compile TypeScript to JavaScript (dist/)              |
 | `npm run build:watch`   | Compile TypeScript in watch mode                      |
@@ -220,7 +222,9 @@ All commands should be run from the `app/` directory. Use `pwd` to verify you're
 - **V8 ignore comments**: Use `/* v8 ignore next -- @preserve */` before statements to exclude from coverage (e.g., signal handlers, unreachable code)
 
 ### Biome (`biome.json`)
-- **Line width**: 150 characters
+- **Line width**: 120 characters
+- **Line ending**: LF (Unix-style)
+- **Trailing commas**: All (JavaScript), None (JSON)
 - **EditorConfig integration**: Enabled (respects `.editorconfig`)
 - **Quote style**: Double quotes
 - **Semicolons**: Always required
