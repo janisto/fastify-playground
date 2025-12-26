@@ -34,7 +34,7 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 │   └── biome.json         # App-specific Biome overrides
 ├── functions/             # Firebase Cloud Functions (placeholder, not implemented)
 ├── biome.json             # Root Biome configuration
-└── .nvmrc                 # Node version
+└── .node-version          # Node version
 ```
 
 ## Features
@@ -121,7 +121,7 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 
 ### Prerequisites
 
-- Node.js 24 (use `nvm use` to switch to the correct version from `.nvmrc`)
+- Node.js 24 (use `fnm use` to switch to the correct version from `.node-version`)
 - npm (comes with Node.js)
 
 ### Installation
@@ -131,8 +131,8 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 git clone https://github.com/janisto/fastify-playground.git
 cd fastify-playground
 
-# Switch to Node 24 (uses .nvmrc)
-nvm use
+# Switch to Node 24 (uses .node-version)
+fnm use
 
 # Install dependencies
 cd app
