@@ -337,7 +337,7 @@ This repository contains multiple apps:
 - When working with Firebase functions, use `cd functions`.
 - Do **not** assume project-level scripts from the repo root unless explicitly defined in `package.json`.
 - Use npm consistently; do not use Yarn or pnpm for this repo.
-- Each package.json must declare `engines.node` (app: 24, functions: 24) and provide an `.nvmrc`. CI should enforce Node versions via `nvm use`.
+- Each package.json must declare `engines.node` (app: 24, functions: 24) and provide a `.node-version`. CI should enforce Node versions via `fnm use`.
 
 ---
 
