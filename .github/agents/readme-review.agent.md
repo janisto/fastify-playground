@@ -35,7 +35,7 @@ Before making any updates, read these files in order:
 - Verify all frameworks and their versions by checking:
   - `app/package.json` for dependencies (Fastify, TypeScript, Vitest, etc.)
   - Configuration files (`biome.json`, `tsconfig.json`, `vitest.config.ts`)
-- Check Node.js version in `.nvmrc` and `engines` field
+- Check Node.js version in `.node-version` and `engines` field
 - Verify Fastify plugins (@fastify/cors, @fastify/helmet, @fastify/jwt, @fastify/swagger, etc.)
 - Identify any Fastify plugins used but not documented
 - Remove any technologies listed but not actually used
@@ -86,7 +86,7 @@ Before making any updates, read these files in order:
   - `tsconfig.json` (TypeScript ES2024, NodeNext module resolution)
   - `tests/tsconfig.json` (test-specific TypeScript config)
   - `.editorconfig` (editor settings)
-  - `.nvmrc` (Node.js version)
+  - `.node-version` (Node.js version)
   - Environment variables (JWT_SECRET, NODE_ENV, PORT)
   - `.env.local` pattern (gitignored)
 
