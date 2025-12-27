@@ -579,9 +579,9 @@ For more information, see [Firebase Session Management](https://firebase.google.
 
 Once the server is running, access the interactive API documentation:
 
-- **Swagger UI**: http://localhost:3000/documentation
-- **OpenAPI JSON**: http://localhost:3000/documentation/json
-- **OpenAPI YAML**: http://localhost:3000/documentation/yaml
+- **Swagger UI**: http://localhost:3000/api-docs
+- **OpenAPI JSON**: http://localhost:3000/api-docs/json
+- **OpenAPI YAML**: http://localhost:3000/api-docs/yaml
 
 ### API Endpoints
 
@@ -590,9 +590,9 @@ Once the server is running, access the interactive API documentation:
 | GET | `/` | Root endpoint, returns `{ root: true }` |
 | GET | `/health` | Simple liveness probe, returns `{ status: "healthy" }` |
 | GET | `/status` | Readiness check with Firestore connectivity |
-| GET | `/documentation` | Swagger UI |
-| GET | `/documentation/json` | OpenAPI 3.1.0 spec (JSON) |
-| GET | `/documentation/yaml` | OpenAPI 3.1.0 spec (YAML) |
+| GET | `/api-docs` | Swagger UI |
+| GET | `/api-docs/json` | OpenAPI 3.1.0 spec (JSON) |
+| GET | `/api-docs/yaml` | OpenAPI 3.1.0 spec (YAML) |
 
 The OpenAPI 3.1.0 specification includes:
 - TypeBox-generated request/response schemas with validation rules

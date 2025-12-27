@@ -41,7 +41,7 @@ describe("App Integration", () => {
     const routes = fastify.printRoutes({ commonPrefix: false });
     expect(routes).toContain("/ (GET, HEAD)");
     expect(routes).toContain("health (GET, HEAD)");
-    expect(routes).toContain("documentation");
+    expect(routes).toContain("api-docs");
 
     await fastify.close();
   });

@@ -8,9 +8,9 @@ import fp from "fastify-plugin";
  *
  * This plugin provides:
  * - Automatic OpenAPI 3.1.0 specification generation
- * - Interactive Swagger UI at /documentation
- * - JSON spec available at /documentation/json
- * - YAML spec available at /documentation/yaml
+ * - Interactive Swagger UI at /api-docs
+ * - JSON spec available at /api-docs/json
+ * - YAML spec available at /api-docs/yaml
  * - JWT Bearer authentication scheme configured
  *
  * The documentation is auto-generated from:
@@ -19,9 +19,9 @@ import fp from "fastify-plugin";
  * - Schema definitions in route options
  *
  * Access the documentation at:
- * - UI: http://localhost:3000/documentation
- * - JSON: http://localhost:3000/documentation/json
- * - YAML: http://localhost:3000/documentation/yaml
+ * - UI: http://localhost:3000/api-docs
+ * - JSON: http://localhost:3000/api-docs/json
+ * - YAML: http://localhost:3000/api-docs/yaml
  *
  * @see https://github.com/fastify/fastify-swagger
  * @see https://github.com/fastify/fastify-swagger-ui
@@ -59,7 +59,7 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
   });
 
   await fastify.register(fastifySwaggerUi, {
-    routePrefix: "/documentation",
+    routePrefix: "/api-docs",
     uiConfig: {
       docExpansion: "list",
       deepLinking: true,
