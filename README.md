@@ -2,6 +2,10 @@
 
 A production-ready REST API built with Fastify, TypeScript, and modern tooling for Node.js 24. Features comprehensive OpenAPI documentation, Firebase Authentication, TypeBox schema validation, structured logging, and graceful shutdown.
 
+<img src="assets/ts.svg" alt="TypeScript logo" width="200">
+
+<sub>TypeScript logo from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Typescript_logo_2020.svg)</sub>
+
 ## Tech Stack
 
 - **Runtime**: Node.js 24 (ES2024)
