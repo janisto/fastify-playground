@@ -1,7 +1,6 @@
-import { Type } from "@fastify/type-provider-typebox";
-import type { FastifyPluginAsync } from "fastify";
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
-const root: FastifyPluginAsync = async (fastify, _opts): Promise<void> => {
+const root: FastifyPluginAsyncTypebox = async (fastify, _opts): Promise<void> => {
   fastify.get(
     "/",
     {

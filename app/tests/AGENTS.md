@@ -289,10 +289,10 @@ it("should decorate request with user property", async () => {
 
 ### TypeBox Schema Testing
 
-When testing routes that use TypeBox schemas, verify response shapes match the schema.
+When testing routes that use TypeBox schemas, verify response shapes match the schema. Routes use `FastifyPluginAsyncTypebox` for automatic type inference.
 
 ```typescript
-import { Type } from "@fastify/type-provider-typebox";
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
 it("should return response matching TypeBox schema", async () => {
 	const fastify = Fastify();
