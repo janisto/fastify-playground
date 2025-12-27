@@ -105,12 +105,11 @@ export const env = Value.Parse(EnvSchema, {
 // Route plugins - use FastifyPluginAsyncTypebox for automatic type inference
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
-// Environment validation - use standalone typebox package alias
+// Environment validation - use standalone typebox package
 import Type from "typebox";
 import Value from "typebox/value";
 
-// Do not use the direct @sinclair/typebox import - this project
-// uses a package alias for consistency with Fastify's type provider
+// Do not use the direct @sinclair/typebox import
 // import { Type } from "@sinclair/typebox";  // Do not use
 ```
 
