@@ -9,50 +9,54 @@ This skill provides patterns for using TypeBox schemas in this repository.
 
 ## Route Schemas (Fastify Context)
 
-Use `@fastify/type-provider-typebox` for route schemas:
+Use `FastifyPluginAsyncTypebox` for route plugins to get automatic TypeBox type inference:
 
 ```typescript
-import { Type } from "@fastify/type-provider-typebox";
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
-fastify.get(
-  "/endpoint",
-  {
-    schema: {
-      description: "Endpoint description",
-      tags: ["tag-name"],
-      summary: "Short summary",
-      querystring: Type.Object({
-        page: Type.Number({ minimum: 1, default: 1 }),
-        limit: Type.Number({ minimum: 1, maximum: 100, default: 10 }),
-      }),
-      params: Type.Object({
-        id: Type.String({ format: "uuid" }),
-      }),
-      body: Type.Object({
-        name: Type.String({ minLength: 1, maxLength: 255 }),
-        email: Type.String({ format: "email" }),
-      }),
-      response: {
-        200: Type.Object({
-          status: Type.Literal("ok"),
-          data: Type.Array(Type.Object({
-            id: Type.String(),
-            name: Type.String(),
-          })),
+const routes: FastifyPluginAsyncTypebox = async (fastify) => {
+  fastify.get(
+    "/endpoint",
+    {
+      schema: {
+        description: "Endpoint description",
+        tags: ["tag-name"],
+        summary: "Short summary",
+        querystring: Type.Object({
+          page: Type.Number({ minimum: 1, default: 1 }),
+          limit: Type.Number({ minimum: 1, maximum: 100, default: 10 }),
         }),
-        400: Type.Object({
-          message: Type.String(),
+        params: Type.Object({
+          id: Type.String({ format: "uuid" }),
         }),
-        404: Type.Object({
-          message: Type.String(),
+        body: Type.Object({
+          name: Type.String({ minLength: 1, maxLength: 255 }),
+          email: Type.String({ format: "email" }),
         }),
+        response: {
+          200: Type.Object({
+            status: Type.Literal("ok"),
+            data: Type.Array(Type.Object({
+              id: Type.String(),
+              name: Type.String(),
+            })),
+          }),
+          400: Type.Object({
+            message: Type.String(),
+          }),
+          404: Type.Object({
+            message: Type.String(),
+          }),
+        },
       },
     },
-  },
-  async (request, reply) => {
-    return { status: "ok", data: [] };
-  },
-);
+    async (request, reply) => {
+      return { status: "ok", data: [] };
+    },
+  );
+};
+
+export default routes;
 ```
 
 ## Environment Validation (Pre-Fastify)
@@ -98,15 +102,14 @@ export const env = Value.Parse(EnvSchema, {
 ## Import Conventions
 
 ```typescript
-// Route schemas - use Fastify's type provider
-import { Type } from "@fastify/type-provider-typebox";
+// Route plugins - use FastifyPluginAsyncTypebox for automatic type inference
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
-// Environment validation - use standalone typebox package alias
+// Environment validation - use standalone typebox package
 import Type from "typebox";
 import Value from "typebox/value";
 
-// Do not use the direct @sinclair/typebox import - this project
-// uses a package alias for consistency with Fastify's type provider
+// Do not use the direct @sinclair/typebox import
 // import { Type } from "@sinclair/typebox";  // Do not use
 ```
 

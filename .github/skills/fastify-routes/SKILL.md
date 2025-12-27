@@ -14,8 +14,7 @@ Routes are located in `app/src/routes/`. Each route file exports a default async
 ## Route Template
 
 ```typescript
-import { Type } from "@fastify/type-provider-typebox";
-import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
 const routes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(

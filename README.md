@@ -435,6 +435,66 @@ export const env = Value.Parse(EnvSchema, {
 });
 ```
 
+### TypeBox Route Schemas
+
+Route plugins use `FastifyPluginAsyncTypebox` for automatic TypeBox type inference:
+
+```typescript
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
+
+const myRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
+	fastify.get(
+		"/endpoint",
+		{
+			schema: {
+				description: "Endpoint description",
+				tags: ["tag-name"],
+				summary: "Short summary",
+				response: {
+					200: Type.Object({
+						status: Type.Literal("ok"),
+						data: Type.String({ description: "Response data" }),
+					}),
+				},
+			},
+		},
+		async (request, reply) => {
+			return { status: "ok", data: "value" };
+		},
+	);
+};
+
+export default myRoutes;
+```
+
+### Application Setup
+
+The Fastify application configures `TypeBoxValidatorCompiler` and `TypeBoxTypeProvider`:
+
+```typescript
+import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
+import Fastify from "fastify";
+
+const fastify = Fastify()
+	.setValidatorCompiler(TypeBoxValidatorCompiler)
+	.withTypeProvider<TypeBoxTypeProvider>();
+```
+
+### Import Conventions
+
+```typescript
+// Route plugins - use FastifyPluginAsyncTypebox for automatic type inference
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
+
+// Environment validation - use standalone typebox
+import Type from "typebox";
+import Value from "typebox/value";
+
+// NEVER use the legacy import
+// import { Type } from "@sinclair/typebox";  // Do not use
+```
+
 ## Firebase Integration
 
 The project uses Firebase Admin SDK for authentication and database services:

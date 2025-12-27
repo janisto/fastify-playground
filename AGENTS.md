@@ -65,30 +65,50 @@ Keep output and code/doc comments minimal and purposeful.
 
 Use `@fastify/type-provider-typebox` for all route schemas. TypeBox provides compile-time TypeScript types and runtime JSON Schema validation.
 
-### Route Schemas (Fastify context)
+### Application Setup
+
+Configure `TypeBoxValidatorCompiler` and `TypeBoxTypeProvider` in the Fastify application:
 
 ```typescript
-import { Type } from "@fastify/type-provider-typebox";
+import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
+import Fastify from "fastify";
 
-fastify.get(
-	"/endpoint",
-	{
-		schema: {
-			description: "Endpoint description",
-			tags: ["tag-name"],
-			summary: "Short summary",
-			response: {
-				200: Type.Object({
-					status: Type.Literal("ok"),
-					data: Type.String({ description: "Response data" }),
-				}),
+const fastify = Fastify()
+	.setValidatorCompiler(TypeBoxValidatorCompiler)
+	.withTypeProvider<TypeBoxTypeProvider>();
+```
+
+### Route Plugins
+
+Use `FastifyPluginAsyncTypebox` for route plugins to get automatic TypeBox type inference without needing `withTypeProvider`:
+
+```typescript
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
+
+const myRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
+	fastify.get(
+		"/endpoint",
+		{
+			schema: {
+				description: "Endpoint description",
+				tags: ["tag-name"],
+				summary: "Short summary",
+				response: {
+					200: Type.Object({
+						status: Type.Literal("ok"),
+						data: Type.String({ description: "Response data" }),
+					}),
+				},
 			},
 		},
-	},
-	async (request, reply) => {
-		return { status: "ok", data: "value" };
-	},
-);
+		async (request, reply) => {
+			return { status: "ok", data: "value" };
+		},
+	);
+};
+
+export default myRoutes;
 ```
 
 ### Environment Validation (pre-Fastify)
@@ -113,8 +133,8 @@ export const env = Value.Parse(EnvSchema, {
 ### Import Conventions
 
 ```typescript
-// Route schemas - use Fastify's type provider
-import { Type } from "@fastify/type-provider-typebox";
+// Route plugins - use FastifyPluginAsyncTypebox for automatic type inference
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
 // Environment validation - use standalone typebox
 import Type from "typebox";
