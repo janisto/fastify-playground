@@ -12,7 +12,7 @@ describe("Swagger Documentation", () => {
 
     const response = await fastify.inject({
       method: "GET",
-      url: "/documentation/json",
+      url: "/api-docs/json",
     });
 
     expect(response.statusCode).toBe(200);
@@ -34,7 +34,7 @@ describe("Swagger Documentation", () => {
 
     const response = await fastify.inject({
       method: "GET",
-      url: "/documentation/yaml",
+      url: "/api-docs/yaml",
     });
 
     expect(response.statusCode).toBe(200);
@@ -53,7 +53,7 @@ describe("Swagger Documentation", () => {
 
     const response = await fastify.inject({
       method: "GET",
-      url: "/documentation",
+      url: "/api-docs",
     });
 
     expect(response.statusCode).toBe(200);
@@ -72,7 +72,7 @@ describe("Swagger Documentation", () => {
 
     const response = await fastify.inject({
       method: "GET",
-      url: "/documentation/json",
+      url: "/api-docs/json",
     });
 
     const spec = response.json();

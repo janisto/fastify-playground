@@ -371,7 +371,7 @@ This repository contains multiple apps:
   - Request and response schemas with validation rules
   - At least **one success example** and **one error example** per endpoint
   - `description` and `summary` for each route
-- Access documentation at `/documentation` (UI), `/documentation/json`, `/documentation/yaml`.
+- Access documentation at `/api-docs` (UI), `/api-docs/json`, `/api-docs/yaml`.
 
 ---
 
