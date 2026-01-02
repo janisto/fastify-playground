@@ -3,6 +3,10 @@ import fastifySwaggerUi from "@fastify/swagger-ui";
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 
+interface SchemaWithId {
+  $id?: string;
+}
+
 /**
  * OpenAPI/Swagger documentation plugin for Fastify.
  *
@@ -54,6 +58,11 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
             description: "Firebase ID token. Obtain from Firebase Authentication SDK on the client.",
           },
         },
+      },
+    },
+    refResolver: {
+      buildLocalReference(json: SchemaWithId, _baseUri, _fragment, i) {
+        return json.$id ?? `def-${i}`;
       },
     },
   });
