@@ -5,8 +5,8 @@ Use these rules for tests under `app/tests/` (Node 24, TypeScript, Vitest).
 ## Test Structure
 
 - **Unit tests** - `app/tests/unit/**` (mirror `app/src/**` structure)
-  - `unit/plugins/**` - Plugin tests (cors, helmet, auth, firebase, lifecycle, error-handler, request-logging, sensible, swagger, under-pressure)
-  - `unit/routes/**` - Route tests (health, root)
+  - `unit/plugins/**` - Plugin tests (accepts-serializer, auth, cbor-parser, cors, error-handler, firebase, helmet, lifecycle, logging, requestid, schema-discovery, sensible, swagger, under-pressure, vary-header)
+  - `unit/routes/**` - Route tests (health, hello, items, root, schemas)
   - `unit/env.test.ts` - Environment configuration tests
 - **Integration tests** - `app/tests/integration/**` (full-stack API tests)
 - **Mocks** - `app/tests/mocks/**` (Firebase mocks, test utilities)
@@ -381,16 +381,24 @@ npm run test:coverage # With coverage report
 **Test files organized by type:**
 
 - `env.test.ts` - Environment configuration validation with TypeBox
+- `plugins/accepts-serializer.test.ts` - CBOR response serialization
 - `plugins/auth.test.ts` - Firebase Auth, token verification, request.user decorator, checkRevoked option
+- `plugins/cbor-parser.test.ts` - CBOR request body parsing
 - `plugins/cors.test.ts` - CORS origin validation, preflight requests
-- `plugins/error-handler.test.ts` - Error logging, structured responses, validation errors
+- `plugins/error-handler.test.ts` - Error logging, RFC 9457 responses, validation errors
 - `plugins/firebase.test.ts` - Firebase Admin SDK initialization, decorators
 - `plugins/helmet.test.ts` - Security headers, CSP, HSTS
 - `plugins/lifecycle.test.ts` - onReady, onListen, onClose hooks, isShuttingDown decorator
-- `plugins/request-logging.test.ts` - Request ID generation, header propagation, context
+- `plugins/logging.test.ts` - Request/response logging with timing
+- `plugins/requestid.test.ts` - Request ID generation, header propagation
+- `plugins/schema-discovery.test.ts` - Schema link header injection
 - `plugins/sensible.test.ts` - HTTP errors, assertions, error utilities
 - `plugins/swagger.test.ts` - JSON/YAML endpoints, Swagger UI, OpenAPI schema
 - `plugins/under-pressure.test.ts` - Health checks, /status endpoint, Firestore connectivity, timeout handling
-- `routes/health.test.ts` - Health check endpoint (simple liveness)
+- `plugins/vary-header.test.ts` - Vary: Accept header for caching
+- `routes/health.test.ts` - Health check endpoint (returns `{ status: "healthy" }`)
+- `routes/hello.test.ts` - Hello endpoint with name parameter
+- `routes/items.test.ts` - Items collection with pagination and filtering
 - `routes/root.test.ts` - Root endpoint
+- `routes/schemas.test.ts` - Schema discovery endpoint
 - `integration/app.test.ts` - Full application stack tests with Firebase mocks

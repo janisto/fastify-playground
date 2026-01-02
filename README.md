@@ -96,7 +96,8 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 ## Key Dependencies
 
 ### Production (`app/package.json`)
-- **@fastify/autoload** - Auto-loading of plugins and routes
+- **@fastify/accepts-serializer** - Response serialization with content negotiation (CBOR support)
+- **@fastify/autoload** - Auto-loading of plugins and routes (used for schema registration)
 - **@fastify/cors** - CORS middleware
 - **@fastify/helmet** - Security headers
 - **@fastify/request-context** - Request context storage for async operations
@@ -105,6 +106,7 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 - **@fastify/swagger-ui** - Swagger UI integration
 - **@fastify/type-provider-typebox** - TypeBox integration for schema validation
 - **@fastify/under-pressure** - Health checks and system pressure monitoring
+- **cbor2** - CBOR encoding/decoding for binary content negotiation
 - **fastify** - Fast and low overhead web framework
 - **fastify-cli** - CLI for running Fastify applications
 - **firebase-admin** - Firebase Admin SDK for authentication and Firestore
@@ -258,20 +260,31 @@ Plugins are registered explicitly in `app.ts` with a layered architecture. Each 
 - **`helmet.ts`** - Security headers via `@fastify/helmet` v13 (CSP, HSTS, X-Frame-Options, etc.)
 - **`cors.ts`** - CORS configuration with configurable origin validation (defaults to localhost in development)
 
-#### Layer 2: Infrastructure
+#### Layer 2: Content Negotiation
+- **`cbor-parser.ts`** - CBOR request body parser for `application/cbor` content type
+- **`accepts-serializer.ts`** - Response serialization with CBOR support via `@fastify/accepts-serializer`
+- **`vary-header.ts`** - Adds `Vary: Accept` header for proper caching
+
+#### Layer 3: Infrastructure
 - **`firebase.ts`** - Firebase Admin SDK initialization with decorators for `firebaseAuth` and `firestore`
 - **`lifecycle.ts`** - Application lifecycle hooks with `isShuttingDown` decorator for graceful shutdown
 - **`under-pressure.ts`** - Health checks via `@fastify/under-pressure` with Firestore connectivity check, exposes `/status` endpoint
 - **`swagger.ts`** - OpenAPI 3.1.0 documentation generation with Swagger UI, JSON/YAML export endpoints
 
-#### Layer 3: Application
+#### Layer 4: Application
 - **`auth.ts`** - Firebase Authentication with `authenticate` decorator for protecting routes, `request.user` decorator
-- **`error-handler.ts`** - Global error handler with structured responses, X-Request-ID header, proper logging
-- **`request-logging.ts`** - Request/response logging with automatic request ID generation (UUID v4), timing calculation
+- **`error-handler.ts`** - Global error handler with RFC 9457 Problem Details responses, CBOR support
+- **`requestid.ts`** - Request ID generation (UUID v4) and `X-Request-Id` header propagation
+- **`logging.ts`** - Request/response logging with timing calculation
+
+#### Layer 5: Response Transformation
+- **`schema-registry.ts`** - Registers shared TypeBox schemas for reuse across routes
+- **`schema-discovery.ts`** - Adds `$schema` link to responses for schema discovery
 
 #### Observability
-- **`error-handler.ts`** - Global error handler with structured responses, proper logging, validation error handling, stack traces in development
-- **`request-logging.ts`** - Request/response logging with automatic request ID generation (UUID v4), context storage, timing calculation, header propagation
+- **`error-handler.ts`** - Global error handler with RFC 9457 Problem Details responses, validation error handling, stack traces in development
+- **`requestid.ts`** - Request ID generation (UUID v4), header validation and propagation
+- **`logging.ts`** - Request/response logging with timing calculation and user context
 - **`lifecycle.ts`** - Application lifecycle hooks (onReady, onListen, onClose) with graceful shutdown handling (SIGTERM/SIGINT)
 
 #### Documentation
@@ -282,7 +295,10 @@ Plugins are registered explicitly in `app.ts` with a layered architecture. Each 
 Routes are registered explicitly in `app.ts` after plugins.
 
 - **`health.ts`** - Simple liveness check endpoint (`GET /health`) with TypeBox schema, returns `{ status: "healthy" }`
+- **`hello.ts`** - Hello endpoint (`GET /hello`) with name parameter support, returns `{ message: "Hello, {name}!" }`
+- **`items.ts`** - Items collection endpoint (`GET /items`) with cursor-based pagination and category filtering
 - **`root.ts`** - Root endpoint (`GET /`) with TypeBox schema, returns `{ root: true }`
+- **`schemas.ts`** - Schema discovery endpoint (`GET /schemas/:schemaId`) for accessing registered TypeBox schemas
 
 ### Health Check Endpoints
 
@@ -316,24 +332,37 @@ The app uses explicit plugin registration with a layered architecture:
 Pre-boot: src/env.ts (validates environment before Fastify instance creation)
 
 Layer 1: Core (no dependencies)
-  - sensible    (HTTP errors, assertions, sharedSchemaId)
+  - sensible    (HTTP errors, assertions)
   - helmet      (security headers)
   - cors        (CORS handling)
 
-Layer 2: Infrastructure
+Layer 2: Content Negotiation
+  - cbor-parser        (CBOR request parsing)
+  - accepts-serializer (CBOR response serialization)
+  - vary-header        (Vary: Accept header)
+
+Layer 3: Infrastructure
   - firebase       (Firebase Admin SDK, ADC credentials)
   - lifecycle      (shutdown handling, isShuttingDown decorator)
   - under-pressure (health checks, depends: firebase, lifecycle)
   - swagger        (OpenAPI documentation)
 
-Layer 3: Application
-  - auth              (depends: firebase, sensible)
-  - error-handler     (depends: sensible)
-  - request-logging   (no strict deps)
+Layer 4: Application
+  - auth           (depends: firebase, sensible)
+  - error-handler  (depends: sensible)
+  - requestid      (X-Request-Id handling)
+  - logging        (request/response logging)
 
-Layer 4: Routes
-  - routes/health     (simple liveness, /health)
-  - routes/root       (demo endpoint)
+Layer 5: Response Transformation
+  - schema-registry   (shared TypeBox schemas)
+  - schema-discovery  ($schema link headers)
+
+Layer 6: Routes
+  - routes/health  (simple liveness, /health)
+  - routes/hello   (greeting endpoint)
+  - routes/items   (collection with pagination)
+  - routes/root    (demo endpoint)
+  - routes/schemas (schema discovery)
 ```
 
 ## Testing
@@ -353,18 +382,26 @@ The project enforces high test coverage standards with comprehensive test suite:
 
 #### Unit Tests (`tests/unit/`)
 - **`env.test.ts`** - Environment configuration validation with TypeBox
+- **`plugins/accepts-serializer.test.ts`** - CBOR response serialization
 - **`plugins/auth.test.ts`** - Firebase Auth, token verification, request.user decorator
+- **`plugins/cbor-parser.test.ts`** - CBOR request body parsing
 - **`plugins/cors.test.ts`** - CORS origin validation, preflight requests, allowed methods
-- **`plugins/error-handler.test.ts`** - Error logging, structured responses, validation errors, stack traces
+- **`plugins/error-handler.test.ts`** - Error logging, RFC 9457 responses, validation errors, stack traces
 - **`plugins/firebase.test.ts`** - Firebase Admin SDK initialization, decorators, cleanup
 - **`plugins/helmet.test.ts`** - Security headers, CSP, HSTS, X-Frame-Options
 - **`plugins/lifecycle.test.ts`** - onReady, onListen, onClose hooks, isShuttingDown decorator
-- **`plugins/request-logging.test.ts`** - Request ID generation, header propagation, context storage
+- **`plugins/logging.test.ts`** - Request/response logging with timing
+- **`plugins/requestid.test.ts`** - Request ID generation, header propagation
+- **`plugins/schema-discovery.test.ts`** - Schema link header injection
 - **`plugins/sensible.test.ts`** - HTTP errors, assertions, error utilities, status codes
 - **`plugins/swagger.test.ts`** - JSON/YAML endpoints, Swagger UI, OpenAPI schema
 - **`plugins/under-pressure.test.ts`** - Health checks, /status endpoint, Firestore connectivity
+- **`plugins/vary-header.test.ts`** - Vary: Accept header for caching
 - **`routes/health.test.ts`** - Health check endpoint returns `{ status: "healthy" }`
+- **`routes/hello.test.ts`** - Hello endpoint with name parameter
+- **`routes/items.test.ts`** - Items collection with pagination and filtering
 - **`routes/root.test.ts`** - Root endpoint returns `{ root: true }`
+- **`routes/schemas.test.ts`** - Schema discovery endpoint
 
 #### Integration Tests (`tests/integration/`)
 - **`app.test.ts`** - Full application stack with all plugins, route loading, error handling
@@ -593,6 +630,9 @@ Once the server is running, access the interactive API documentation:
 |--------|------|-------------|
 | GET | `/` | Root endpoint, returns `{ root: true }` |
 | GET | `/health` | Simple liveness probe, returns `{ status: "healthy" }` |
+| GET | `/hello` | Greeting endpoint with optional name parameter |
+| GET | `/items` | Items collection with cursor-based pagination and category filtering |
+| GET | `/schemas/:schemaId` | Schema discovery endpoint for registered TypeBox schemas |
 | GET | `/status` | Readiness check with Firestore connectivity |
 | GET | `/api-docs` | Swagger UI |
 | GET | `/api-docs/json` | OpenAPI 3.1.0 spec (JSON) |

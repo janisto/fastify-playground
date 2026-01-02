@@ -86,7 +86,7 @@ describe("Swagger Documentation", () => {
     const healthEndpoint = spec.paths["/health"].get;
     expect(healthEndpoint.summary).toBe("Health check endpoint");
     expect(healthEndpoint.description).toBe("Check the health status of the API");
-    expect(healthEndpoint.tags).toContain("health");
+    expect(healthEndpoint.tags).toContain("Health");
 
     // Check response schema
     expect(healthEndpoint.responses).toHaveProperty("200");

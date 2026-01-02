@@ -1,7 +1,6 @@
 ---
 name: readme-review
 description: Update README.md Documentation for Fastify Playground
-mode: agent
 ---
 
 # Task: Update README.md Documentation
@@ -16,10 +15,10 @@ Conduct a comprehensive analysis of the entire codebase and update the README.md
 
 Before making any updates, read these files in order:
 1. `app/package.json` - Dependencies, scripts, engines
-2. `app/src/app.ts` - Entry point and AutoLoad configuration
+2. `app/src/app.ts` - Entry point and plugin registration
 3. `app/vitest.config.ts` - Test and coverage configuration
 4. `app/tsconfig.json` - TypeScript settings
-5. `.github/copilot-instructions.md` - Coding guidelines
+5. `AGENTS.md` - Coding guidelines
 6. All files in `app/src/plugins/` and `app/src/routes/`
 7. Root `biome.json` and `app/biome.json` - Linting configuration
 
@@ -61,17 +60,19 @@ Before making any updates, read these files in order:
 
 ### 5. Architecture & Directory Structure
 - Scan the directory structure in `app/`:
-  - `src/app.ts` (entry point with AutoLoad)
+  - `src/app.ts` (entry point with explicit plugin registration)
   - `src/plugins/` (Fastify plugins)
   - `src/routes/` (route handlers)
   - `tests/unit/`, `tests/integration/` (test structure)
 - Verify all documented paths exist
 - Check that plugin files match documentation:
-  - cors.ts, helmet.ts, jwt.ts, sensible.ts, swagger.ts
-  - error-handler.ts, lifecycle.ts, request-logging.ts
-- Verify route files: health.ts, root.ts
+  - accepts-serializer.ts, auth.ts, cbor-parser.ts, cors.ts
+  - error-handler.ts, firebase.ts, helmet.ts, lifecycle.ts
+  - logging.ts, requestid.ts, schema-discovery.ts, schema-registry.ts
+  - sensible.ts, swagger.ts, under-pressure.ts, vary-header.ts
+- Verify route files: health.ts, hello.ts, items.ts, root.ts, schemas.ts
 - Document test file organization (one test file per plugin/route)
-- Note @fastify/autoload usage with `forceESM: true`
+- Note explicit plugin registration in layered architecture
 
 ### 6. Automation
 - Check for GitHub Actions workflows in `.github/workflows/`
@@ -92,7 +93,7 @@ Before making any updates, read these files in order:
 
 ### 8. Development Guidelines
 - Extract coding conventions from:
-  - `.github/copilot-instructions.md` if present
+  - `AGENTS.md` at repository root
   - Biome rules (double quotes, semicolons, import extensions)
   - TypeScript strict mode settings
   - ESM module system (`"type": "module"`)
@@ -105,20 +106,26 @@ Before making any updates, read these files in order:
 
 ### 9. Integration Points
 - Document Fastify plugin integrations:
-  - JWT authentication flow
+  - Firebase authentication flow (ID token verification)
   - CORS origin validation
   - Helmet security headers
   - OpenAPI documentation generation
   - Request logging and context
   - Lifecycle hooks and graceful shutdown
-- Note any external APIs or Firebase integration
+  - CBOR content negotiation
+  - Schema discovery with $schema links
+- Note Firebase integration (Auth, Firestore)
 
 ### 10. Environment Variables Verification
 - Document all required/optional environment variables by checking actual usage:
-  - `JWT_SECRET` - Required for JWT authentication
-  - `NODE_ENV` - development/production
+  - `NODE_ENV` - development/production/test
   - `PORT` - Server port (default: 3000)
-  - `LOG_LEVEL` - Pino log level (if used)
+  - `HOST` - Server host (default: 0.0.0.0)
+  - `LOG_LEVEL` - Pino log level (trace, debug, info, warn, error, fatal)
+  - `GOOGLE_CLOUD_PROJECT` - Google Cloud Project ID (optional)
+  - `GOOGLE_APPLICATION_CREDENTIALS` - Path to Firebase service account JSON (development only)
+  - `FIRESTORE_EMULATOR_HOST` - Firestore emulator address
+  - `FIREBASE_AUTH_EMULATOR_HOST` - Auth emulator address
 - Search for `process.env` usage across all source files
 - Verify `.env.example` or `.env.local` patterns if present
 
@@ -183,6 +190,7 @@ Create an updated README.md file that:
   - V8 ignore comments (`/* v8 ignore next -- @preserve */`) with @preserve to prevent esbuild stripping
   - Test coverage measured on unit tests only (`tests/unit/`)
   - Integration tests exist but don't affect coverage metrics
+  - Health endpoint returns `{ status: "healthy" }`
 - Document both what exists AND how it should be used
 - If you find discrepancies between documentation and reality, always favor reality
 - Update plugin list to match actual files in `src/plugins/`
@@ -216,16 +224,19 @@ After generating the updated README, verify:
 - [ ] Route list matches files in `app/src/routes/`
 - [ ] Environment variables match actual `process.env` usage
 - [ ] OpenAPI endpoints are accurate
+- [ ] Health response format is correct (`{ status: "healthy" }`)
 
 ## Fastify-Specific Considerations
 
 - Document all Fastify plugins with their purposes
-- Explain the AutoLoad pattern used for plugins and routes
+- Explain the explicit plugin registration pattern used
 - Detail the plugin decorators added to Fastify instances
 - Document route schemas and OpenAPI integration
 - Explain test patterns for Fastify (inject method, plugin testing)
 - Document lifecycle hooks and graceful shutdown
-- Explain error handling with structured responses
-- Detail JWT authentication flow and decorators
+- Explain error handling with RFC 9457 Problem Details responses
+- Detail Firebase authentication flow and decorators
+- Document CBOR content negotiation support
+- Explain schema discovery with $schema link headers
 
 Remember: The goal is to create documentation that allows VS Code Copilot to work effectively with this Fastify codebase, understanding the plugin architecture, ESM requirements, and testing patterns without confusion or errors.

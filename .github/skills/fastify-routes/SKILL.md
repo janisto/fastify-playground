@@ -105,8 +105,11 @@ reply.badRequest("Invalid input");
 
 ## Existing Routes
 
-- `health.ts` - Simple liveness probe at `/health`
+- `health.ts` - Simple liveness probe at `/health` (returns `{ status: "healthy" }`)
+- `hello.ts` - Greeting endpoint at `/hello` with optional name parameter
+- `items.ts` - Items collection at `/items` with cursor-based pagination and category filtering
 - `root.ts` - Root endpoint at `/`
+- `schemas.ts` - Schema discovery at `/schemas/:schemaId`
 
 ## Testing Requirements
 

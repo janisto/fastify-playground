@@ -34,6 +34,7 @@ const EnvSchema = Type.Object({
     ],
     { default: "info" },
   ),
+  GOOGLE_CLOUD_PROJECT: Type.Optional(Type.String({ description: "Google Cloud Project ID for Cloud Trace" })),
 });
 
 export const env = Value.Parse(EnvSchema, {
@@ -41,6 +42,7 @@ export const env = Value.Parse(EnvSchema, {
   PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
   HOST: process.env.HOST,
   LOG_LEVEL: process.env.LOG_LEVEL,
+  GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
 });
 
 export type Env = typeof env;

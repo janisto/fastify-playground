@@ -1,4 +1,5 @@
-import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
+import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
+import { HealthResponseSchema } from "../plugins/schema-registry.js";
 
 const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
   fastify.get(
@@ -6,25 +7,15 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
     {
       schema: {
         description: "Check the health status of the API",
-        tags: ["health"],
+        tags: ["Health"],
         summary: "Health check endpoint",
         response: {
-          200: Type.Object(
-            {
-              status: Type.Literal("healthy", {
-                description: "Health status indicator",
-                examples: ["healthy"],
-              }),
-            },
-            {
-              description: "Successful response indicating the API is healthy",
-            },
-          ),
+          200: HealthResponseSchema,
         },
       },
     },
-    async (_request, reply) => {
-      return reply.code(200).send({ status: "healthy" });
+    async () => {
+      return { status: "healthy" as const };
     },
   );
 };

@@ -16,6 +16,7 @@ const ORIGIN_HOSTNAME_REGEX = /^https?:\/\/([^/:]+)/;
  * - Allow requests with no origin (mobile apps, Postman, curl)
  * - Block all other origins (production security)
  * - Enable credentials (cookies, authorization headers)
+ * - Allow traceparent header for W3C Trace Context distributed tracing
  *
  * Security considerations:
  * - In production, maintain an explicit allowlist of trusted origins
@@ -24,6 +25,7 @@ const ORIGIN_HOSTNAME_REGEX = /^https?:\/\/([^/:]+)/;
  *
  * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
  * @see https://github.com/fastify/fastify-cors
+ * @see https://www.w3.org/TR/trace-context/
  */
 export default fp<FastifyCorsOptions>(
   async (fastify) => {
@@ -55,6 +57,8 @@ export default fp<FastifyCorsOptions>(
         callback(new Error("Not allowed by CORS"), false);
       },
       credentials: true,
+      allowedHeaders: ["Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-Id", "traceparent"],
+      exposedHeaders: ["Link", "Location", "X-Request-Id"],
     });
   },
   {

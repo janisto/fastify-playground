@@ -2,30 +2,44 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { Type, TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
 import Fastify from "fastify";
 import { env } from "./env.js";
+import acceptsSerializerPlugin from "./plugins/accepts-serializer.js";
 import authPlugin from "./plugins/auth.js";
+import cborParserPlugin from "./plugins/cbor-parser.js";
 import corsPlugin from "./plugins/cors.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
 import firebasePlugin from "./plugins/firebase.js";
 import helmetPlugin from "./plugins/helmet.js";
 import lifecyclePlugin from "./plugins/lifecycle.js";
-import requestLoggingPlugin from "./plugins/request-logging.js";
+import loggingPlugin from "./plugins/logging.js";
+import requestidPlugin from "./plugins/requestid.js";
+import schemaDiscoveryPlugin from "./plugins/schema-discovery.js";
+import schemaRegistryPlugin from "./plugins/schema-registry.js";
 import sensiblePlugin from "./plugins/sensible.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import underPressurePlugin from "./plugins/under-pressure.js";
+import varyHeaderPlugin from "./plugins/vary-header.js";
 import healthRoutes from "./routes/health.js";
+import helloRoutes from "./routes/hello.js";
+import itemsRoutes from "./routes/items.js";
 import rootRoutes from "./routes/root.js";
+import schemasRoutes from "./routes/schemas.js";
+import { schemaErrorFormatter } from "./utils/schema-error-formatter.js";
 
 /**
  * Build and configure the Fastify application.
  *
  * Plugins are registered in dependency order:
  * 1. Core: sensible, helmet, cors (no dependencies)
- * 2. Infrastructure: firebase, lifecycle, under-pressure, swagger
- * 3. Application: auth, error-handler, request-logging
- * 4. Routes: health, root
+ * 2. Content negotiation: cbor-parser, accepts-serializer, vary-header
+ * 3. Infrastructure: firebase, lifecycle, under-pressure, swagger
+ * 4. Application: auth, error-handler, requestid, logging
+ * 5. Routes: health, root
  */
 export async function buildApp() {
   const fastify = Fastify({
+    connectionTimeout: 10000,
+    requestTimeout: 30000,
+    schemaErrorFormatter,
     logger: {
       level: env.LOG_LEVEL,
       // Cloud Run / Firebase App Hosting optimized configuration:
@@ -48,20 +62,33 @@ export async function buildApp() {
   await fastify.register(helmetPlugin);
   await fastify.register(corsPlugin);
 
-  // Layer 2: Infrastructure plugins
+  // Layer 2: Content negotiation plugins
+  await fastify.register(cborParserPlugin);
+  await fastify.register(acceptsSerializerPlugin);
+  await fastify.register(varyHeaderPlugin);
+
+  // Layer 3: Infrastructure plugins
   await fastify.register(firebasePlugin);
   await fastify.register(lifecyclePlugin);
   await fastify.register(underPressurePlugin);
   await fastify.register(swaggerPlugin);
 
-  // Layer 3: Application plugins
+  // Layer 4: Application plugins
   await fastify.register(authPlugin);
   await fastify.register(errorHandlerPlugin);
-  await fastify.register(requestLoggingPlugin);
+  await fastify.register(requestidPlugin);
+  await fastify.register(loggingPlugin);
 
-  // Layer 4: Routes
+  // Layer 5: Response transformation plugins
+  await fastify.register(schemaRegistryPlugin);
+  await fastify.register(schemaDiscoveryPlugin);
+
+  // Layer 6: Routes
   await fastify.register(healthRoutes);
+  await fastify.register(helloRoutes);
+  await fastify.register(itemsRoutes);
   await fastify.register(rootRoutes);
+  await fastify.register(schemasRoutes);
 
   return fastify;
 }

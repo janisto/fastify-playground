@@ -1,11 +1,11 @@
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
-import requestLogging from "../../../src/plugins/request-logging.js";
+import requestid from "../../../src/plugins/requestid.js";
 
-describe("Request Logging Plugin", () => {
+describe("Request ID Plugin", () => {
   it("should generate request ID when not provided", async () => {
     const fastify = Fastify();
-    await fastify.register(requestLogging);
+    await fastify.register(requestid);
 
     fastify.get("/test", async () => ({ status: "ok" }));
 
@@ -23,9 +23,9 @@ describe("Request Logging Plugin", () => {
     await fastify.close();
   });
 
-  it("should use client-provided request ID", async () => {
+  it("should use client-provided request ID when valid", async () => {
     const fastify = Fastify();
-    await fastify.register(requestLogging);
+    await fastify.register(requestid);
 
     fastify.get("/test", async () => ({ status: "ok" }));
 
@@ -43,9 +43,98 @@ describe("Request Logging Plugin", () => {
     await fastify.close();
   });
 
+  it("should generate new UUID when request ID is too long", async () => {
+    const fastify = Fastify();
+    await fastify.register(requestid);
+
+    fastify.get("/test", async () => ({ status: "ok" }));
+
+    const longRequestId = "a".repeat(129);
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/test",
+      headers: {
+        "X-Request-Id": longRequestId,
+      },
+    });
+
+    expect(response.headers["x-request-id"]).not.toBe(longRequestId);
+    expect(response.headers["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+
+    await fastify.close();
+  });
+
+  it("should generate new UUID when request ID contains non-ASCII characters", async () => {
+    const fastify = Fastify();
+    await fastify.register(requestid);
+
+    fastify.get("/test", async () => ({ status: "ok" }));
+
+    const nonAsciiRequestId = "request-id-\u0000-null";
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/test",
+      headers: {
+        "X-Request-Id": nonAsciiRequestId,
+      },
+    });
+
+    expect(response.headers["x-request-id"]).not.toBe(nonAsciiRequestId);
+    expect(response.headers["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+
+    await fastify.close();
+  });
+
+  it("should generate new UUID when request ID contains control characters", async () => {
+    const fastify = Fastify();
+    await fastify.register(requestid);
+
+    fastify.get("/test", async () => ({ status: "ok" }));
+
+    const controlCharRequestId = "request-id-\n-newline";
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/test",
+      headers: {
+        "X-Request-Id": controlCharRequestId,
+      },
+    });
+
+    expect(response.headers["x-request-id"]).not.toBe(controlCharRequestId);
+    expect(response.headers["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+
+    await fastify.close();
+  });
+
+  it("should accept request ID at exactly max length (128 chars)", async () => {
+    const fastify = Fastify();
+    await fastify.register(requestid);
+
+    fastify.get("/test", async () => ({ status: "ok" }));
+
+    const maxLengthRequestId = "a".repeat(128);
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/test",
+      headers: {
+        "X-Request-Id": maxLengthRequestId,
+      },
+    });
+
+    expect(response.headers["x-request-id"]).toBe(maxLengthRequestId);
+
+    await fastify.close();
+  });
+
   it("should add request ID to request object", async () => {
     const fastify = Fastify();
-    await fastify.register(requestLogging);
+    await fastify.register(requestid);
 
     let capturedRequestId: string | undefined;
 
@@ -65,29 +154,9 @@ describe("Request Logging Plugin", () => {
     await fastify.close();
   });
 
-  it("should log incoming requests", async () => {
-    const fastify = Fastify({
-      logger: true,
-    });
-
-    await fastify.register(requestLogging);
-
-    fastify.get("/test", async () => ({ status: "ok" }));
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/test",
-    });
-
-    // Verify the endpoint works (logging happens in background)
-    expect(response.statusCode).toBe(200);
-
-    await fastify.close();
-  });
-
   it("should handle multiple concurrent requests with unique IDs", async () => {
     const fastify = Fastify();
-    await fastify.register(requestLogging);
+    await fastify.register(requestid);
 
     const requestIds = new Set<string>();
 
@@ -96,7 +165,6 @@ describe("Request Logging Plugin", () => {
       return { id: request.id };
     });
 
-    // Make multiple concurrent requests
     const requests = await Promise.all([
       fastify.inject({ method: "GET", url: "/test" }),
       fastify.inject({ method: "GET", url: "/test" }),
@@ -105,7 +173,6 @@ describe("Request Logging Plugin", () => {
       fastify.inject({ method: "GET", url: "/test" }),
     ]);
 
-    // Verify each has a unique request ID
     expect(requestIds.size).toBe(5);
     expect(requests.map((r) => r.headers["x-request-id"]).every((id) => id)).toBe(true);
 
@@ -114,7 +181,7 @@ describe("Request Logging Plugin", () => {
 
   it("should work with different HTTP methods", async () => {
     const fastify = Fastify();
-    await fastify.register(requestLogging);
+    await fastify.register(requestid);
 
     fastify.get("/test", async () => ({ method: "GET" }));
     fastify.post("/test", async () => ({ method: "POST" }));

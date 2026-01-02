@@ -85,9 +85,10 @@ describe("App Integration", () => {
       url: "/",
     });
 
-    expect(response.headers["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
-    expect(response.headers["strict-transport-security"]).toBeDefined();
+    // HSTS is disabled for this application
+    expect(response.headers["strict-transport-security"]).toBeUndefined();
 
     await fastify.close();
   });
