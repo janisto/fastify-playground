@@ -1,5 +1,5 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
-import { HelloResponseSchema } from "../plugins/schema-registry.js";
+import { ErrorModelSchema, HelloResponseSchema } from "../plugins/schema-registry.js";
 
 const HelloInputSchema = Type.Object(
   {
@@ -18,6 +18,7 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         tags: ["Hello"],
         response: {
           200: HelloResponseSchema,
+          500: ErrorModelSchema,
         },
       },
     },
@@ -36,6 +37,8 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         body: HelloInputSchema,
         response: {
           201: HelloResponseSchema,
+          422: ErrorModelSchema,
+          500: ErrorModelSchema,
         },
       },
     },

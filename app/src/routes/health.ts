@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-import { HealthResponseSchema } from "../plugins/schema-registry.js";
+import { ErrorModelSchema, HealthResponseSchema } from "../plugins/schema-registry.js";
 
 const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
   fastify.get(
@@ -11,6 +11,7 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
         summary: "Health check endpoint",
         response: {
           200: HealthResponseSchema,
+          503: ErrorModelSchema,
         },
       },
     },

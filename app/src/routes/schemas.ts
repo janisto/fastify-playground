@@ -6,8 +6,8 @@ import type { OpenAPIV3_1 } from "openapi-types";
  * Schema Discovery Routes
  *
  * Serves JSON Schemas extracted from the OpenAPI specification.
- * Schemas are dynamically derived from `/api-docs/json` at startup,
- * providing automatic schema discovery for all API response types.
+ * Schemas are retrieved from `fastify.swagger().components.schemas` at startup.
+ * Only schemas referenced by route definitions will be discoverable here.
  *
  * @see https://json-schema.org/draft/2020-12/json-schema-core.html
  * @see https://spec.openapis.org/oas/v3.1.0#schema-object

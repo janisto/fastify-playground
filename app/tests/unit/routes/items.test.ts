@@ -1,18 +1,27 @@
-import sensible from "@fastify/sensible";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
 import Fastify from "fastify";
 import fp from "fastify-plugin";
 import { describe, expect, it } from "vitest";
+import errorHandler from "../../../src/plugins/error-handler.js";
+import schemaRegistry from "../../../src/plugins/schema-registry.js";
+import sensible from "../../../src/plugins/sensible.js";
 import itemsRoutes from "../../../src/routes/items.js";
 import { encodeCursor } from "../../../src/utils/pagination.js";
+
+async function createTestApp() {
+  const fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler).withTypeProvider<TypeBoxTypeProvider>();
+  await fastify.register(sensible);
+  await fastify.register(schemaRegistry);
+  await fastify.register(errorHandler);
+  await fastify.register(itemsRoutes);
+  return fastify;
+}
 
 describe("Items Routes", () => {
   describe("GET /items", () => {
     it("should return a paginated list of items", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
@@ -31,9 +40,7 @@ describe("Items Routes", () => {
     });
 
     it("should return items with correct structure", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
@@ -57,9 +64,7 @@ describe("Items Routes", () => {
     });
 
     it("should paginate with cursor", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const firstResponse = await fastify.inject({
         method: "GET",
@@ -88,9 +93,7 @@ describe("Items Routes", () => {
     });
 
     it("should filter by category", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
@@ -109,9 +112,7 @@ describe("Items Routes", () => {
     });
 
     it("should return 400 for invalid cursor format", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
@@ -121,15 +122,13 @@ describe("Items Routes", () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.message).toContain("invalid cursor format");
+      expect(body.detail).toContain("invalid cursor format");
 
       await fastify.close();
     });
 
     it("should return 400 for cursor type mismatch", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const cursor = encodeCursor({ type: "wrong", value: "item-001" });
       const response = await fastify.inject({
@@ -140,15 +139,13 @@ describe("Items Routes", () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.message).toContain("cursor type mismatch");
+      expect(body.detail).toContain("cursor type mismatch");
 
       await fastify.close();
     });
 
     it("should return 400 for cursor referencing unknown item", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const cursor = encodeCursor({ type: "item", value: "item-999" });
       const response = await fastify.inject({
@@ -159,15 +156,13 @@ describe("Items Routes", () => {
       expect(response.statusCode).toBe(400);
 
       const body = response.json();
-      expect(body.message).toContain("cursor references unknown item");
+      expect(body.detail).toContain("cursor references unknown item");
 
       await fastify.close();
     });
 
     it("should include Link header with next cursor when more items available", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
@@ -182,9 +177,7 @@ describe("Items Routes", () => {
     });
 
     it("should include Link header with prev cursor when not at start", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const cursor = encodeCursor({ type: "item", value: "item-010" });
       const response = await fastify.inject({
@@ -201,9 +194,7 @@ describe("Items Routes", () => {
     });
 
     it("should not include Link header on last page", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const cursor = encodeCursor({ type: "item", value: "item-025" });
       const response = await fastify.inject({
@@ -220,9 +211,7 @@ describe("Items Routes", () => {
     });
 
     it("should respect limit parameter", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
@@ -237,56 +226,51 @@ describe("Items Routes", () => {
       await fastify.close();
     });
 
-    it("should return 400 for limit less than 1", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+    it("should return 422 for limit less than 1", async () => {
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
         url: "/items?limit=0",
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(422);
 
       await fastify.close();
     });
 
-    it("should return 400 for limit greater than 100", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+    it("should return 422 for limit greater than 100", async () => {
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
         url: "/items?limit=101",
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(422);
 
       await fastify.close();
     });
 
-    it("should return 400 for invalid category", async () => {
-      const fastify = Fastify();
-      await fastify.register(sensible);
-      await fastify.register(itemsRoutes);
+    it("should return 422 for invalid category", async () => {
+      const fastify = await createTestApp();
 
       const response = await fastify.inject({
         method: "GET",
         url: "/items?category=invalid",
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(422);
 
       await fastify.close();
     });
 
     it("should register ItemsData schema for discovery", async () => {
       const fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler).withTypeProvider<TypeBoxTypeProvider>();
-      const { default: schemaRegistry } = await import("../../../src/plugins/schema-registry.js");
-      await fastify.register(sensible);
-      await fastify.register(schemaRegistry);
+      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
+      const { default: schemaRegistryPlugin } = await import("../../../src/plugins/schema-registry.js");
+      await fastify.register(sensiblePlugin);
+      await fastify.register(schemaRegistryPlugin);
       await fastify.register(fp(itemsRoutes));
       await fastify.ready();
 
