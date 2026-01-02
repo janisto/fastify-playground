@@ -50,16 +50,22 @@ declare module "fastify" {
 
 ## Existing Plugins Reference
 
+- `accepts-serializer.ts` - CBOR response serialization with @fastify/accepts-serializer
 - `auth.ts` - Firebase authentication with request.user decorator
+- `cbor-parser.ts` - CBOR request body parsing
 - `cors.ts` - CORS configuration with @fastify/cors
-- `error-handler.ts` - Global error handling with structured responses
+- `error-handler.ts` - Global error handling with RFC 9457 Problem Details responses
 - `firebase.ts` - Firebase Admin SDK initialization
 - `helmet.ts` - Security headers with @fastify/helmet
 - `lifecycle.ts` - Server lifecycle hooks and graceful shutdown
-- `request-logging.ts` - Request ID and logging context
+- `logging.ts` - Request/response logging with timing
+- `requestid.ts` - Request ID generation and header propagation
+- `schema-discovery.ts` - Schema link header injection for responses
+- `schema-registry.ts` - Shared TypeBox schema registration
 - `sensible.ts` - HTTP error utilities with @fastify/sensible
 - `swagger.ts` - OpenAPI documentation with @fastify/swagger
 - `under-pressure.ts` - Health checks and system pressure monitoring
+- `vary-header.ts` - Vary: Accept header for proper caching
 
 ## Testing Requirements
 
@@ -77,6 +83,6 @@ npm run test        # Run all tests including plugin tests
 
 ## Boundaries
 
-- Do not modify `app/src/app.ts` unless adding new AutoLoad configuration
+- Do not modify `app/src/app.ts` unless adding new plugin registration
 - Do not add plugins that duplicate existing functionality
 - Always add corresponding unit tests for new plugins

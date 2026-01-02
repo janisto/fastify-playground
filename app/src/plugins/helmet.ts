@@ -4,17 +4,8 @@ import fp from "fastify-plugin";
 /**
  * Helmet security headers plugin for Fastify.
  *
- * This plugin adds essential security headers to protect against common vulnerabilities:
- * - Content-Security-Policy: Controls resource loading to prevent XSS
- * - Strict-Transport-Security (HSTS): Enforces HTTPS connections
- * - X-Frame-Options: Prevents clickjacking attacks
- * - X-Content-Type-Options: Prevents MIME-type sniffing
- * - X-DNS-Prefetch-Control: Controls DNS prefetching
- *
- * Configuration:
- * - CSP allows 'self' for scripts, styles with inline styles for UI frameworks
- * - HSTS with 1-year max-age, includeSubDomains, and preload
- * - Applied globally to all routes
+ * All headers configured via @fastify/helmet options.
+ * Use route-level `helmet: false` or custom config to override per-route.
  *
  * @see https://helmetjs.github.io/
  * @see https://github.com/fastify/fastify-helmet
@@ -24,18 +15,29 @@ export default fp<FastifyHelmetOptions>(
     await fastify.register(helmet, {
       global: true,
       contentSecurityPolicy: {
+        useDefaults: false,
         directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          scriptSrc: ["'self'"],
-          imgSrc: ["'self'", "data:", "https:"],
+          "default-src": ["'none'"],
+          "frame-ancestors": ["'none'"],
         },
       },
-      hsts: {
-        maxAge: 31536000, // 1 year
-        includeSubDomains: true,
-        preload: true,
-      },
+      crossOriginOpenerPolicy: { policy: "same-origin" },
+      crossOriginResourcePolicy: { policy: "same-origin" },
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+      xFrameOptions: { action: "deny" },
+      // Disable unused headers
+      hsts: false,
+      dnsPrefetchControl: false,
+      originAgentCluster: false,
+    });
+
+    // Additional security headers not handled by helmet
+    fastify.addHook("onSend", async (_request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      reply.header(
+        "Permissions-Policy",
+        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
+      );
     });
   },
   {

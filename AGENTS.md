@@ -389,6 +389,199 @@ This repository contains multiple apps:
 
 ---
 
+## REST API Implementation Guidelines
+
+Follow these guidelines when implementing REST API endpoints.
+
+### Resource-Oriented Architecture
+
+- Model APIs around resources (nouns), not actions (verbs)
+- Use plural nouns for collection endpoints: `/items`, `/users`
+- Nest sub-resources logically: `/users/{id}/orders`
+- Keep URLs shallow (max 2-3 levels of nesting)
+
+### Problem Details Error Handling (RFC 9457)
+
+All error responses must use RFC 9457 Problem Details format:
+
+```typescript
+import { Type } from "@fastify/type-provider-typebox";
+
+const ProblemDetailsSchema = Type.Object({
+	type: Type.Optional(Type.String({ default: "about:blank" })),
+	title: Type.String(),
+	status: Type.Integer(),
+	detail: Type.Optional(Type.String()),
+	instance: Type.Optional(Type.String()),
+});
+```
+
+Error handler implementation:
+
+```typescript
+fastify.setErrorHandler((error, request, reply) => {
+	const statusCode = error.statusCode ?? 500;
+	const problemDetails = {
+		type: error.code ? `https://api.example.com/errors/${error.code}` : "about:blank",
+		title: error.name || "Error",
+		status: statusCode,
+		detail: error.message,
+		instance: request.url,
+	};
+
+	const contentType = request.headers.accept?.includes("application/cbor")
+		? "application/problem+cbor"
+		: "application/problem+json";
+
+	return reply.status(statusCode).type(contentType).send(problemDetails);
+});
+```
+
+### Content Negotiation Implementation
+
+Use `@fastify/accepts-serializer` for response serialization and custom parser for CBOR requests:
+
+```typescript
+// CBOR request parser
+fastify.addContentTypeParser(
+	["application/cbor", /^application\/.+\+cbor$/],
+	{ parseAs: "buffer" },
+	async (_request, payload: Buffer) => {
+		return decode(new Uint8Array(payload));
+	},
+);
+
+// Response serialization via @fastify/accepts-serializer
+await fastify.register(acceptsSerializer, {
+	serializers: [
+		{ regex: /^application\/cbor$/, serializer: (body) => cborEncode(body) },
+	],
+	default: "application/json",
+});
+```
+
+Always add `Vary: Accept` header for proper caching:
+
+```typescript
+fastify.addHook("onSend", async (_request, reply) => {
+	reply.header("Vary", "Accept");
+});
+```
+
+### Cursor-Based Pagination
+
+Use opaque Base64URL-encoded cursors:
+
+```typescript
+import { Buffer } from "node:buffer";
+
+export function encodeCursor(cursor: { type: string; value: string }): string {
+	return Buffer.from(`${cursor.type}:${cursor.value}`).toString("base64url");
+}
+
+export function decodeCursor(encoded: string): { type: string; value: string } | null {
+	try {
+		const data = Buffer.from(encoded, "base64url").toString("utf8");
+		const colonIdx = data.indexOf(":");
+		if (colonIdx === -1) return null;
+		return { type: data.slice(0, colonIdx), value: data.slice(colonIdx + 1) };
+	} catch {
+		return null;
+	}
+}
+```
+
+Include RFC 8288 Link headers for navigation:
+
+```typescript
+reply.header("Link", '</items?cursor=abc123>; rel="next", </items?cursor=xyz789>; rel="prev"');
+```
+
+### Request ID Handling
+
+Validate and propagate request IDs for tracing:
+
+- Accept client-provided `X-Request-Id` if valid (printable ASCII, 1-128 chars)
+- Generate UUID v4 if not provided or invalid
+- Include in all log entries and response headers
+- Reject control characters and overly long IDs to prevent log injection
+
+```typescript
+const REQUEST_ID_PATTERN = /^[\x20-\x7E]{1,128}$/;
+
+fastify.addHook("onRequest", async (request, reply) => {
+	const clientId = request.headers["x-request-id"];
+	const requestId = typeof clientId === "string" && REQUEST_ID_PATTERN.test(clientId)
+		? clientId
+		: randomUUID();
+	request.id = requestId;
+	reply.header("X-Request-Id", requestId);
+});
+```
+
+### Security Headers
+
+Configure `@fastify/helmet` with OWASP-recommended headers:
+
+```typescript
+await fastify.register(helmet, {
+	contentSecurityPolicy: {
+		directives: {
+			defaultSrc: ["'none'"],
+			frameAncestors: ["'none'"],
+		},
+	},
+	crossOriginOpenerPolicy: { policy: "same-origin" },
+	crossOriginResourcePolicy: { policy: "same-origin" },
+	originAgentCluster: true,
+	referrerPolicy: { policy: "no-referrer" },
+	strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true, preload: true },
+	xContentTypeOptions: true,
+	xDnsPrefetchControl: { allow: false },
+	xDownloadOptions: true,
+	xFrameOptions: { action: "deny" },
+	xPermittedCrossDomainPolicies: { permittedPolicies: "none" },
+	xXssProtection: false,
+});
+```
+
+### Type Coercion
+
+TypeBox with Fastify performs automatic type coercion for query parameters and path parameters:
+
+- `"123"` becomes `123` for `Type.Integer()` or `Type.Number()`
+- `"true"` / `"false"` becomes `true` / `false` for `Type.Boolean()`
+- Empty string `""` is NOT coerced to `null` or `undefined`
+
+Define schemas with appropriate types; Fastify handles coercion automatically.
+
+### Schema Discovery
+
+Add `$id` to shared schemas for OpenAPI schema reuse and include `$schema` field in responses:
+
+```typescript
+const ItemsResponseSchema = Type.Object({
+	$schema: Type.Optional(Type.String()),
+	items: Type.Array(ItemSchema),
+	total: Type.Integer(),
+}, { $id: "ItemsResponse" });
+
+// Register for OpenAPI
+fastify.addSchema(ItemsResponseSchema);
+```
+
+Provide schema endpoint for clients:
+
+```typescript
+fastify.get("/schemas/:schemaId", async (request, reply) => {
+	const schema = fastify.getSchema(`#${request.params.schemaId}`);
+	if (!schema) throw fastify.httpErrors.notFound("Schema not found");
+	return schema;
+});
+```
+
+---
+
 ## Secrets and Environment Variables
 
 - Never commit secrets. Use environment files like `.env.local` (gitignored).
