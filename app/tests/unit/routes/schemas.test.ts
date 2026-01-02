@@ -351,4 +351,70 @@ describe("GET /schemas/:schemaName", () => {
       await fastify.close();
     });
   });
+
+  describe("Empty Schemas Handling", () => {
+    it("should handle missing components.schemas gracefully", async () => {
+      const fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler).withTypeProvider<TypeBoxTypeProvider>();
+
+      // Register minimal swagger without any schemas
+      const minimalSwagger = fp(
+        async (f) => {
+          await f.register(fastifySwagger, {
+            openapi: {
+              openapi: "3.1.0",
+              info: { title: "Empty API", version: "1.0.0" },
+            },
+          });
+        },
+        { name: "swagger" },
+      );
+
+      await fastify.register(sensible);
+      await fastify.register(minimalSwagger);
+      await fastify.register(schemasRoutes);
+      await fastify.ready();
+
+      // Request a non-existent schema when components.schemas is empty/undefined
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/schemas/NonExistent.json",
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      await fastify.close();
+    });
+
+    it("should handle undefined components object from swagger", async () => {
+      const fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler).withTypeProvider<TypeBoxTypeProvider>();
+
+      // Create a mock swagger that returns an OpenAPI doc without components
+      const mockSwagger = fp(
+        async (f) => {
+          // Mock the swagger function to return a minimal document without components
+          f.decorate("swagger", () => ({
+            openapi: "3.1.0",
+            info: { title: "No Components API", version: "1.0.0" },
+            paths: {},
+          }));
+        },
+        { name: "swagger" },
+      );
+
+      await fastify.register(sensible);
+      await fastify.register(mockSwagger);
+      await fastify.register(schemasRoutes);
+      await fastify.ready();
+
+      // Request any schema - should return 404 since there are no schemas
+      const response = await fastify.inject({
+        method: "GET",
+        url: "/schemas/AnySchema.json",
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      await fastify.close();
+    });
+  });
 });

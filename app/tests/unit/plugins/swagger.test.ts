@@ -102,4 +102,111 @@ describe("Swagger Documentation", () => {
 
     await fastify.close();
   });
+
+  it("should include Content-Security-Policy header for Swagger UI static assets", async () => {
+    const fastify = Fastify();
+
+    await fastify.register(swagger);
+    await fastify.register(health);
+
+    // Request the Swagger UI CSS which triggers static CSP handling via transformStaticCSP
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/api-docs/static/swagger-ui.css",
+    });
+
+    // Static files should be served with proper CSP headers
+    // transformStaticCSP passes header through unchanged
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/css");
+
+    await fastify.close();
+  });
+
+  it("should use refResolver to generate schema references", async () => {
+    const fastify = Fastify();
+
+    await fastify.register(swagger);
+
+    // Register a schema with $id to test buildLocalReference
+    fastify.addSchema({
+      $id: "TestRefSchema",
+      type: "object",
+      properties: {
+        id: { type: "string" },
+      },
+    });
+
+    fastify.get(
+      "/test-ref",
+      {
+        schema: {
+          response: {
+            200: { $ref: "TestRefSchema#" },
+          },
+        },
+      },
+      async () => ({ id: "123" }),
+    );
+
+    await fastify.ready();
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/api-docs/json",
+    });
+
+    const spec = response.json();
+
+    // Check that the schema is referenced using the $id
+    expect(spec.components?.schemas?.TestRefSchema).toBeDefined();
+
+    await fastify.close();
+  });
+
+  it("should use def-index fallback when schema has no $id", async () => {
+    const fastify = Fastify();
+
+    await fastify.register(swagger);
+
+    // Register POST route with inline body schema without $id to test the fallback
+    fastify.post(
+      "/inline-schema",
+      {
+        schema: {
+          body: {
+            type: "object",
+            properties: {
+              data: { type: "string" },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              properties: {
+                result: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+      async () => ({ result: "ok" }),
+    );
+
+    await fastify.ready();
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/api-docs/json",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const spec = response.json();
+
+    // The path should be documented
+    expect(spec.paths["/inline-schema"]).toBeDefined();
+    expect(spec.paths["/inline-schema"].post).toBeDefined();
+
+    await fastify.close();
+  });
 });

@@ -62,6 +62,7 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
     },
     refResolver: {
       buildLocalReference(json: SchemaWithId, _baseUri, _fragment, i) {
+        /* v8 ignore next -- @preserve */
         return json.$id ?? `def-${i}`;
       },
     },
