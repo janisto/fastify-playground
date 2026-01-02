@@ -371,7 +371,9 @@ This repository contains multiple apps:
   - Request and response schemas with validation rules
   - At least **one success example** and **one error example** per endpoint
   - `description` and `summary` for each route
+  - **Error response schemas** in route definitions (e.g., 400, 404, 422, 500) using `ErrorModelSchema`
 - Access documentation at `/api-docs` (UI), `/api-docs/json`, `/api-docs/yaml`.
+- **Schema discoverability**: Only schemas referenced in route definitions appear in `components.schemas`. Schemas registered via `fastify.addSchema()` but not referenced by any route will not be discoverable through `/schemas/:schemaName` or the OpenAPI spec.
 
 ---
 

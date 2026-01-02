@@ -1,4 +1,5 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
+import { ErrorModelSchema } from "../plugins/schema-registry.js";
 
 const root: FastifyPluginAsyncTypebox = async (fastify, _opts): Promise<void> => {
   fastify.get(
@@ -20,6 +21,7 @@ const root: FastifyPluginAsyncTypebox = async (fastify, _opts): Promise<void> =>
               description: "Successful response from the root endpoint",
             },
           ),
+          500: ErrorModelSchema,
         },
       },
     },

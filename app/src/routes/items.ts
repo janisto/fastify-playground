@@ -1,6 +1,6 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 import type { FastifyInstance } from "fastify";
-import { ItemsResponseSchema } from "../plugins/schema-registry.js";
+import { ErrorModelSchema, ItemsResponseSchema } from "../plugins/schema-registry.js";
 import { buildLinkHeader, type Cursor, decodeCursor, encodeCursor } from "../utils/pagination.js";
 
 const CategoryEnum = Type.Union([
@@ -355,6 +355,9 @@ const itemsRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         querystring: ItemsQuerySchema,
         response: {
           200: ItemsResponseSchema,
+          400: ErrorModelSchema,
+          422: ErrorModelSchema,
+          500: ErrorModelSchema,
         },
       },
     },

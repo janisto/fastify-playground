@@ -15,6 +15,7 @@ Routes are located in `app/src/routes/`. Each route file exports a default async
 
 ```typescript
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
+import { ErrorModelSchema } from "../plugins/schema-registry.js";
 
 const routes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
@@ -32,9 +33,8 @@ const routes: FastifyPluginAsyncTypebox = async (fastify) => {
             status: Type.Literal("ok"),
             data: Type.String({ description: "Response data" }),
           }),
-          400: Type.Object({
-            message: Type.String(),
-          }),
+          422: ErrorModelSchema,
+          500: ErrorModelSchema,
         },
       },
     },
@@ -54,13 +54,17 @@ export default routes;
 2. **Description and summary**: Required for OpenAPI documentation
 3. **Tags**: Group related endpoints
 4. **Response codes**: Document all possible response status codes
-5. **TypeBox types**: Use `Type` from `@fastify/type-provider-typebox`
+5. **Error responses**: Use `ErrorModelSchema` from `schema-registry.js` for error status codes (400, 404, 422, 500, 503)
+6. **TypeBox types**: Use `Type` from `@fastify/type-provider-typebox`
+7. **Schema discoverability**: Only schemas referenced in route definitions appear in OpenAPI `components.schemas`
 
 ## Authentication
 
 For protected routes, use the `fastify.authenticate` preHandler:
 
 ```typescript
+import { ErrorModelSchema } from "../plugins/schema-registry.js";
+
 fastify.get(
   "/protected",
   {
@@ -70,7 +74,8 @@ fastify.get(
       tags: ["protected"],
       response: {
         200: Type.Object({ userId: Type.String() }),
-        401: Type.Object({ message: Type.String() }),
+        401: ErrorModelSchema,
+        500: ErrorModelSchema,
       },
     },
   },
