@@ -12,8 +12,16 @@
     "indentWidth": 2,
     "lineEnding": "lf"
   },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "linter": {
     "rules": {
+      "recommended": true,
       "complexity": {
         "noExcessiveCognitiveComplexity": "warn",
         "noForEach": "off"
@@ -21,14 +29,17 @@
       "correctness": {
         "noUnusedImports": "error",
         "noUnusedVariables": "error",
-        "useExhaustiveDependencies": "warn",
         "noUnusedFunctionParameters": "off",
+        "useExhaustiveDependencies": "warn",
         "useImportExtensions": {
           "level": "error",
           "options": {
             "forceJsExtensions": true
           }
         }
+      },
+      "security": {
+        "noGlobalEval": "error"
       },
       "style": {
         "noNonNullAssertion": "warn",
@@ -40,10 +51,14 @@
       },
       "suspicious": {
         "noDebugger": "error",
-        "noExplicitAny": "warn"
+        "noExplicitAny": "warn",
+        "noConsole": "warn"
       },
       "performance": {
         "noAccumulatingSpread": "warn"
+      },
+      "nursery": {
+        "noFloatingPromises": "error"
       }
     }
   },

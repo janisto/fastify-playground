@@ -1,5 +1,5 @@
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
-import { Type, TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
+import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
 import Fastify from "fastify";
 import { env } from "./env.js";
 import acceptsSerializerPlugin from "./plugins/accepts-serializer.js";
@@ -19,10 +19,8 @@ import swaggerPlugin from "./plugins/swagger.js";
 import underPressurePlugin from "./plugins/under-pressure.js";
 import varyHeaderPlugin from "./plugins/vary-header.js";
 import healthRoutes from "./routes/health.js";
-import helloRoutes from "./routes/hello.js";
-import itemsRoutes from "./routes/items.js";
-import rootRoutes from "./routes/root.js";
 import schemasRoutes from "./routes/schemas.js";
+import v1Routes from "./routes/v1.js";
 import { schemaErrorFormatter } from "./utils/schema-error-formatter.js";
 
 /**
@@ -84,16 +82,15 @@ export async function buildApp() {
   await fastify.register(schemaDiscoveryPlugin);
 
   // Layer 6: Routes
+  // Infrastructure routes (unversioned)
   await fastify.register(healthRoutes);
-  await fastify.register(helloRoutes);
-  await fastify.register(itemsRoutes);
-  await fastify.register(rootRoutes);
   await fastify.register(schemasRoutes);
+
+  // Business routes (versioned)
+  await fastify.register(v1Routes, { prefix: "/v1" });
 
   return fastify;
 }
-
-export { Type };
 
 // Start server when run directly (development mode with tsx)
 // In production, use: node dist/app.js
@@ -104,7 +101,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
     await fastify.listen({ port: env.PORT, host: env.HOST });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    process.stderr.write(`Failed to start server: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(1);
   }
 }

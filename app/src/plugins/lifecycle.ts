@@ -84,14 +84,14 @@ export default fp(
     /* v8 ignore next -- @preserve */
     process.on("uncaughtException", (error) => {
       fastify.log.fatal(error, "Uncaught exception");
-      closeGracefully("uncaughtException");
+      void closeGracefully("uncaughtException");
     });
 
     // Handle unhandled promise rejections
     /* v8 ignore next -- @preserve */
     process.on("unhandledRejection", (reason, promise) => {
       fastify.log.fatal({ reason, promise }, "Unhandled promise rejection");
-      closeGracefully("unhandledRejection");
+      void closeGracefully("unhandledRejection");
     });
   },
   {

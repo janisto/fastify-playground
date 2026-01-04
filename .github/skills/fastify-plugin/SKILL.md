@@ -48,7 +48,7 @@ declare module "fastify" {
 5. **Node.js builtins**: Use `node:` protocol prefix (e.g., `import * as path from "node:path"`)
 6. **Type imports**: Use `import type { ... } from "pkg"` for type-only imports
 
-## Existing Plugins Reference
+## Existing Plugins Reference (16 plugins)
 
 - `accepts-serializer.ts` - CBOR response serialization with @fastify/accepts-serializer
 - `auth.ts` - Firebase authentication with request.user decorator

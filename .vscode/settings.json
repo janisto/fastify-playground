@@ -3,7 +3,7 @@
   "eslint.format.enable": false,
   "jest.enable": false,
   "prettier.requireConfig": true,
-  "editor.rulers": [150],
+  "editor.rulers": [120],
   "javascript.preferences.importModuleSpecifierEnding": "js",
   "typescript.preferences.importModuleSpecifierEnding": "js",
   "biome.requireConfiguration": true,
@@ -31,12 +31,5 @@
     "editor.codeActionsOnSave": {
       "source.biome.useSortedKeys": "never"
     }
-  },
-  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
-  "github.copilot.nextEditSuggestions.enabled": true,
-  "github.copilot.chat.agent.thinkingTool": true,
-  "chat.mcp.autostart": "newAndOutdated",
-  "chat.agent.enabled": true,
-  "github.copilot.chat.languageContext.typescript.enabled": true,
-  "github.copilot.chat.languageContext.fix.typescript.enabled": true
+  }
 }

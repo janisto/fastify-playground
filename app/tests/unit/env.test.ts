@@ -97,6 +97,19 @@ describe("Environment Configuration", () => {
       expect(env).toHaveProperty("PORT");
       expect(env).toHaveProperty("HOST");
       expect(env).toHaveProperty("LOG_LEVEL");
+      expect(env).toHaveProperty("SECRET_MANAGER_ENABLED");
+      expect(env).toHaveProperty("APP_ENVIRONMENT");
+      expect(env).toHaveProperty("APP_URL");
+    });
+
+    it("should have optional Firebase properties", async () => {
+      process.env.FIREBASE_PROJECT_ID = "test-project";
+      process.env.FIREBASE_PROJECT_NUMBER = "123456789";
+
+      const { env } = await import("../../src/env.js");
+
+      expect(env.FIREBASE_PROJECT_ID).toBe("test-project");
+      expect(env.FIREBASE_PROJECT_NUMBER).toBe("123456789");
     });
   });
 
@@ -117,6 +130,64 @@ describe("Environment Configuration", () => {
       process.env.PORT = "not-a-number";
 
       await expect(import("../../src/env.js")).rejects.toThrow();
+    });
+
+    it("should throw for invalid APP_ENVIRONMENT", async () => {
+      process.env.APP_ENVIRONMENT = "invalid";
+
+      await expect(import("../../src/env.js")).rejects.toThrow();
+    });
+  });
+
+  describe("New Environment Variables", () => {
+    it("should use default values for new variables", async () => {
+      delete process.env.SECRET_MANAGER_ENABLED;
+      delete process.env.APP_ENVIRONMENT;
+      delete process.env.APP_URL;
+
+      const { env } = await import("../../src/env.js");
+
+      expect(env.SECRET_MANAGER_ENABLED).toBe(false);
+      expect(env.APP_ENVIRONMENT).toBe("development");
+      expect(env.APP_URL).toBe("http://localhost:3000");
+    });
+
+    it("should parse SECRET_MANAGER_ENABLED as boolean", async () => {
+      process.env.SECRET_MANAGER_ENABLED = "true";
+
+      const { env } = await import("../../src/env.js");
+
+      expect(env.SECRET_MANAGER_ENABLED).toBe(true);
+      expect(typeof env.SECRET_MANAGER_ENABLED).toBe("boolean");
+    });
+
+    it("should parse APP_ENVIRONMENT correctly", async () => {
+      process.env.APP_ENVIRONMENT = "staging";
+
+      const { env } = await import("../../src/env.js");
+
+      expect(env.APP_ENVIRONMENT).toBe("staging");
+    });
+
+    it("should parse APP_URL correctly", async () => {
+      process.env.APP_URL = "https://api.example.com";
+
+      const { env } = await import("../../src/env.js");
+
+      expect(env.APP_URL).toBe("https://api.example.com");
+    });
+
+    it.each([
+      "development",
+      "staging",
+      "production",
+    ] as const)("should accept %s as APP_ENVIRONMENT", async (environment) => {
+      vi.resetModules();
+      process.env.APP_ENVIRONMENT = environment;
+
+      const { env } = await import("../../src/env.js");
+
+      expect(env.APP_ENVIRONMENT).toBe(environment);
     });
   });
 });
