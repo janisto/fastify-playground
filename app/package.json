@@ -41,7 +41,8 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format .",
-    "format:fix": "biome format --write ."
+    "format:fix": "biome format --write .",
+    "fix": "npm run check:fix && npm run build:check && npm run test"
   },
   "dependencies": {
     "@fastify/accepts-serializer": "^6.0.3",

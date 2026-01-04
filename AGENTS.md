@@ -53,6 +53,9 @@ Keep output and code/doc comments minimal and purposeful.
 - **Avoid `any`**: Use `unknown` if type is uncertain. Prefer existing types over `Record<string, unknown>`.
 - **Async code**: Use async/await. Wrap critical paths in try/catch and include contextual error messages.
 - **Keep it simple**: Avoid over-engineering and premature abstractions. Write idiomatic, maintainable code.
+- **Module boundaries**: Expose each feature's public API via `app/src/modules/<name>/index.ts` and prefer importing from the index outside the module.
+- **Service construction**: Instantiate services at plugin registration time (not inside handlers). Pass dependencies via plugin options or decorators for future Firestore adapters.
+- **Repository pattern**: Add `repository.ts` per module for persistence (Firestore or external APIs) and keep `service.ts` focused on business logic.
 - **Linting**: Do not use `eslint-disable`. Project enforces linting via Biome.
 - **TypeScript/build targets**:
   - `app/tsconfig.json`: `target` `ES2024`, `module` `NodeNext`, `moduleResolution` `NodeNext`, extends `fastify-tsconfig`.
@@ -649,23 +652,28 @@ Always `cd` into the correct app directory before running commands (`cd app` or 
 
 ### Formatting Rules
 
-- **Line width**: 150 characters
+- **Line width**: 120 characters
 - **Format with errors**: Enabled (formats even if syntax errors exist)
-- **EditorConfig integration**: Enabled (respects `.editorconfig` for indent style/size)
+- **Indent style**: 2 spaces (via `.editorconfig`)
+- **Line endings**: LF (Unix-style)
 - **Quote style**: Double quotes
 - **Semicolons**: Always required
+- **Trailing commas**: All (including function parameters)
 
 ### Linter Rules
 
+- **Base**: `recommended: true` (enables all recommended rules by default)
 - **Complexity**:
   - `noExcessiveCognitiveComplexity`: warn
   - `noForEach`: off
 - **Correctness**:
   - `noUnusedImports`: error
   - `noUnusedVariables`: error
-  - `useExhaustiveDependencies`: warn
   - `noUnusedFunctionParameters`: off
+  - `useExhaustiveDependencies`: warn
   - `useImportExtensions`: error (with `forceJsExtensions: true`)
+- **Security**:
+  - `noGlobalEval`: error (prevents code injection vulnerabilities)
 - **Style**:
   - `noNonNullAssertion`: warn
   - `useConst`: error
@@ -676,11 +684,19 @@ Always `cd` into the correct app directory before running commands (`cd app` or 
 - **Suspicious**:
   - `noDebugger`: error
   - `noExplicitAny`: warn
+  - `noConsole`: warn (use `fastify.log` or `process.stderr.write` instead)
 - **Performance**:
   - `noAccumulatingSpread`: warn
+- **Nursery** (experimental but valuable):
+  - `noFloatingPromises`: error (catches unhandled promises)
+
+### Assist Actions
+
+- **organizeImports**: on (auto-sorts and groups imports)
 
 ### Important Notes
 
 - Keep imports sorted/grouped per Biome; do not disable rules.
 - The `useImportExtensions` rule with `forceJsExtensions: true` automatically enforces `.js` extensions on relative imports.
+- Use `void` operator to explicitly ignore promise results when intentional (e.g., `void closeGracefully()`).
 - Run `npm run check:fix` to auto-fix all linting and formatting issues.

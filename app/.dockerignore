@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Test files
+tests
+coverage
+*.test.ts
+
+# Development files
+.env*
+.git
+.gitignore
+.editorconfig
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Development config (not needed at runtime)
+vitest.config.ts
+biome.json
+
+# Firebase config (not needed in container)
+firebase.json
+firestore.indexes.json
+firestore.rules
+.firebaserc

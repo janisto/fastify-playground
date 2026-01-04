@@ -39,11 +39,15 @@ export function parseTraceparent(header: string | undefined): TraceparentCompone
 
 /**
  * Resolves the Google Cloud Project ID from environment variables.
- * Checked in order: GOOGLE_CLOUD_PROJECT, GCP_PROJECT, GCLOUD_PROJECT, PROJECT_ID
+ * Checked in order: FIREBASE_PROJECT_ID, GOOGLE_CLOUD_PROJECT, GCP_PROJECT, GCLOUD_PROJECT, PROJECT_ID
  */
 export function resolveProjectId(): string | undefined {
   return (
-    process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT || process.env.PROJECT_ID
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    process.env.GCP_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.PROJECT_ID
   );
 }
 

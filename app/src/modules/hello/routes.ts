@@ -1,16 +1,16 @@
-import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
-import { ErrorModelSchema, HelloResponseSchema } from "../plugins/schema-registry.js";
+import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
 
-const HelloInputSchema = Type.Object(
-  {
-    name: Type.String({ minLength: 1, maxLength: 100, description: "Name to greet" }),
-  },
-  { additionalProperties: false },
-);
+import { ErrorModelSchema } from "../../schemas/index.js";
+import { HelloInputSchema, HelloResponseSchema } from "./schemas.js";
+import { HelloService } from "./service.js";
 
 const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
+  const service = new HelloService();
+
+  fastify.addSchema(HelloResponseSchema);
+
   fastify.get(
-    "/hello",
+    "/",
     {
       schema: {
         description: "Get a greeting message",
@@ -23,12 +23,12 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async () => {
-      return { message: "Hello, World!" };
+      return service.greet();
     },
   );
 
   fastify.post(
-    "/hello",
+    "/",
     {
       schema: {
         description: "Create a personalized greeting",
@@ -43,8 +43,8 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { name } = request.body;
-      return reply.code(201).send({ message: `Hello, ${name}!` });
+      const result = service.greet(request.body.name);
+      return reply.code(201).send(result);
     },
   );
 };

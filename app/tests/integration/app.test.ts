@@ -46,21 +46,6 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
-  it("should handle requests to root endpoint", async () => {
-    const { buildApp } = await import("../../src/app.js");
-    const fastify = await buildApp();
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/",
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ root: true });
-
-    await fastify.close();
-  });
-
   it("should handle requests to health endpoint", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();

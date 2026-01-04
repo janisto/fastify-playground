@@ -15,7 +15,7 @@ Routes are located in `app/src/routes/`. Each route file exports a default async
 
 ```typescript
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
-import { ErrorModelSchema } from "../plugins/schema-registry.js";
+import { ErrorModelSchema } from "../schemas/index.js";
 
 const routes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
@@ -54,7 +54,7 @@ export default routes;
 2. **Description and summary**: Required for OpenAPI documentation
 3. **Tags**: Group related endpoints
 4. **Response codes**: Document all possible response status codes
-5. **Error responses**: Use `ErrorModelSchema` from `schema-registry.js` for error status codes (400, 404, 422, 500, 503)
+5. **Error responses**: Use `ErrorModelSchema` from `schemas/index.js` for error status codes (400, 404, 422, 500, 503)
 6. **TypeBox types**: Use `Type` from `@fastify/type-provider-typebox`
 7. **Schema discoverability**: Only schemas referenced in route definitions appear in OpenAPI `components.schemas`
 
@@ -63,7 +63,7 @@ export default routes;
 For protected routes, use the `fastify.authenticate` preHandler:
 
 ```typescript
-import { ErrorModelSchema } from "../plugins/schema-registry.js";
+import { ErrorModelSchema } from "../schemas/index.js";
 
 fastify.get(
   "/protected",
@@ -110,15 +110,15 @@ reply.badRequest("Invalid input");
 
 ## Existing Routes
 
-- `health.ts` - Simple liveness probe at `/health` (returns `{ status: "healthy" }`)
-- `hello.ts` - Greeting endpoint at `/hello` with optional name parameter
-- `items.ts` - Items collection at `/items` with cursor-based pagination and category filtering
-- `root.ts` - Root endpoint at `/`
-- `schemas.ts` - Schema discovery at `/schemas/:schemaId`
+- `routes/health.ts` - Simple liveness probe at `/health` (returns `{ status: "healthy" }`)
+- `routes/schemas.ts` - Schema discovery at `/schemas/:schemaId`
+- `routes/v1.ts` - V1 API router that registers versioned modules under `/v1`
+- `modules/hello/routes.ts` - Greeting endpoint at `/v1/hello` (GET and POST)
+- `modules/items/routes.ts` - Items collection at `/v1/items` with cursor-based pagination and category filtering
 
 ## Testing Requirements
 
-Each route must have a corresponding test file in `app/tests/unit/routes/`. Test all HTTP methods, status codes, and validation errors.
+Each route must have a corresponding test file in `app/tests/unit/`. Routes in `src/routes/` have tests in `tests/unit/routes/`, and module routes in `src/modules/` have tests in `tests/unit/modules/`.
 
 ## Commands
 

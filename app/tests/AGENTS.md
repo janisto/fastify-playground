@@ -5,8 +5,11 @@ Use these rules for tests under `app/tests/` (Node 24, TypeScript, Vitest).
 ## Test Structure
 
 - **Unit tests** - `app/tests/unit/**` (mirror `app/src/**` structure)
-  - `unit/plugins/**` - Plugin tests (accepts-serializer, auth, cbor-parser, cors, error-handler, firebase, helmet, lifecycle, logging, requestid, schema-discovery, sensible, swagger, under-pressure, vary-header)
-  - `unit/routes/**` - Route tests (health, hello, items, root, schemas)
+  - `unit/plugins/**` - Plugin tests (accepts-serializer, auth, cbor-parser, cors, error-handler, firebase, helmet, lifecycle, logging, requestid, schema-discovery, schema-registry, sensible, swagger, under-pressure, vary-header)
+  - `unit/routes/**` - Route tests (health, schemas, v1)
+  - `unit/modules/**` - Module tests (hello/routes, hello/service, items/routes, items/service)
+  - `unit/schemas/**` - Schema tests (index)
+  - `unit/utils/**` - Utility tests (cbor, link-header, pagination, schema-error-formatter, schema-url)
   - `unit/env.test.ts` - Environment configuration tests
 - **Integration tests** - `app/tests/integration/**` (full-stack API tests)
 - **Mocks** - `app/tests/mocks/**` (Firebase mocks, test utilities)
@@ -66,6 +69,7 @@ process.on("SIGINT", handler);
 - **Each source file has a matching test file**: Mirror directory structure in `tests/unit/`
 - **Import extensions required**: All relative imports must use `.js` extensions (e.g., `import foo from "../../../src/plugins/cors.js"`)
 - **Type imports**: Use explicit `import type { ... } from "pkg"` (enforced by Biome's `useImportType` rule)
+- **Module imports**: When a test consumes a module as a unit, prefer `src/modules/<name>/index.ts` instead of deep imports.
 - **No inline Vitest env comments**: Do not add `// @vitest-environment node` comments (repository rules prohibit them)
 - **Realistic fixtures**: Use realistic data; avoid PII
 - **Parse JSON responses**: Use `response.json()` to parse JSON responses in assertions
@@ -392,13 +396,22 @@ npm run test:coverage # With coverage report
 - `plugins/logging.test.ts` - Request/response logging with timing
 - `plugins/requestid.test.ts` - Request ID generation, header propagation
 - `plugins/schema-discovery.test.ts` - Schema link header injection
+- `plugins/schema-registry.test.ts` - Shared TypeBox schema registration
 - `plugins/sensible.test.ts` - HTTP errors, assertions, error utilities
 - `plugins/swagger.test.ts` - JSON/YAML endpoints, Swagger UI, OpenAPI schema
 - `plugins/under-pressure.test.ts` - Health checks, /status endpoint, Firestore connectivity, timeout handling
 - `plugins/vary-header.test.ts` - Vary: Accept header for caching
 - `routes/health.test.ts` - Health check endpoint (returns `{ status: "healthy" }`)
-- `routes/hello.test.ts` - Hello endpoint with name parameter
-- `routes/items.test.ts` - Items collection with pagination and filtering
-- `routes/root.test.ts` - Root endpoint
 - `routes/schemas.test.ts` - Schema discovery endpoint
+- `routes/v1.test.ts` - V1 API router registration (hello, items modules)
+- `modules/hello/routes.test.ts` - Hello endpoint with name parameter
+- `modules/hello/service.test.ts` - Hello service unit tests
+- `modules/items/routes.test.ts` - Items collection with pagination and filtering
+- `modules/items/service.test.ts` - Items service unit tests
+- `schemas/index.test.ts` - Shared schema exports
+- `utils/cbor.test.ts` - CBOR utility functions
+- `utils/link-header.test.ts` - Link header utilities
+- `utils/pagination.test.ts` - Pagination utilities
+- `utils/schema-error-formatter.test.ts` - Schema error formatting
+- `utils/schema-url.test.ts` - Schema URL utilities
 - `integration/app.test.ts` - Full application stack tests with Firebase mocks

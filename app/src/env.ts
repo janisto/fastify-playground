@@ -35,6 +35,16 @@ const EnvSchema = Type.Object({
     { default: "info" },
   ),
   GOOGLE_CLOUD_PROJECT: Type.Optional(Type.String({ description: "Google Cloud Project ID for Cloud Trace" })),
+  FIREBASE_PROJECT_ID: Type.Optional(
+    Type.String({ description: "Firebase Project ID (primary source for Cloud Trace correlation)" }),
+  ),
+  FIREBASE_PROJECT_NUMBER: Type.Optional(Type.String({ description: "Firebase Project Number" })),
+  SECRET_MANAGER_ENABLED: Type.Boolean({ default: false, description: "Enable Secret Manager integration" }),
+  APP_ENVIRONMENT: Type.Union([Type.Literal("development"), Type.Literal("staging"), Type.Literal("production")], {
+    default: "development",
+    description: "Application environment label",
+  }),
+  APP_URL: Type.String({ default: "http://localhost:3000", description: "Base URL for the application" }),
 });
 
 export const env = Value.Parse(EnvSchema, {
@@ -43,6 +53,11 @@ export const env = Value.Parse(EnvSchema, {
   HOST: process.env.HOST,
   LOG_LEVEL: process.env.LOG_LEVEL,
   GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
+  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
+  FIREBASE_PROJECT_NUMBER: process.env.FIREBASE_PROJECT_NUMBER,
+  SECRET_MANAGER_ENABLED: process.env.SECRET_MANAGER_ENABLED === "true",
+  APP_ENVIRONMENT: process.env.APP_ENVIRONMENT,
+  APP_URL: process.env.APP_URL,
 });
 
 export type Env = typeof env;

@@ -1,34 +1,5 @@
-import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
-import type { FastifyInstance } from "fastify";
-import { ErrorModelSchema, ItemsResponseSchema } from "../plugins/schema-registry.js";
-import { buildLinkHeader, type Cursor, decodeCursor, encodeCursor } from "../utils/pagination.js";
-
-const CategoryEnum = Type.Union([
-  Type.Literal("electronics"),
-  Type.Literal("tools"),
-  Type.Literal("accessories"),
-  Type.Literal("robotics"),
-  Type.Literal("power"),
-  Type.Literal("components"),
-]);
-
-type Category = "electronics" | "tools" | "accessories" | "robotics" | "power" | "components";
-
-interface Item {
-  id: string;
-  name: string;
-  category: Category;
-  price: number;
-  inStock: boolean;
-  createdAt: string;
-  description: string;
-}
-
-const ItemsQuerySchema = Type.Object({
-  cursor: Type.Optional(Type.String()),
-  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 20 })),
-  category: Type.Optional(CategoryEnum),
-});
+import { type Cursor, decodeCursor, encodeCursor } from "../../utils/pagination.js";
+import type { Category, Item } from "./schemas.js";
 
 const MOCK_ITEMS: Item[] = [
   {
@@ -305,83 +276,67 @@ const MOCK_ITEMS: Item[] = [
 
 const CURSOR_TYPE = "item";
 
-function validateCursor(fastify: FastifyInstance, encodedCursor: string | undefined): Cursor {
-  const cursor = decodeCursor(encodedCursor);
-  if (cursor === null) {
-    throw fastify.httpErrors.badRequest("invalid cursor format");
-  }
-  if (cursor.type && cursor.type !== CURSOR_TYPE) {
-    throw fastify.httpErrors.badRequest("cursor type mismatch");
-  }
-  return cursor;
+export interface ItemsListResult {
+  items: Item[];
+  total: number;
+  nextCursor?: string;
+  prevCursor?: string;
 }
 
-function findStartIndex(fastify: FastifyInstance, items: Item[], cursor: Cursor): number {
-  if (!cursor.value) {
-    return 0;
+export class ItemsService {
+  validateCursor(encodedCursor: string | undefined): Cursor {
+    const cursor = decodeCursor(encodedCursor);
+    if (cursor === null) {
+      throw new Error("invalid cursor format");
+    }
+    if (cursor.type && cursor.type !== CURSOR_TYPE) {
+      throw new Error("cursor type mismatch");
+    }
+    return cursor;
   }
-  const cursorIndex = items.findIndex((item) => item.id === cursor.value);
-  if (cursorIndex === -1) {
-    throw fastify.httpErrors.badRequest("cursor references unknown item");
+
+  list(options: { cursor?: string; limit?: number; category?: Category }): ItemsListResult {
+    const { cursor: encodedCursor, limit = 20, category } = options;
+
+    const cursor = this.validateCursor(encodedCursor);
+    const filtered = category ? MOCK_ITEMS.filter((item) => item.category === category) : MOCK_ITEMS;
+    const startIndex = this.findStartIndex(filtered, cursor);
+    const pageItems = filtered.slice(startIndex, startIndex + limit);
+    const { nextCursor, prevCursor } = this.buildPaginationCursors(filtered, pageItems, startIndex, limit);
+
+    return {
+      items: pageItems,
+      total: filtered.length,
+      nextCursor,
+      prevCursor,
+    };
   }
-  return cursorIndex + 1;
+
+  private findStartIndex(items: Item[], cursor: Cursor): number {
+    if (!cursor.value) {
+      return 0;
+    }
+    const cursorIndex = items.findIndex((item) => item.id === cursor.value);
+    if (cursorIndex === -1) {
+      throw new Error("cursor references unknown item");
+    }
+    return cursorIndex + 1;
+  }
+
+  private buildPaginationCursors(
+    items: Item[],
+    pageItems: Item[],
+    startIndex: number,
+    limit: number,
+  ): { nextCursor: string | undefined; prevCursor: string | undefined } {
+    const hasNext = startIndex + limit < items.length;
+    const hasPrev = startIndex > 0;
+
+    const nextCursor = hasNext
+      ? encodeCursor({ type: CURSOR_TYPE, value: pageItems[pageItems.length - 1].id })
+      : undefined;
+    const prevCursor = hasPrev ? encodeCursor({ type: CURSOR_TYPE, value: items[startIndex - 1].id }) : undefined;
+
+    return { nextCursor, prevCursor };
+  }
 }
-
-function buildPaginationCursors(
-  items: Item[],
-  pageItems: Item[],
-  startIndex: number,
-  limit: number,
-): { nextCursor: string | undefined; prevCursor: string | undefined } {
-  const hasNext = startIndex + limit < items.length;
-  const hasPrev = startIndex > 0;
-
-  const nextCursor = hasNext
-    ? encodeCursor({ type: CURSOR_TYPE, value: pageItems[pageItems.length - 1].id })
-    : undefined;
-  const prevCursor = hasPrev ? encodeCursor({ type: CURSOR_TYPE, value: items[startIndex - 1].id }) : undefined;
-
-  return { nextCursor, prevCursor };
-}
-
-const itemsRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
-  fastify.get(
-    "/items",
-    {
-      schema: {
-        description: "Returns a paginated list of items",
-        summary: "List items",
-        tags: ["Items"],
-        querystring: ItemsQuerySchema,
-        response: {
-          200: ItemsResponseSchema,
-          400: ErrorModelSchema,
-          422: ErrorModelSchema,
-          500: ErrorModelSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const { cursor: encodedCursor, limit = 20, category } = request.query;
-
-      const cursor = validateCursor(fastify, encodedCursor);
-      const filtered = category ? MOCK_ITEMS.filter((item) => item.category === category) : MOCK_ITEMS;
-      const startIndex = findStartIndex(fastify, filtered, cursor);
-      const pageItems = filtered.slice(startIndex, startIndex + limit);
-      const { nextCursor, prevCursor } = buildPaginationCursors(filtered, pageItems, startIndex, limit);
-
-      const query = new URLSearchParams();
-      if (category) query.set("category", category);
-      query.set("limit", String(limit));
-
-      const linkHeader = buildLinkHeader("/items", query, nextCursor, prevCursor);
-      if (linkHeader) {
-        reply.header("Link", linkHeader);
-      }
-
-      return { items: pageItems, total: filtered.length };
-    },
-  );
-};
-
-export default itemsRoutes;
