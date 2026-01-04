@@ -3,6 +3,8 @@ import type { FastifyInstance, FastifyServerOptions } from "fastify";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { helloRoutes } from "../../../../src/modules/hello/index.js";
+import errorHandler from "../../../../src/plugins/error-handler.js";
+import sensible from "../../../../src/plugins/sensible.js";
 
 describe("hello routes", () => {
   let fastify: FastifyInstance;
@@ -13,6 +15,8 @@ describe("hello routes", () => {
 
   beforeEach(async () => {
     fastify = createFastify();
+    await fastify.register(sensible);
+    await fastify.register(errorHandler);
     await fastify.register(helloRoutes);
     await fastify.ready();
   });
@@ -53,7 +57,7 @@ describe("hello routes", () => {
         payload: {},
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(422);
     });
 
     it("returns 422 when name is empty string", async () => {
@@ -63,7 +67,7 @@ describe("hello routes", () => {
         payload: { name: "" },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(422);
     });
 
     it("returns 422 when name exceeds max length", async () => {
@@ -73,7 +77,7 @@ describe("hello routes", () => {
         payload: { name: "a".repeat(101) },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(422);
     });
   });
 });
