@@ -51,7 +51,7 @@
     "@fastify/request-context": "^6.2.1",
     "@fastify/sensible": "^6.0.4",
     "@fastify/swagger": "^9.6.1",
-    "@fastify/swagger-ui": "^5.2.3",
+    "@fastify/swagger-ui": "^5.2.4",
     "@fastify/type-provider-typebox": "^6.1.0",
     "@fastify/under-pressure": "^9.0.3",
     "cbor2": "^2.0.1",
