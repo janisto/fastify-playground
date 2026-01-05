@@ -7,7 +7,7 @@
 # Cloud Run automatic base image updates:
 # Deploy with automatic base image updates so Google can patch the base without a rebuild:
 #   gcloud run deploy fastify-playground \
-#     --image REGION-docker.pkg.dev/PROJECT/REPO/fastify-playground:latest \
+#     --image REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest \
 #     --platform managed \
 #     --region REGION \
 #     --base-image nodejs24 \
