@@ -148,19 +148,19 @@ npm run serve         # Start Firebase emulators
 npm run deploy        # Deploy to Firebase App Hosting
 ```
 
-## Docker
-
-Build and run with version injection:
+## Container
 
 ```bash
-# Build with default version (dev)
-docker build -t fastify-playground:local ./app
+just container-build      # Build image
+just container-up         # Run container detached
+just container-down       # Stop container
+```
 
-# Build with specific version
-docker build --build-arg VERSION=1.0.0 -t fastify-playground:1.0.0 ./app
+Or with Docker/Podman CLI:
 
-# Run the container
-docker run --rm -p 8080:8080 fastify-playground:local
+```bash
+docker build -t fastify-playground:latest ./app
+docker run --rm -p 8080:8080 --env-file .env fastify-playground:latest
 ```
 
 ## Deployment
@@ -168,12 +168,20 @@ docker run --rm -p 8080:8080 fastify-playground:local
 ### Google Cloud Run
 
 ```bash
-# Build and push
-gcloud builds submit --tag REGION-docker.pkg.dev/PROJECT/REPO/fastify-playground:latest ./app
+# Build and push to Artifact Registry
+gcloud builds submit --tag REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest ./app
 
 # Deploy with automatic base image updates
 gcloud run deploy fastify-playground \
-  --image REGION-docker.pkg.dev/PROJECT/REPO/fastify-playground:latest \
+  --image REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest \
+  --platform managed \
+  --region REGION \
+  --base-image nodejs24 \
+  --automatic-updates
+
+# Deploy from source with automatic base image updates
+gcloud run deploy fastify-playground \
+  --source . \
   --platform managed \
   --region REGION \
   --base-image nodejs24 \
@@ -182,7 +190,7 @@ gcloud run deploy fastify-playground \
 
 The `--base-image` and `--automatic-updates` flags enable [automatic base image updates](https://cloud.google.com/run/docs/configuring/services/automatic-base-image-updates), allowing Google to apply security patches to the OS and runtime without rebuilding or redeploying.
 
-Set `FIREBASE_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT` environment variable to enable trace correlation in Cloud Logging.
+Set `FIREBASE_PROJECT_ID` environment variable to enable trace correlation in Cloud Logging.
 
 ## API Endpoints
 
