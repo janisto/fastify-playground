@@ -8,18 +8,20 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    working-directory: app
-
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
 
     steps:
       - name: Checkout
