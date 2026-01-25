@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6.0.2
 
       - name: Use Node.js 24
         uses: actions/setup-node@v6.2.0
@@ -45,7 +45,7 @@ jobs:
 
       - name: Report coverage summary
         if: always()
-        uses: davelosert/vitest-coverage-report-action@v2.9.0
+        uses: davelosert/vitest-coverage-report-action@v2.9.2
         with:
           working-directory: app
           name: app
