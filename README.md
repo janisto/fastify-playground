@@ -96,7 +96,7 @@ app/
     env.ts              # Environment validation (TypeBox)
     plugins/            # Fastify plugins (16 plugins, layered architecture)
     routes/             # Route handlers (health, schemas)
-    modules/            # Feature modules (hello/, items/)
+    modules/            # Feature modules (github/, hello/, items/)
       <name>/           # index.ts, routes.ts, schemas.ts, service.ts
     schemas/            # Shared TypeBox schemas (problem-details, pagination)
     utils/              # Utility functions
@@ -201,6 +201,12 @@ Set `FIREBASE_PROJECT_ID` environment variable to enable trace correlation in Cl
 | GET | `/v1/hello` | Greeting endpoint |
 | POST | `/v1/hello` | Personalized greeting (201 Created) |
 | GET | `/v1/items` | Items with cursor-based pagination and category filtering |
+| GET | `/v1/github/owners/:owner` | GitHub user profile |
+| GET | `/v1/github/owners/:owner/repos` | List user repositories |
+| GET | `/v1/github/repos/:owner/:repo` | Repository details |
+| GET | `/v1/github/repos/:owner/:repo/activity` | Repository activity (paginated) |
+| GET | `/v1/github/repos/:owner/:repo/languages` | Repository languages |
+| GET | `/v1/github/repos/:owner/:repo/tags` | Repository tags |
 | GET | `/schemas/:schemaId` | Schema discovery |
 | GET | `/api-docs` | Swagger UI |
 | GET | `/api-docs/json` | OpenAPI 3.1.0 spec (JSON) |
@@ -224,6 +230,7 @@ cp .env.example .env
 | `SECRET_MANAGER_ENABLED` | `false` | Enable Secret Manager integration |
 | `APP_ENVIRONMENT` | `development` | Application environment label (`development`, `staging`, `production`) |
 | `APP_URL` | `http://localhost:3000` | Base URL for the application |
+| `GITHUB_TOKEN` | - | GitHub API token for authenticated requests |
 
 **Firebase Emulators**:
 

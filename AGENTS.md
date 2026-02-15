@@ -405,6 +405,50 @@ Follow these guidelines when implementing REST API endpoints.
 - Nest sub-resources logically: `/users/{id}/orders`
 - Keep URLs shallow (max 2-3 levels of nesting)
 
+### JSON Encoding
+
+- JSON responses are UTF-8 with HTML escaping disabled
+- Response bodies include a `$schema` pointer to the JSON Schema
+
+### JSON Property Naming
+
+Use **camelCase** for all JSON property names in API request and response bodies. This aligns with Google's protobuf-to-JSON mapping convention.
+
+```typescript
+// TypeBox schema with camelCase properties
+const ItemSchema = Type.Object({
+	id: Type.String(),
+	inStock: Type.Boolean(),
+	createdAt: Type.String({ format: "date-time" }),
+});
+```
+
+### Firestore Field Naming
+
+Always use **snake_case** for Firestore document field names. Storage naming is independent of the JSON API contract. The mapping between API and storage representations happens in the persistence layer (`repository.ts` for Firestore, `client.ts` for external APIs):
+
+```typescript
+// API model (camelCase JSON) - used in routes and services
+interface Profile {
+	phoneNumber: string;
+	createdAt: string;
+}
+
+// Firestore document (snake_case storage) - used in repository
+interface FirestoreProfile {
+	phone_number: string;
+	created_at: Timestamp;
+}
+
+// Repository maps between representations
+function toApiModel(doc: FirestoreProfile): Profile {
+	return {
+		phoneNumber: doc.phone_number,
+		createdAt: doc.created_at.toDate().toISOString(),
+	};
+}
+```
+
 ### Problem Details Error Handling (RFC 9457)
 
 All error responses must use RFC 9457 Problem Details format:
