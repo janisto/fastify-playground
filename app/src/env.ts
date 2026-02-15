@@ -45,6 +45,7 @@ const EnvSchema = Type.Object({
     description: "Application environment label",
   }),
   APP_URL: Type.String({ default: "http://localhost:3000", description: "Base URL for the application" }),
+  GITHUB_TOKEN: Type.Optional(Type.String({ description: "GitHub API token for authenticated requests" })),
 });
 
 export const env = Value.Parse(EnvSchema, {
@@ -58,6 +59,7 @@ export const env = Value.Parse(EnvSchema, {
   SECRET_MANAGER_ENABLED: process.env.SECRET_MANAGER_ENABLED === "true",
   APP_ENVIRONMENT: process.env.APP_ENVIRONMENT,
   APP_URL: process.env.APP_URL,
+  GITHUB_TOKEN: process.env.GITHUB_TOKEN,
 });
 
 export type Env = typeof env;
