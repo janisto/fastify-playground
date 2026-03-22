@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Use Node.js 24
-        uses: actions/setup-node@v6.2.0
+        uses: actions/setup-node@v6.3.0
         with:
           cache-dependency-path: "app/package-lock.json"
           node-version: 24
@@ -45,7 +45,7 @@ jobs:
 
       - name: Report coverage summary
         if: always()
-        uses: davelosert/vitest-coverage-report-action@v2.9.2
+        uses: davelosert/vitest-coverage-report-action@v2.9.3
         with:
           working-directory: app
           name: app
