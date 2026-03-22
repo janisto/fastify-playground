@@ -37,6 +37,7 @@ export async function buildApp() {
   const fastify = Fastify({
     connectionTimeout: 10000,
     requestTimeout: 30000,
+    disableRequestLogging: true,
     schemaErrorFormatter,
     logger: {
       level: env.LOG_LEVEL,

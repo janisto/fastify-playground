@@ -48,15 +48,15 @@ const EnvSchema = Type.Object({
   GITHUB_TOKEN: Type.Optional(Type.String({ description: "GitHub API token for authenticated requests" })),
 });
 
-export const env = Value.Parse(EnvSchema, {
-  NODE_ENV: process.env.NODE_ENV ?? "development",
-  PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
+export const env = Value.Decode(EnvSchema, {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT,
   HOST: process.env.HOST,
   LOG_LEVEL: process.env.LOG_LEVEL,
   GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
   FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
   FIREBASE_PROJECT_NUMBER: process.env.FIREBASE_PROJECT_NUMBER,
-  SECRET_MANAGER_ENABLED: process.env.SECRET_MANAGER_ENABLED === "true",
+  SECRET_MANAGER_ENABLED: process.env.SECRET_MANAGER_ENABLED,
   APP_ENVIRONMENT: process.env.APP_ENVIRONMENT,
   APP_URL: process.env.APP_URL,
   GITHUB_TOKEN: process.env.GITHUB_TOKEN,

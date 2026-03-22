@@ -1,3 +1,4 @@
+import { PassThrough } from "node:stream";
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
 import logging, {
@@ -7,10 +8,27 @@ import logging, {
 } from "../../../src/plugins/logging.js";
 import requestid from "../../../src/plugins/requestid.js";
 
+function collectLogs() {
+  const stream = new PassThrough();
+  const lines: string[] = [];
+  stream.on("data", (chunk: Buffer) => {
+    for (const line of chunk.toString().split("\n")) {
+      if (line.trim()) lines.push(line);
+    }
+  });
+  return { stream, lines };
+}
+
+function parseLogMessages(lines: string[]): { msg: string }[] {
+  return lines.map((line) => JSON.parse(line) as { msg: string });
+}
+
 describe("Request Logging Plugin", () => {
   it("should log incoming requests", async () => {
+    const { stream, lines } = collectLogs();
     const fastify = Fastify({
-      logger: true,
+      disableRequestLogging: true,
+      logger: { stream, level: "info" },
     });
 
     await fastify.register(requestid);
@@ -26,6 +44,74 @@ describe("Request Logging Plugin", () => {
     expect(response.statusCode).toBe(200);
 
     await fastify.close();
+
+    const parsed = parseLogMessages(lines);
+    const requestLogs = parsed.filter((entry) => entry.msg === "Incoming request" || entry.msg === "Request completed");
+    expect(requestLogs).toHaveLength(2);
+    expect(requestLogs[0].msg).toBe("Incoming request");
+    expect(requestLogs[1].msg).toBe("Request completed");
+  });
+
+  it("should not emit duplicate request logs", async () => {
+    const { stream, lines } = collectLogs();
+    const fastify = Fastify({
+      disableRequestLogging: true,
+      logger: { stream, level: "info" },
+    });
+
+    await fastify.register(requestid);
+    await fastify.register(logging);
+
+    fastify.get("/test", async () => ({ status: "ok" }));
+
+    await fastify.inject({ method: "GET", url: "/test" });
+    await fastify.close();
+
+    const parsed = parseLogMessages(lines);
+    const incomingLogs = parsed.filter((e) => e.msg.toLowerCase().includes("incoming request"));
+    const completedLogs = parsed.filter((e) => e.msg.toLowerCase().includes("request completed"));
+
+    expect(incomingLogs).toHaveLength(1);
+    expect(completedLogs).toHaveLength(1);
+  });
+
+  it("should include structured fields in request logs", async () => {
+    const { stream, lines } = collectLogs();
+    const fastify = Fastify({
+      disableRequestLogging: true,
+      logger: { stream, level: "info" },
+    });
+
+    await fastify.register(requestid);
+    await fastify.register(logging);
+
+    fastify.get("/test", async () => ({ status: "ok" }));
+
+    await fastify.inject({
+      method: "GET",
+      url: "/test",
+      headers: { "user-agent": "test-agent" },
+    });
+    await fastify.close();
+
+    const parsed = lines.map((line) => JSON.parse(line));
+    const incoming = parsed.find((e: { msg: string }) => e.msg === "Incoming request");
+    const completed = parsed.find((e: { msg: string }) => e.msg === "Request completed");
+
+    expect(incoming).toMatchObject({
+      method: "GET",
+      url: "/test",
+      userAgent: "test-agent",
+    });
+    expect(incoming.requestId).toBeDefined();
+
+    expect(completed).toMatchObject({
+      method: "GET",
+      url: "/test",
+      statusCode: 200,
+    });
+    expect(completed.responseTime).toBeGreaterThanOrEqual(0);
+    expect(completed.requestId).toBeDefined();
   });
 });
 
