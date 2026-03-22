@@ -137,7 +137,7 @@ Access the API at http://localhost:3000 and Swagger UI at http://localhost:3000/
 Run all commands from the `app/` directory:
 
 ```bash
-npm run fix           # Auto-fix all issues (format, lint, type check, tests)
+npm run qa            # Auto-fix lint/format, type check, and run tests
 npm run dev           # Start dev server with hot reload
 npm test              # Run all tests
 npm run test:coverage # Run tests with coverage report
