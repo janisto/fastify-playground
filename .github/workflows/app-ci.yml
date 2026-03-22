@@ -41,17 +41,19 @@ jobs:
         run: npm run build:check
 
       - name: Run test coverage
+        id: test-coverage
         run: npm run test:coverage
 
       - name: Report coverage summary
-        if: always()
+        if: ${{ !cancelled() && steps.test-coverage.outcome != 'skipped' }}
         uses: davelosert/vitest-coverage-report-action@v2.9.3
         with:
           working-directory: app
           name: app
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v6.0.0
+        if: ${{ !cancelled() && steps.test-coverage.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7.0.0
         with:
           name: app-coverage
           path: app/coverage
