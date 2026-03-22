@@ -61,7 +61,9 @@ export default routes;
 
 ## Environment Validation (Pre-Fastify)
 
-Use TypeBox standalone for environment validation before Fastify instance creation:
+Use TypeBox standalone for environment validation before Fastify instance creation.
+Use `Value.Decode` (not `Value.Parse`) to get the full pipeline: Default -> Convert -> Clean -> Assert.
+`Value.Parse` in TypeBox 1.1+ is strict and does not apply defaults or type coercion.
 
 ```typescript
 import Type from "typebox";
@@ -91,9 +93,9 @@ const EnvSchema = Type.Object({
   ),
 });
 
-export const env = Value.Parse(EnvSchema, {
-  NODE_ENV: process.env.NODE_ENV ?? "development",
-  PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
+export const env = Value.Decode(EnvSchema, {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT,
   HOST: process.env.HOST,
   LOG_LEVEL: process.env.LOG_LEVEL,
 });

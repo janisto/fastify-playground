@@ -42,7 +42,7 @@
     "lint:fix": "biome lint --write .",
     "format": "biome format .",
     "format:fix": "biome format --write .",
-    "fix": "npm run check:fix && npm run build:check && npm run test"
+    "qa": "npm run check:fix && npm run build:check && npm run test"
   },
   "dependencies": {
     "@fastify/accepts-serializer": "^6.0.3",
@@ -55,16 +55,16 @@
     "@fastify/swagger-ui": "^5.2.5",
     "@fastify/type-provider-typebox": "^6.1.0",
     "@fastify/under-pressure": "^9.0.3",
-    "cbor2": "^2.2.1",
-    "fastify": "^5.7.4",
+    "cbor2": "^2.3.0",
+    "fastify": "^5.8.2",
     "fastify-cli": "^7.4.1",
     "firebase-admin": "^13.6.1",
-    "typebox": "^1.0.81",
+    "typebox": "^1.1.6",
     "undici": "^7.22.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.0",
-    "@types/node": "^24.10.13",
+    "@biomejs/biome": "2.4.8",
+    "@types/node": "^24.12.0",
     "@vitest/coverage-v8": "^4.0.18",
     "fastify-tsconfig": "^3.0.0",
     "msw": "^2.12.10",
