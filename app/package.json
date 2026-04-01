@@ -56,16 +56,16 @@
     "@fastify/type-provider-typebox": "^6.1.0",
     "@fastify/under-pressure": "^9.0.3",
     "cbor2": "^2.3.0",
-    "fastify": "^5.8.2",
+    "fastify": "^5.8.4",
     "fastify-cli": "^7.4.1",
     "firebase-admin": "^13.7.0",
-    "typebox": "^1.1.6",
-    "undici": "^7.24.5"
+    "typebox": "^1.1.12",
+    "undici": "^7.24.6"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.8",
+    "@biomejs/biome": "2.4.10",
     "@types/node": "^24.12.0",
-    "@vitest/coverage-v8": "^4.1.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "fastify-tsconfig": "^3.0.0",
     "msw": "^2.12.14",
     "tsx": "^4.21.0",
