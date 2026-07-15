@@ -1,6 +1,7 @@
 # mac files
 .DS_Store
-plans/
+plans/*
+!plans/modernize.md
 
 # Environment variables
 .env
@@ -10,4 +11,4 @@ plans/
 # Logs
 logs
 *.log
-npm-debug.log*
+pnpm-debug.log*

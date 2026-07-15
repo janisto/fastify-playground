@@ -1,0 +1,8 @@
+allowBuilds:
+  '@firebase/util': true
+  esbuild: true
+  msw: false
+  protobufjs: false
+minimumReleaseAgeExclude:
+  - '@fastify/swagger@9.8.1'
+  - fastify-observability@0.2.0

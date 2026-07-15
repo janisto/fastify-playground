@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import health from "../../../src/routes/health.js";
 
 describe("GET /health", () => {
-  it("should return healthy status", async () => {
+  it("reports process liveness without external dependencies", async () => {
     const fastify = Fastify();
 
-    await fastify.register(health);
+    fastify.register(health);
 
     const response = await fastify.inject({
       method: "GET",

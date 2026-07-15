@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { addSchemaLinkHeader } from "../../../src/utils/link-header.js";
 
 describe("addSchemaLinkHeader", () => {
-  it("should add Link header with describedBy relation", async () => {
+  it("adds Link header with describedBy relation", async () => {
     const fastify = Fastify();
 
     fastify.get("/test", async (_request, reply) => {
@@ -22,7 +22,7 @@ describe("addSchemaLinkHeader", () => {
     await fastify.close();
   });
 
-  it("should append to existing Link header", async () => {
+  it("appends to existing Link header", async () => {
     const fastify = Fastify();
 
     fastify.get("/test", async (_request, reply) => {
@@ -44,7 +44,7 @@ describe("addSchemaLinkHeader", () => {
     await fastify.close();
   });
 
-  it("should handle array of existing Link headers", async () => {
+  it("handles array of existing Link headers", async () => {
     const fastify = Fastify();
 
     fastify.get("/test", async (_request, reply) => {
@@ -67,7 +67,7 @@ describe("addSchemaLinkHeader", () => {
     await fastify.close();
   });
 
-  it("should use correct schema name in URL", async () => {
+  it("uses correct schema name in URL", async () => {
     const fastify = Fastify();
 
     fastify.get("/test", async (_request, reply) => {

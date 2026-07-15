@@ -1,5 +1,9 @@
-import helmet, { type FastifyHelmetOptions } from "@fastify/helmet";
+import helmet from "@fastify/helmet";
 import fp from "fastify-plugin";
+
+export interface HelmetPluginOptions {
+  readonly hsts?: boolean;
+}
 
 /**
  * Helmet security headers plugin for Fastify.
@@ -10,8 +14,8 @@ import fp from "fastify-plugin";
  * @see https://helmetjs.github.io/
  * @see https://github.com/fastify/fastify-helmet
  */
-export default fp<FastifyHelmetOptions>(
-  async (fastify) => {
+export default fp<HelmetPluginOptions>(
+  async (fastify, options) => {
     await fastify.register(helmet, {
       global: true,
       contentSecurityPolicy: {
@@ -26,7 +30,7 @@ export default fp<FastifyHelmetOptions>(
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
       xFrameOptions: { action: "deny" },
       // Disable unused headers
-      hsts: false,
+      hsts: options.hsts ?? false,
       dnsPrefetchControl: false,
       originAgentCluster: false,
     });

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Firebase Testing"
+  short_description: "Test Firebase behavior without live services"
+  default_prompt: "Use $firebase-testing to add isolated Firebase Admin or Firestore tests with the repository mocks and safety boundaries."

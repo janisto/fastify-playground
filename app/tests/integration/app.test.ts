@@ -1,3 +1,5 @@
+import { Writable } from "node:stream";
+import { decode as cborDecode, encode as cborEncode } from "cbor2";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFirebaseAppMock, createFirebaseAuthMock, createFirestoreMock } from "../mocks/firebase.js";
 
@@ -9,7 +11,6 @@ const mockFirestore = createFirestoreMock();
 vi.mock("firebase-admin/app", () => ({
   getApps: vi.fn(() => [mockApp]),
   initializeApp: vi.fn(() => mockApp),
-  cert: vi.fn(),
 }));
 
 vi.mock("firebase-admin/auth", () => ({
@@ -19,6 +20,30 @@ vi.mock("firebase-admin/auth", () => ({
 vi.mock("firebase-admin/firestore", () => ({
   getFirestore: vi.fn(() => mockFirestore),
 }));
+
+interface LogRecord {
+  readonly [key: string]: unknown;
+  readonly message?: string;
+}
+
+class JsonLineStream extends Writable {
+  readonly lines: string[] = [];
+  readonly records: LogRecord[] = [];
+
+  override _write(chunk: Buffer, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
+    try {
+      for (const line of chunk.toString().split("\n")) {
+        if (line.length > 0) {
+          this.lines.push(line);
+          this.records.push(JSON.parse(line) as LogRecord);
+        }
+      }
+      callback();
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error("failed to parse log record"));
+    }
+  }
+}
 
 describe("App Integration", () => {
   beforeEach(() => {
@@ -30,7 +55,7 @@ describe("App Integration", () => {
     vi.resetModules();
   });
 
-  it("should initialize app successfully and register all routes", async () => {
+  it("initializes app successfully and register all routes", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
 
@@ -46,7 +71,70 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
-  it("should handle requests to health endpoint", async () => {
+  it("emit one safe, correlated terminal record for an application error", async () => {
+    const stream = new JsonLineStream();
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp({ loggerDestination: stream, loggerLevel: "info" });
+    const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    const parentId = "00f067aa0ba902b7";
+    const requestId = "observability-integration";
+
+    fastify.get("/observability-error-test", async () => {
+      throw new Error("terminal-error-canary");
+    });
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/observability-error-test?token=query-secret-canary",
+      headers: {
+        authorization: "Bearer authorization-secret-canary",
+        cookie: "session=cookie-secret-canary",
+        traceparent: `00-${traceId}-${parentId}-01`,
+        "x-request-id": requestId,
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.headers["x-request-id"]).toBe(requestId);
+
+    await fastify.close();
+
+    const terminalLines = stream.lines.filter(
+      (line) => (JSON.parse(line) as LogRecord).message === "request completed",
+    );
+    expect(terminalLines).toHaveLength(1);
+    const terminalLine = terminalLines[0];
+    if (terminalLine === undefined) {
+      throw new Error("expected one terminal access record");
+    }
+    const terminal = JSON.parse(terminalLine) as LogRecord;
+
+    expect(terminal).toMatchObject({
+      severity: "ERROR",
+      message: "request completed",
+      request_id: requestId,
+      correlation_id: traceId,
+      trace_id: traceId,
+      parent_id: parentId,
+      trace_flags: "01",
+      trace_sampled: true,
+      method: "GET",
+      path: "/observability-error-test",
+      path_template: "/observability-error-test",
+      status: 500,
+      "logging.googleapis.com/trace": traceId,
+      "logging.googleapis.com/trace_sampled": true,
+      err: { message: "terminal-error-canary" },
+    });
+    expect(terminal["logging.googleapis.com/spanId"]).toBeUndefined();
+    expect(terminalLine.match(/"request_id":/g)).toHaveLength(1);
+    expect(stream.records.filter((record) => record.message === "Server error")).toHaveLength(0);
+    for (const secret of ["query-secret-canary", "authorization-secret-canary", "cookie-secret-canary"]) {
+      expect(terminalLine).not.toContain(secret);
+    }
+  });
+
+  it("handles requests to health endpoint", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
 
@@ -61,7 +149,7 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
-  it("should have security headers from helmet plugin", async () => {
+  it("have security headers from helmet plugin", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
 
@@ -72,13 +160,13 @@ describe("App Integration", () => {
 
     expect(response.headers["x-frame-options"]).toBe("DENY");
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
-    // HSTS is disabled for this application
+    // HSTS is disabled outside the production composition.
     expect(response.headers["strict-transport-security"]).toBeUndefined();
 
     await fastify.close();
   });
 
-  it("should handle CORS for localhost requests", async () => {
+  it("handles CORS for localhost requests", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
 
@@ -93,6 +181,122 @@ describe("App Integration", () => {
     expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3000");
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
 
+    await fastify.close();
+  });
+
+  it("negotiate modeled API responses and reject unsupported success formats", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const json = await fastify.inject({
+      method: "GET",
+      url: "/v1/hello",
+      headers: { accept: "application/json, application/cbor" },
+    });
+    const cbor = await fastify.inject({
+      method: "GET",
+      url: "/v1/hello",
+      headers: { accept: "application/cbor" },
+    });
+    const rejected = await fastify.inject({
+      method: "GET",
+      url: "/v1/hello",
+      headers: { accept: "text/html", "x-request-id": "negotiation-test" },
+    });
+
+    expect(json.statusCode).toBe(200);
+    expect(json.headers["content-type"]).toContain("application/json");
+    expect(json.json()).toEqual({ message: "Hello, World!" });
+    expect(json.headers.link).toBe('</schemas/HelloResponse.json>; rel="describedBy"');
+
+    expect(cbor.statusCode).toBe(200);
+    expect(cbor.headers["content-type"]).toBe("application/cbor");
+    expect(cborDecode(cbor.rawPayload)).toEqual({ message: "Hello, World!" });
+
+    expect(rejected.statusCode).toBe(406);
+    expect(rejected.headers["content-type"]).toContain("application/problem+json");
+    expect(rejected.headers["x-request-id"]).toBe("negotiation-test");
+    expect(rejected.headers.vary).toEqual(["Accept", "Origin"]);
+    expect(rejected.json()).toMatchObject({ title: "Not Acceptable", status: 406 });
+    await fastify.close();
+  });
+
+  it("negotiate before body parsing and encode validation problems as generic CBOR", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const rejected = await fastify.inject({
+      method: "POST",
+      url: "/v1/hello",
+      headers: { accept: "text/html", "content-type": "application/cbor" },
+      payload: Buffer.from([0xff]),
+    });
+    const validation = await fastify.inject({
+      method: "POST",
+      url: "/v1/hello",
+      headers: { accept: "application/cbor", "content-type": "application/cbor" },
+      payload: Buffer.from(cborEncode({ name: "" })),
+    });
+
+    expect(rejected.statusCode).toBe(406);
+    expect(rejected.json()).toMatchObject({ status: 406 });
+
+    expect(validation.statusCode).toBe(422);
+    expect(validation.headers["content-type"]).toBe("application/cbor");
+    expect(validation.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(cborDecode(validation.rawPayload)).toMatchObject({ status: 422, detail: "validation failed" });
+    await fastify.close();
+  });
+
+  it("strictly negotiate schema documents", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const rejected = await fastify.inject({
+      method: "GET",
+      url: "/schemas/HelloResponse.json",
+      headers: { accept: "application/json" },
+    });
+    const accepted = await fastify.inject({
+      method: "GET",
+      url: "/schemas/HelloResponse.json",
+      headers: { accept: "application/schema+json" },
+    });
+
+    expect(rejected.statusCode).toBe(406);
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.headers["content-type"]).toContain("application/schema+json");
+    await fastify.close();
+  });
+
+  it("publishes a deployment-neutral, uniquely identified OpenAPI contract", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const response = await fastify.inject({ method: "GET", url: "/api-docs/json" });
+    const document = response.json();
+    const getHello = document.paths["/v1/hello/"].get;
+    const postHello = document.paths["/v1/hello/"].post;
+
+    expect(Object.keys(getHello.responses["200"].content)).toEqual(["application/json", "application/cbor"]);
+    expect(Object.keys(getHello.responses["406"].content)).toEqual(["application/problem+json", "application/cbor"]);
+    expect(getHello.responses["200"].headers).toHaveProperty("Vary");
+    expect(getHello.responses["200"].headers).toHaveProperty("X-Request-ID");
+    expect(getHello.responses["200"].headers).toHaveProperty("Link");
+    expect(Object.keys(postHello.requestBody.content)).toEqual(["application/json", "application/cbor"]);
+    expect(document.servers).toEqual([{ url: "/", description: "Current server" }]);
+
+    const operationIds: string[] = [];
+    for (const path of Object.values(document.paths) as Record<string, Record<string, unknown>>[]) {
+      for (const operation of Object.values(path)) {
+        if (typeof operation !== "object" || operation === null || !("responses" in operation)) continue;
+        expect(operation).toHaveProperty("operationId");
+        operationIds.push((operation as { operationId: string }).operationId);
+      }
+    }
+    expect(operationIds).toHaveLength(11);
+    expect(new Set(operationIds).size).toBe(operationIds.length);
+    expect(JSON.stringify(document)).not.toContain("application/problem+cbor");
     await fastify.close();
   });
 });

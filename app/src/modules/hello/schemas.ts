@@ -2,7 +2,6 @@ import { Type } from "@fastify/type-provider-typebox";
 
 export const HelloResponseSchema = Type.Object(
   {
-    $schema: Type.Optional(Type.String()),
     message: Type.String({ description: "Greeting message", examples: ["Hello, World!"] }),
   },
   {

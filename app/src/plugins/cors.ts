@@ -1,20 +1,17 @@
-import cors, { type FastifyCorsOptions } from "@fastify/cors";
+import cors from "@fastify/cors";
 import fp from "fastify-plugin";
 
-/**
- * Precompiled regex for extracting hostname from origin URLs.
- * Matches http(s)://hostname:port or http(s)://hostname patterns.
- * Performance optimization: avoids creating URL objects on every request.
- */
-const ORIGIN_HOSTNAME_REGEX = /^https?:\/\/([^/:]+)/;
+export interface CorsPluginOptions {
+  readonly origins?: readonly string[];
+}
 
 /**
  * CORS (Cross-Origin Resource Sharing) plugin for Fastify.
  *
  * This plugin configures CORS to:
- * - Allow requests from localhost and 127.0.0.1 (development)
+ * - Allow requests from an explicit, startup-validated origin allowlist
  * - Allow requests with no origin (mobile apps, Postman, curl)
- * - Block all other origins (production security)
+ * - Omit CORS response headers for all other origins
  * - Enable credentials (cookies, authorization headers)
  * - Allow traceparent header for W3C Trace Context distributed tracing
  *
@@ -27,37 +24,28 @@ const ORIGIN_HOSTNAME_REGEX = /^https?:\/\/([^/:]+)/;
  * @see https://github.com/fastify/fastify-cors
  * @see https://www.w3.org/TR/trace-context/
  */
-export default fp<FastifyCorsOptions>(
-  async (fastify) => {
+export default fp<CorsPluginOptions>(
+  async (fastify, options) => {
+    const allowedOrigins = new Set(options.origins ?? []);
+
     await fastify.register(cors, {
       origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) {
           callback(null, true);
           return;
         }
-
-        // Extract hostname using regex (faster than new URL())
-        const match = ORIGIN_HOSTNAME_REGEX.exec(origin);
-        if (!match) {
-          callback(new Error("Not allowed by CORS"), false);
-          return;
-        }
-
-        const hostname = match[1];
-
-        // Allow localhost in development
-        if (hostname === "localhost" || hostname === "127.0.0.1") {
-          callback(null, true);
-          return;
-        }
-
-        // In production, you should maintain an allowlist
-        // For now, deny all other origins
-        callback(new Error("Not allowed by CORS"), false);
+        callback(null, allowedOrigins.has(origin));
       },
       credentials: true,
-      allowedHeaders: ["Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-Id", "traceparent"],
+      allowedHeaders: [
+        "Accept",
+        "Authorization",
+        "Content-Type",
+        "X-CSRF-Token",
+        "X-Request-Id",
+        "traceparent",
+        "tracestate",
+      ],
       exposedHeaders: ["Link", "Location", "X-Request-Id"],
     });
   },

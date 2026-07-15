@@ -126,8 +126,8 @@ describe("GitHubClient", () => {
       const repos = await client.listOwnerRepos("octocat");
 
       expect(repos).toHaveLength(1);
-      expect(repos[0].name).toBe("Hello-World");
-      expect(repos[0].fullName).toBe("octocat/Hello-World");
+      expect(repos.at(0)?.name).toBe("Hello-World");
+      expect(repos.at(0)?.fullName).toBe("octocat/Hello-World");
     });
 
     it("throws error when user not found", async () => {
@@ -464,6 +464,30 @@ describe("GitHubClient", () => {
       await expect(client.getOwner("octocat")).rejects.toMatchObject({
         message: "Upstream GitHub API error",
         code: "github_upstream",
+      });
+    });
+
+    it("uses a controlled fallback when an error response is not JSON", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(502, "proxy detail canary", { headers: { "content-type": "text/html" } });
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "Upstream GitHub API error",
+        code: "github_upstream",
+      });
+    });
+
+    it("maps transport failures to a stable upstream error", async () => {
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("no-interceptor")).rejects.toMatchObject({
+        message: "GitHub API request failed",
+        code: "github_upstream",
+        statusCode: 502,
+        cause: expect.any(Error),
       });
     });
   });

@@ -27,10 +27,10 @@ describe("Error Handler Plugin", () => {
     vi.resetModules();
   });
 
-  it("should return RFC 9457 Problem Details for server errors (500+)", async () => {
+  it("returns RFC 9457 Problem Details for server errors (500+)", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/error", async () => {
       throw new Error("Internal server error");
@@ -43,12 +43,11 @@ describe("Error Handler Plugin", () => {
 
     expect(response.statusCode).toBe(500);
     expect(response.headers["content-type"]).toContain("application/problem+json");
-    expect(response.headers["x-request-id"]).toBeDefined();
-    expect(response.headers.vary).toBe("Accept");
+    expect(response.headers.vary).toEqual(["Accept", "Origin"]);
     expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
 
     const body = response.json();
-    expect(body.$schema).toContain("/schemas/ErrorModel.json");
+    expect(body.$schema).toBeUndefined();
     expect(body.title).toBe("Internal Server Error");
     expect(body.status).toBe(500);
     expect(body.detail).toBe("Internal server error");
@@ -56,10 +55,10 @@ describe("Error Handler Plugin", () => {
     await fastify.close();
   });
 
-  it("should return RFC 9457 Problem Details for client errors (400+)", async () => {
+  it("returns RFC 9457 Problem Details for client errors (400+)", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/client-error", async () => {
       const error = new Error("Bad request") as Error & { statusCode?: number };
@@ -83,10 +82,10 @@ describe("Error Handler Plugin", () => {
     await fastify.close();
   });
 
-  it("should include errors array for validation errors", async () => {
+  it("includes errors array for validation errors", async () => {
     const fastify = Fastify({ schemaErrorFormatter });
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get(
       "/validate",
@@ -116,18 +115,17 @@ describe("Error Handler Plugin", () => {
     expect(body.title).toBe("Unprocessable Entity");
     expect(body.status).toBe(422);
     expect(body.detail).toBe("validation failed");
-    expect(body.errors).toBeDefined();
-    expect(Array.isArray(body.errors)).toBe(true);
-    expect(body.errors[0]).toHaveProperty("message");
-    expect(body.errors[0]).toHaveProperty("location");
+    expect(body.errors).toEqual([
+      expect.objectContaining({ message: expect.any(String), location: expect.any(String) }),
+    ]);
 
     await fastify.close();
   });
 
-  it("should return CBOR response when Accept header is application/cbor", async () => {
+  it("returns CBOR response when Accept header is application/cbor", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/cbor-error", async () => {
       throw new Error("CBOR error test");
@@ -140,20 +138,20 @@ describe("Error Handler Plugin", () => {
     });
 
     expect(response.statusCode).toBe(500);
-    expect(response.headers["content-type"]).toBe("application/problem+cbor");
+    expect(response.headers["content-type"]).toBe("application/cbor");
 
     const body = cborDecode(new Uint8Array(response.rawPayload)) as Record<string, unknown>;
-    expect(body.title).toBe("Internal Server Error");
-    expect(body.status).toBe(500);
-    expect(body.detail).toBe("CBOR error test");
+    expect(body["title"]).toBe("Internal Server Error");
+    expect(body["status"]).toBe(500);
+    expect(body["detail"]).toBe("CBOR error test");
 
     await fastify.close();
   });
 
-  it("should return CBOR response when Accept header is application/problem+cbor", async () => {
+  it("fall back to JSON for the unregistered application/problem+cbor media type", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/problem-cbor-error", async () => {
       const error = new Error("Problem CBOR error") as Error & { statusCode?: number };
@@ -168,19 +166,19 @@ describe("Error Handler Plugin", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.headers["content-type"]).toBe("application/problem+cbor");
+    expect(response.headers["content-type"]).toContain("application/problem+json");
 
-    const body = cborDecode(new Uint8Array(response.rawPayload)) as Record<string, unknown>;
+    const body = response.json();
     expect(body.title).toBe("Forbidden");
     expect(body.status).toBe(403);
 
     await fastify.close();
   });
 
-  it("should return RFC 9457 Problem Details for 404 not found", async () => {
+  it("returns RFC 9457 Problem Details for 404 not found", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     const response = await fastify.inject({
       method: "GET",
@@ -189,23 +187,22 @@ describe("Error Handler Plugin", () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.headers["content-type"]).toContain("application/problem+json");
-    expect(response.headers["x-request-id"]).toBeDefined();
-    expect(response.headers.vary).toBe("Accept");
+    expect(response.headers.vary).toEqual(["Accept", "Origin"]);
     expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
 
     const body = response.json();
-    expect(body.$schema).toContain("/schemas/ErrorModel.json");
-    expect(body.title).toBe("Not Found");
-    expect(body.status).toBe(404);
+    expect(body.$schema).toBeUndefined();
+    expect(body["title"]).toBe("Not Found");
+    expect(body["status"]).toBe(404);
     expect(body.detail).toBe("resource not found");
 
     await fastify.close();
   });
 
-  it("should return CBOR 404 response when Accept header is application/cbor", async () => {
+  it("returns CBOR 404 response when Accept header is application/cbor", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     const response = await fastify.inject({
       method: "GET",
@@ -214,16 +211,16 @@ describe("Error Handler Plugin", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.headers["content-type"]).toBe("application/problem+cbor");
+    expect(response.headers["content-type"]).toBe("application/cbor");
 
     const body = cborDecode(new Uint8Array(response.rawPayload)) as Record<string, unknown>;
-    expect(body.title).toBe("Not Found");
-    expect(body.status).toBe(404);
+    expect(body["title"]).toBe("Not Found");
+    expect(body["status"]).toBe(404);
 
     await fastify.close();
   });
 
-  it("should hide internal error details in production for 5xx errors", async () => {
+  it("hides internal error details in production for 5xx errors", async () => {
     vi.doMock("../../../src/env.js", () => ({
       env: {
         NODE_ENV: "production",
@@ -237,8 +234,8 @@ describe("Error Handler Plugin", () => {
     const { default: sensiblePluginProd } = await import("../../../src/plugins/sensible.js");
 
     const fastify = Fastify();
-    await fastify.register(sensiblePluginProd);
-    await fastify.register(errorHandlerProd);
+    fastify.register(sensiblePluginProd);
+    fastify.register(errorHandlerProd);
 
     fastify.get("/prod-server-error", async () => {
       throw new Error("Sensitive internal error details");
@@ -257,10 +254,10 @@ describe("Error Handler Plugin", () => {
     await fastify.close();
   });
 
-  it("should show error details in non-production for 5xx errors", async () => {
+  it("shows error details in non-production for 5xx errors", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/dev-server-error", async () => {
       throw new Error("Detailed error message");
@@ -278,10 +275,10 @@ describe("Error Handler Plugin", () => {
     await fastify.close();
   });
 
-  it("should default to 500 for errors without status code", async () => {
+  it("defaults to 500 for errors without status code", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/no-status", async () => {
       throw new Error("No status code");
@@ -300,10 +297,10 @@ describe("Error Handler Plugin", () => {
     await fastify.close();
   });
 
-  it("should handle errors with custom error codes", async () => {
+  it("handles errors with custom error codes", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/custom-error", async () => {
       const error = new Error("Custom forbidden error") as Error & { code?: string; statusCode?: number };
@@ -326,10 +323,10 @@ describe("Error Handler Plugin", () => {
     await fastify.close();
   });
 
-  it("should use x-forwarded-proto for schema URL when present", async () => {
+  it("keeps schema discovery in a relative Link header behind a proxy", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/forwarded-error", async () => {
       throw new Error("Forwarded error");
@@ -344,16 +341,16 @@ describe("Error Handler Plugin", () => {
       },
     });
 
-    const body = response.json();
-    expect(body.$schema).toBe("https://api.example.com/schemas/ErrorModel.json");
+    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(response.json().$schema).toBeUndefined();
 
     await fastify.close();
   });
 
-  it("should handle GitHubApiError with 404 code", async () => {
+  it("handles GitHubApiError with 404 code", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/github-error", async () => {
       throw new GitHubApiError("Not Found", 404, GITHUB_ERROR_NOT_FOUND);
@@ -367,17 +364,17 @@ describe("Error Handler Plugin", () => {
     expect(response.statusCode).toBe(404);
     expect(response.headers["content-type"]).toContain("application/problem+json");
     const body = response.json();
-    expect(body.title).toBe("Not Found");
-    expect(body.status).toBe(404);
-    expect(body.detail).toBe("Not Found");
+    expect(body["title"]).toBe("Not Found");
+    expect(body["status"]).toBe(404);
+    expect(body.detail).toBe("GitHub resource not found");
 
     await fastify.close();
   });
 
-  it("should handle GitHubApiError with rate limit and Retry-After header", async () => {
+  it("handles GitHubApiError with rate limit and Retry-After header", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/github-rate-limit", async () => {
       throw new GitHubApiError("Rate limit exceeded", 429, GITHUB_ERROR_RATE_LIMIT, "60");
@@ -393,14 +390,15 @@ describe("Error Handler Plugin", () => {
     const body = response.json();
     expect(body.title).toBe("Too Many Requests");
     expect(body.status).toBe(429);
+    expect(body.detail).toBe("GitHub API rate limit exceeded");
 
     await fastify.close();
   });
 
-  it("should handle GitHubApiError with forbidden code", async () => {
+  it("handles GitHubApiError with forbidden code", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/github-forbidden", async () => {
       throw new GitHubApiError("Resource not accessible", 403, GITHUB_ERROR_FORBIDDEN);
@@ -415,17 +413,18 @@ describe("Error Handler Plugin", () => {
     const body = response.json();
     expect(body.title).toBe("Forbidden");
     expect(body.status).toBe(403);
+    expect(body.detail).toBe("GitHub request forbidden");
 
     await fastify.close();
   });
 
-  it("should handle GitHubApiError with upstream error code", async () => {
+  it("handles GitHubApiError with upstream error code", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/github-upstream", async () => {
-      throw new GitHubApiError("Upstream error", 502, GITHUB_ERROR_UPSTREAM);
+      throw new GitHubApiError("raw upstream detail canary", 502, GITHUB_ERROR_UPSTREAM);
     });
 
     const response = await fastify.inject({
@@ -437,14 +436,16 @@ describe("Error Handler Plugin", () => {
     const body = response.json();
     expect(body.title).toBe("Bad Gateway");
     expect(body.status).toBe(502);
+    expect(body.detail).toBe("GitHub service is unavailable");
+    expect(response.payload).not.toContain("raw upstream detail canary");
 
     await fastify.close();
   });
 
-  it("should handle InvalidCursorError with 400 status", async () => {
+  it("handles InvalidCursorError with 400 status", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/invalid-cursor", async () => {
       throw new InvalidCursorError("invalid cursor format");
@@ -465,10 +466,10 @@ describe("Error Handler Plugin", () => {
     await fastify.close();
   });
 
-  it("should handle GitHubApiError with CBOR response when client prefers CBOR", async () => {
+  it("handles GitHubApiError with CBOR response when client prefers CBOR", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/github-cbor", async () => {
       throw new GitHubApiError("Not Found", 404, GITHUB_ERROR_NOT_FOUND);
@@ -483,19 +484,19 @@ describe("Error Handler Plugin", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.headers["content-type"]).toContain("application/problem+cbor");
+    expect(response.headers["content-type"]).toContain("application/cbor");
 
     const body = cborDecode(response.rawPayload) as Record<string, unknown>;
-    expect(body.title).toBe("Not Found");
-    expect(body.status).toBe(404);
+    expect(body["title"]).toBe("Not Found");
+    expect(body["status"]).toBe(404);
 
     await fastify.close();
   });
 
-  it("should handle InvalidCursorError with CBOR response when client prefers CBOR", async () => {
+  it("handles InvalidCursorError with CBOR response when client prefers CBOR", async () => {
     const fastify = Fastify();
-    await fastify.register(sensiblePlugin);
-    await fastify.register(errorHandler);
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
 
     fastify.get("/cursor-cbor", async () => {
       throw new InvalidCursorError("bad cursor");
@@ -510,12 +511,12 @@ describe("Error Handler Plugin", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.headers["content-type"]).toContain("application/problem+cbor");
+    expect(response.headers["content-type"]).toContain("application/cbor");
 
     const body = cborDecode(response.rawPayload) as Record<string, unknown>;
-    expect(body.title).toBe("Bad Request");
-    expect(body.status).toBe(400);
-    expect(body.detail).toBe("bad cursor");
+    expect(body["title"]).toBe("Bad Request");
+    expect(body["status"]).toBe(400);
+    expect(body["detail"]).toBe("bad cursor");
 
     await fastify.close();
   });

@@ -65,11 +65,13 @@ export class GitHubService {
       cursor.value || undefined,
     );
 
+    const nextCursor = result.nextCursor
+      ? encodeCursor({ type: ACTIVITY_CURSOR_TYPE, value: result.nextCursor })
+      : undefined;
+
     return {
       items: result.activities,
-      nextCursor: result.nextCursor
-        ? encodeCursor({ type: ACTIVITY_CURSOR_TYPE, value: result.nextCursor })
-        : undefined,
+      ...(nextCursor ? { nextCursor } : {}),
     };
   }
 
@@ -87,7 +89,7 @@ export class GitHubService {
   }
 
   private validateCursor(encodedCursor: string | undefined, expectedType: string): Cursor {
-    if (!encodedCursor) {
+    if (encodedCursor === undefined) {
       return { type: "", value: "" };
     }
     const cursor = decodeCursor(encodedCursor);

@@ -1,6 +1,6 @@
 # fastify-playground
 
-A production-ready REST API built with Fastify, TypeScript, and modern tooling for Node.js 24. Features comprehensive OpenAPI documentation, Firebase Authentication, TypeBox schema validation, structured logging, and graceful shutdown.
+A production-oriented reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates OpenAPI documentation, Firebase Authentication, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
 
 <img src="assets/ts.svg" alt="TypeScript logo" width="200">
 
@@ -8,15 +8,15 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 
 ## Features
 
-- Layered plugin architecture with security headers (Helmet), CORS, request IDs, and structured access logs
-- Request-scoped Pino logger with Google Cloud Trace correlation via [W3C Trace Context](https://www.w3.org/TR/trace-context/) `traceparent` header, falling back to request ID when no trace exists
+- Layered plugin architecture with production HSTS, an exact CORS origin allowlist, and [fastify-observability](https://www.npmjs.com/package/fastify-observability)
+- Validated request IDs, strict [W3C Trace Context](https://www.w3.org/TR/trace-context/), request-scoped Pino fields, and exactly one structured terminal access record
 - Firebase Authentication with ID token verification and `request.user` decorator
 - TypeBox schema validation with compile-time TypeScript types and runtime JSON Schema validation
-- [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457) for all error responses with optional field-level validation errors
+- [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457) for application-owned error responses with optional field-level validation errors
 - Content negotiation supporting [JSON (RFC 8259)](https://datatracker.ietf.org/doc/html/rfc8259) and [CBOR (RFC 8949)](https://datatracker.ietf.org/doc/html/rfc8949) formats via `Accept` header
 - Cursor-based pagination with [RFC 8288 Link](https://datatracker.ietf.org/doc/html/rfc8288) headers
 - [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) documentation with Swagger UI, auto-generated from TypeBox route schemas
-- Graceful shutdown handling SIGTERM/SIGINT with `isShuttingDown` decorator
+- Graceful SIGTERM/SIGINT shutdown owned by the executable server boundary; fatal Node.js errors are not treated as recoverable application events
 - Health check endpoints (`/health` for liveness, `/status` for readiness with Firestore connectivity)
 
 ## API Design Principles
@@ -40,32 +40,48 @@ A production-ready REST API built with Fastify, TypeScript, and modern tooling f
 
 ### Error Responses (RFC 9457)
 
-All errors use [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457):
+Application-owned errors use [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457). The fixed-format `/status` and documentation routes retain their Fastify plugin-owned error formats.
 
 ```json
 {
-  "type": "https://example.com/errors/validation-error",
   "title": "Validation Error",
   "status": 422,
   "detail": "One or more fields failed validation",
-  "instance": "/items",
   "errors": [
-    { "field": "name", "message": "is required" }
+    { "location": "body.name", "message": "is required" }
   ]
 }
 ```
 
-Content-Type: `application/problem+json` or `application/problem+cbor`
+Responses include `Link: </schemas/ErrorModel.json>; rel="describedBy"` for schema discovery. Error bodies use
+`application/problem+json` by default, or the same fields encoded as registered `application/cbor` when the client
+explicitly prefers CBOR.
 
 ### Content Negotiation
 
-| Accept Header | Response Format |
-|---------------|-----------------|
-| `application/json` | JSON (default) |
-| `application/cbor` | CBOR binary |
-| `*/*` or missing | JSON (default) |
+API responses with a body default to JSON. CBOR is selected only by an explicit, positive-quality
+`Accept: application/cbor`; wildcards and equal quality values keep JSON. RFC 9110 quality values and specificity are
+honored, including exact `q=0` exclusions. If an explicit `Accept` value excludes every supported success
+representation, the API returns 406 before parsing the request body or running the handler. A 204 or 205 response has
+no representation, so `Accept` does not gate it.
 
-All responses include `Vary: Accept` header for proper caching.
+| Response class | Media types | Policy |
+|----------------|-------------|--------|
+| `/v1` success | `application/json`, `application/cbor` | Strict negotiation; JSON is the default and tie preference |
+| `/health` | `application/json` | Strict JSON-only liveness response |
+| `/status` | Plugin-owned `application/json` | Fixed readiness format outside application negotiation |
+| `/schemas/*.json` | `application/schema+json` | Strict JSON Schema representation |
+| Problem Details | `application/problem+json`, `application/cbor` | Best effort; explicit CBOR preference wins, otherwise JSON preserves the original error status |
+| `/api-docs` assets | Fastify-owned JSON, YAML, HTML, CSS, or JavaScript | Fixed formats outside application negotiation |
+
+JSON and CBOR request bodies are selected independently with `Content-Type`. Modeled request bodies accept
+`application/json` and `application/cbor`, with media-type parameters ignored. Unowned structured suffixes such as
+`application/vnd.example+cbor` and the unregistered `application/problem+cbor` are rejected with 415. RFC 9290's
+registered `application/concise-problem-details+cbor` uses a different compact data model and is not implemented.
+
+Negotiated responses include `Vary: Accept, Origin`. Successful modeled responses and Problem Details use an RFC 8288
+`Link` header for schema discovery. Response instances do not contain the JSON Schema `$schema` keyword; standalone
+schema documents include the Draft 2020-12 dialect and local `$defs` for referenced components.
 
 ### Pagination
 
@@ -77,24 +93,36 @@ GET /items?limit=20&cursor=aXRlbToxMjM
 Link: </items?limit=20&cursor=aXRlbToxNTY>; rel="next"
 ```
 
-- `cursor` - Opaque Base64URL-encoded cursor (do not decode on client)
+- `cursor` - Canonical, unpadded Base64URL cursor with a 2,048-character limit (do not decode on client)
 - `limit` - Items per page (1-100, default 20)
+
+Malformed, noncanonical, empty, oversized, invalid UTF-8, wrong-resource, and stale cursors return a client error. A previous-page link returns the exact preceding page; the second page links back to the first page without an empty `cursor` parameter.
 
 ### Request Identification
 
-- Client-provided `X-Request-Id` header used if valid (printable ASCII, max 128 chars)
-- Server generates UUID v4 otherwise
+- Client-provided `X-Request-Id` is accepted only when it contains 1–128 URI-unreserved ASCII characters (`A-Z`, `a-z`, `0-9`, `-`, `.`, `_`, or `~`)
+- Missing, empty, duplicate, oversized, or invalid values are replaced with a generated request ID
 - Response includes `X-Request-Id` header
-- All logs include request ID for correlation
+- `request.id`, `request.observability.requestId`, and the Pino `request_id` binding always agree
+
+### Observability
+
+[fastify-observability](https://www.npmjs.com/package/fastify-observability) owns the application Pino logger, request-ID generation, W3C trace parsing, request correlation, and access logging. It emits one terminal `request completed` record for successful, handled-error, unhandled-error, timeout, and observable abort paths. Query strings, request bodies, cookies, authorization, and arbitrary headers are not selected for access records.
+
+The GCP preset maps log levels to Cloud Logging severity and emits the validated bare trace ID in `logging.googleapis.com/trace`. It does not prepend a project resource, copy the incoming parent ID into a fake current-span field, initialize a cloud SDK, or create spans. Without a valid `traceparent`, `correlation_id` falls back to the request ID.
+
+Application code logs through `fastify.log`, `request.log`, or `reply.log`. Request-scoped logs inherit `request_id`, `correlation_id`, and validated trace fields. The immutable context is also available as `request.observability`.
 
 ## Project Structure
 
 ```
+.agents/skills/           Portable coding-agent workflows
 app/
   src/
-    app.ts              # Application entry point
+    app.ts              # Pure application factory
+    server.ts           # Executable startup and signal boundary
     env.ts              # Environment validation (TypeBox)
-    plugins/            # Fastify plugins (16 plugins, layered architecture)
+    plugins/            # Application-owned Fastify plugins
     routes/             # Route handlers (health, schemas)
     modules/            # Feature modules (github/, hello/, items/)
       <name>/           # index.ts, routes.ts, schemas.ts, service.ts
@@ -107,14 +135,22 @@ app/
 functions/              # Firebase Cloud Functions (placeholder)
 ```
 
+## Requirements
+
+- Node.js 24.18.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
+- pnpm 11.13.0 through Corepack
+- [just](https://github.com/casey/just) for repository workflows
+- Firebase project with Authentication and Firestore, or separately configured local Firebase emulators
+
 ## Quick Start
 
 ```bash
-# Prerequisites: Node.js 24 (use fnm use)
 git clone https://github.com/janisto/fastify-playground.git
-cd fastify-playground/app
-fnm use && npm install
-npm run dev  # Start development server with hot reload
+cd fastify-playground
+fnm use && corepack enable
+cp .env.example .env
+just install
+just serve
 ```
 
 Access the API at http://localhost:3000 and Swagger UI at http://localhost:3000/api-docs
@@ -123,29 +159,43 @@ Access the API at http://localhost:3000 and Swagger UI at http://localhost:3000/
 
 | Category | Technology |
 |----------|------------|
-| Runtime | Node.js 24 (ES2024) |
-| Framework | Fastify 5.x with TypeScript 5.9 |
+| Runtime | Node.js 24.18.0 (ES2024) |
+| Framework | Fastify 5.x with TypeScript 7 |
+| Observability | fastify-observability with Pino 10 |
+| Package manager | pnpm 11.13.0 |
 | Authentication | Firebase Admin SDK |
 | Schema Validation | TypeBox with @fastify/type-provider-typebox |
-| Testing | Vitest with V8 coverage (70% minimum) |
+| Testing | Vitest with V8 coverage (90% minimum) |
 | Code Quality | Biome (formatting, linting, imports) |
 | Backend Services | Firebase (Auth, Firestore) |
 | Module System | ESM (`"type": "module"`) |
 
 ## Development Commands
 
-Run all commands from the `app/` directory:
+Use the root `Justfile` for normal development:
 
 ```bash
-npm run qa            # Auto-fix lint/format, type check, and run tests
-npm run dev           # Start dev server with hot reload
-npm test              # Run all tests
-npm run test:coverage # Run tests with coverage report
-npm run check         # Run format, lint, and import checks
-npm run check:fix     # Auto-fix all issues
-npm run build:check   # Type check without compilation
-npm run serve         # Start Firebase emulators
-npm run deploy        # Deploy to Firebase App Hosting
+just lint             # Check Biome formatting and lint rules
+just typing           # Type-check source and tests
+just test             # Run unit and integration tests
+just cov              # Run the full suite with coverage
+just qa               # Apply safe fixes, then type-check and test
+just check            # Run all non-mutating quality gates
+just install          # Install exactly from the lockfile
+just update           # Update dependencies within declared ranges
+```
+
+Direct package scripts run from `app/`:
+
+```bash
+pnpm qa            # Auto-fix lint/format, type check, and run tests
+pnpm dev           # Start dev server with hot reload
+pnpm test          # Run all tests
+pnpm test:coverage # Run tests with coverage report
+pnpm check         # Run format, lint, and import checks
+pnpm check:fix     # Auto-fix all issues
+pnpm typecheck     # Type check source and tests
+pnpm start         # Start the compiled server
 ```
 
 ## Container
@@ -181,7 +231,7 @@ gcloud run deploy fastify-playground \
 
 # Deploy from source with automatic base image updates
 gcloud run deploy fastify-playground \
-  --source . \
+  --source app \
   --platform managed \
   --region REGION \
   --base-image nodejs24 \
@@ -190,7 +240,7 @@ gcloud run deploy fastify-playground \
 
 The `--base-image` and `--automatic-updates` flags enable [automatic base image updates](https://cloud.google.com/run/docs/configuring/services/automatic-base-image-updates), allowing Google to apply security patches to the OS and runtime without rebuilding or redeploying.
 
-Set `FIREBASE_PROJECT_ID` environment variable to enable trace correlation in Cloud Logging.
+Trace correlation requires only a valid incoming W3C `traceparent`; no Google Cloud project setting is needed for the package's bare trace-ID contract.
 
 ## API Endpoints
 
@@ -224,19 +274,15 @@ cp .env.example .env
 | `NODE_ENV` | `development` | Environment mode (`development`, `production`, `test`) |
 | `PORT` | `3000` | Server port |
 | `HOST` | `0.0.0.0` | Server host |
-| `LOG_LEVEL` | `info` | Logging level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
-| `FIREBASE_PROJECT_ID` | - | Firebase Project ID (primary source for Cloud Trace correlation) |
-| `GOOGLE_CLOUD_PROJECT` | - | Google Cloud Project ID for Cloud Trace |
-| `SECRET_MANAGER_ENABLED` | `false` | Enable Secret Manager integration |
-| `APP_ENVIRONMENT` | `development` | Application environment label (`development`, `staging`, `production`) |
-| `APP_URL` | `http://localhost:3000` | Base URL for the application |
+| `LOG_LEVEL` | `info` | Logging level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent`) |
+| `CORS_ORIGINS` | empty | JSON array or comma-separated exact browser origins; empty denies all browser origins |
 | `GITHUB_TOKEN` | - | GitHub API token for authenticated requests |
 
 **Firebase Emulators**:
 
 | Variable | Description |
 |----------|-------------|
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to Firebase service account JSON (dev only) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Local path used directly by Application Default Credentials; the application does not read the key file |
 | `FIRESTORE_EMULATOR_HOST` | Firestore emulator address (e.g., `localhost:8080`) |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Auth emulator address (e.g., `localhost:9099`) |
 
@@ -246,13 +292,15 @@ Plugins are registered explicitly in `app.ts` with layered dependencies:
 
 | Layer | Plugins |
 |-------|---------|
-| 1. Core | sensible, helmet, cors |
-| 2. Content Negotiation | cbor-parser, accepts-serializer, vary-header |
-| 3. Infrastructure | firebase, lifecycle, under-pressure, swagger |
-| 4. Application | auth, error-handler, requestid, logging |
-| 5. Response Transformation | schema-registry, schema-discovery |
+| 1. Observability | fastify-observability |
+| 2. Core | sensible, helmet, cors |
+| 3. HTTP Lifecycle | vary-header, cbor-parser, content-negotiation |
+| 4. Infrastructure | firebase, lifecycle, swagger, under-pressure |
+| 5. Application | auth, error-handler |
+| 6. Response Metadata | schema-registry, schema-discovery |
+| 7. Routes | health, schemas, v1 modules |
 
-All plugins use `fastify-plugin` wrapper to expose decorators globally.
+Observability is registered once at the root before every application hook and route. Application-owned plugins use `fastify-plugin` when decorators or hooks must escape encapsulation.
 
 ## Firebase Authentication
 
@@ -272,13 +320,14 @@ Clients send Firebase ID tokens via `Authorization: Bearer <token>` header.
 ## Testing
 
 - **Framework**: Vitest with V8 coverage
-- **Coverage threshold**: 70% (lines, functions, branches, statements)
-- **Unit tests**: `tests/unit/` (affects coverage)
-- **Integration tests**: `tests/integration/` (validates behavior, no coverage impact)
+- **Coverage threshold**: 90% (lines, functions, branches, statements)
+- **Coverage scope**: Full unit and integration suite across all `src/**/*.ts` files
+- **Unit tests**: `tests/unit/` with mocked external dependencies
+- **Integration tests**: `tests/integration/`; real GitHub calls require `GITHUB_TOKEN` and otherwise skip
 
 ## Code Style Requirements
 
-All enforced by Biome and auto-fixable with `npm run check:fix`:
+Biome enforces formatting, imports, project and test rules, and type-aware promise and correctness checks. TypeScript separately checks production and test code with exact optional properties and unchecked indexed access. `pnpm check:fix` applies safe fixes; `just check` runs all non-mutating quality gates.
 
 ## CI/CD
 
@@ -296,7 +345,7 @@ Dependabot is configured in `.github/dependabot.yml` for automated dependency up
 
 ## Contributing
 
-See [AGENTS.md](AGENTS.md) for coding guidelines and conventions.
+The README is the human-facing project guide. Portable coding-agent workflows live under [`.agents/skills/`](.agents/skills/), and agent execution rules live in [AGENTS.md](AGENTS.md).
 
 ## License
 

@@ -11,9 +11,9 @@ describe("v1 routes", () => {
 
   beforeEach(async () => {
     fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler);
-    await fastify.register(sensible);
-    await fastify.register(errorHandler);
-    await fastify.register(v1Routes, { prefix: "/v1" });
+    fastify.register(sensible);
+    fastify.register(errorHandler);
+    fastify.register(v1Routes, { prefix: "/v1" });
     await fastify.ready();
   });
 
@@ -28,8 +28,7 @@ describe("v1 routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.message).toBeDefined();
+    expect(response.json()).toEqual({ message: "Hello, World!" });
   });
 
   it("registers items routes under /v1/items", async () => {
@@ -39,9 +38,8 @@ describe("v1 routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.items).toBeDefined();
-    expect(body.total).toBeDefined();
+    expect(response.json()).toMatchObject({ total: 30 });
+    expect(response.json().items).toHaveLength(20);
   });
 
   it("returns 404 for unknown v1 routes", async () => {

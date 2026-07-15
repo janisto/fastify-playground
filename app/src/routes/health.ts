@@ -1,10 +1,8 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
-
 import { ErrorModelSchema } from "../schemas/index.js";
 
 export const HealthResponseSchema = Type.Object(
   {
-    $schema: Type.Optional(Type.String()),
     status: Type.Literal("healthy", {
       description: "Health status indicator",
       examples: ["healthy"],
@@ -21,13 +19,18 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
   fastify.get(
     "/health",
     {
+      config: {
+        pressureHandler: () => undefined,
+      },
       schema: {
-        description: "Check the health status of the API",
+        operationId: "getHealth",
+        description: "Confirms that the API process is running without checking external dependencies",
+        produces: ["application/json"],
         tags: ["Health"],
-        summary: "Health check endpoint",
+        summary: "Liveness check",
         response: {
           200: HealthResponseSchema,
-          503: ErrorModelSchema,
+          406: ErrorModelSchema,
         },
       },
     },

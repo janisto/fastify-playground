@@ -34,7 +34,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -75,7 +75,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -118,7 +118,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -150,7 +150,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -178,12 +178,11 @@ describe("GitHub routes", () => {
           actorAvatarUrl: "https://example.com/avatar",
         },
       ],
-      nextCursor: undefined,
     });
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -209,7 +208,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -240,7 +239,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({

@@ -6,7 +6,7 @@
 # Logs
 logs
 *.log
-npm-debug.log*
+pnpm-debug.log*
 
 # Runtime data
 pids
@@ -26,8 +26,8 @@ dist
 # Dependency directories
 node_modules
 
-# Optional npm cache directory
-.npm
+# Optional local pnpm store
+.pnpm-store
 
 # mac files
 .DS_Store

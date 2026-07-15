@@ -1,4 +1,4 @@
-import { type Dispatcher, request } from "undici";
+import { type Dispatcher, request as undiciRequest } from "undici";
 
 import {
   GITHUB_ERROR_FORBIDDEN,
@@ -77,8 +77,8 @@ export interface ActivityPage {
 
 export class GitHubClient {
   private readonly baseUrl: string;
-  private readonly dispatcher?: Dispatcher;
-  private readonly token?: string;
+  private readonly dispatcher: Dispatcher | undefined;
+  private readonly token: string | undefined;
 
   constructor(options?: GitHubClientOptions) {
     this.baseUrl = options?.baseUrl ?? "https://api.github.com";
@@ -88,15 +88,10 @@ export class GitHubClient {
 
   async getOwner(owner: string): Promise<GitHubOwner> {
     const url = `${this.baseUrl}/users/${encodeURIComponent(owner)}`;
-    const { statusCode, headers, body } = await request(url, {
-      method: "GET",
-      headers: this.buildHeaders(),
-      dispatcher: this.dispatcher,
-    });
+    const { statusCode, headers, body } = await this.request(url);
 
     if (statusCode !== 200) {
-      const errorBody = (await body.json()) as { message?: string };
-      throw this.mapError(statusCode, headers, errorBody.message);
+      throw this.mapError(statusCode, headers, await this.readErrorMessage(body));
     }
 
     const data = (await body.json()) as RawGitHubOwner;
@@ -105,15 +100,10 @@ export class GitHubClient {
 
   async listOwnerRepos(owner: string, perPage = 30): Promise<GitHubRepo[]> {
     const url = `${this.baseUrl}/users/${encodeURIComponent(owner)}/repos?per_page=${perPage}`;
-    const { statusCode, headers, body } = await request(url, {
-      method: "GET",
-      headers: this.buildHeaders(),
-      dispatcher: this.dispatcher,
-    });
+    const { statusCode, headers, body } = await this.request(url);
 
     if (statusCode !== 200) {
-      const errorBody = (await body.json()) as { message?: string };
-      throw this.mapError(statusCode, headers, errorBody.message);
+      throw this.mapError(statusCode, headers, await this.readErrorMessage(body));
     }
 
     const data = (await body.json()) as RawGitHubRepo[];
@@ -122,15 +112,10 @@ export class GitHubClient {
 
   async getRepo(owner: string, repo: string): Promise<GitHubRepoDetail> {
     const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-    const { statusCode, headers, body } = await request(url, {
-      method: "GET",
-      headers: this.buildHeaders(),
-      dispatcher: this.dispatcher,
-    });
+    const { statusCode, headers, body } = await this.request(url);
 
     if (statusCode !== 200) {
-      const errorBody = (await body.json()) as { message?: string };
-      throw this.mapError(statusCode, headers, errorBody.message);
+      throw this.mapError(statusCode, headers, await this.readErrorMessage(body));
     }
 
     const data = (await body.json()) as RawGitHubRepo;
@@ -143,19 +128,14 @@ export class GitHubClient {
       url += `&after=${encodeURIComponent(afterCursor)}`;
     }
 
-    const { statusCode, headers, body } = await request(url, {
-      method: "GET",
-      headers: this.buildHeaders(),
-      dispatcher: this.dispatcher,
-    });
+    const { statusCode, headers, body } = await this.request(url);
 
     if (statusCode !== 200) {
-      const errorBody = (await body.json()) as { message?: string };
-      throw this.mapError(statusCode, headers, errorBody.message);
+      throw this.mapError(statusCode, headers, await this.readErrorMessage(body));
     }
 
     const data = (await body.json()) as RawGitHubActivity[];
-    const linkHeader = headers.link as string | undefined;
+    const linkHeader = headers["link"] as string | undefined;
     const nextCursor = this.parseLinkHeader(linkHeader ?? null);
 
     return {
@@ -166,15 +146,10 @@ export class GitHubClient {
 
   async listRepoLanguages(owner: string, repo: string): Promise<Record<string, number>> {
     const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/languages`;
-    const { statusCode, headers, body } = await request(url, {
-      method: "GET",
-      headers: this.buildHeaders(),
-      dispatcher: this.dispatcher,
-    });
+    const { statusCode, headers, body } = await this.request(url);
 
     if (statusCode !== 200) {
-      const errorBody = (await body.json()) as { message?: string };
-      throw this.mapError(statusCode, headers, errorBody.message);
+      throw this.mapError(statusCode, headers, await this.readErrorMessage(body));
     }
 
     return (await body.json()) as Record<string, number>;
@@ -182,15 +157,10 @@ export class GitHubClient {
 
   async listRepoTags(owner: string, repo: string, perPage = 30): Promise<GitHubTag[]> {
     const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags?per_page=${perPage}`;
-    const { statusCode, headers, body } = await request(url, {
-      method: "GET",
-      headers: this.buildHeaders(),
-      dispatcher: this.dispatcher,
-    });
+    const { statusCode, headers, body } = await this.request(url);
 
     if (statusCode !== 200) {
-      const errorBody = (await body.json()) as { message?: string };
-      throw this.mapError(statusCode, headers, errorBody.message);
+      throw this.mapError(statusCode, headers, await this.readErrorMessage(body));
     }
 
     const data = (await body.json()) as RawGitHubTag[];
@@ -204,9 +174,44 @@ export class GitHubClient {
       "User-Agent": "fastify-playground",
     };
     if (this.token) {
-      headers.Authorization = `Bearer ${this.token}`;
+      headers["Authorization"] = `Bearer ${this.token}`;
     }
     return headers;
+  }
+
+  private buildRequestOptions() {
+    return {
+      method: "GET" as const,
+      headers: this.buildHeaders(),
+      ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
+    };
+  }
+
+  private async request(url: string): Promise<Dispatcher.ResponseData> {
+    try {
+      return await undiciRequest(url, this.buildRequestOptions());
+    } catch (error) {
+      throw new GitHubApiError("GitHub API request failed", 502, GITHUB_ERROR_UPSTREAM, undefined, {
+        cause: error,
+      });
+    }
+  }
+
+  private async readErrorMessage(body: Dispatcher.ResponseData["body"]): Promise<string | undefined> {
+    try {
+      const errorBody = await body.json();
+      if (
+        typeof errorBody === "object" &&
+        errorBody !== null &&
+        "message" in errorBody &&
+        typeof errorBody.message === "string"
+      ) {
+        return errorBody.message;
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
   }
 
   private mapError(statusCode: number, headers: ResponseHeaders, message?: string): GitHubApiError {

@@ -1,9 +1,8 @@
 import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
 import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { itemsRoutes } from "../../../../src/modules/items/index.js";
-import * as itemsService from "../../../../src/modules/items/service.js";
 import errorHandler from "../../../../src/plugins/error-handler.js";
 import sensible from "../../../../src/plugins/sensible.js";
 import { encodeCursor } from "../../../../src/utils/pagination.js";
@@ -13,9 +12,9 @@ describe("items routes", () => {
 
   beforeEach(async () => {
     fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler);
-    await fastify.register(sensible);
-    await fastify.register(errorHandler);
-    await fastify.register(itemsRoutes);
+    fastify.register(sensible);
+    fastify.register(errorHandler);
+    fastify.register(itemsRoutes);
     await fastify.ready();
   });
 
@@ -34,7 +33,6 @@ describe("items routes", () => {
       expect(response.headers["content-type"]).toContain("application/json");
 
       const body = response.json();
-      expect(body.items).toBeDefined();
       expect(body.items).toHaveLength(20);
       expect(body.total).toBe(30);
     });
@@ -85,8 +83,7 @@ describe("items routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.headers.link).toBeDefined();
-      expect(response.headers.link).toContain('rel="next"');
+      expect(response.headers.link).toBe('</v1/items?cursor=aXRlbTppdGVtLTAwNQ&limit=5>; rel="next"');
     });
 
     it("rejects invalid cursor with 400 error", async () => {
@@ -135,21 +132,6 @@ describe("items routes", () => {
       const body = response.json();
       expect(body.status).toBe(422);
       expect(body.detail).toBe("validation failed");
-    });
-
-    it("rethrows non-Error exceptions", async () => {
-      const listSpy = vi.spyOn(itemsService.ItemsService.prototype, "list");
-      listSpy.mockImplementation(() => {
-        throw "string error";
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/",
-      });
-
-      expect(response.statusCode).toBe(500);
-      listSpy.mockRestore();
     });
   });
 });

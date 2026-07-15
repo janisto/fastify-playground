@@ -6,8 +6,8 @@
     },
     "firebase": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "firebase-tools@latest", "experimental:mcp"]
+      "command": "pnpm",
+      "args": ["dlx", "firebase-tools@latest", "experimental:mcp"]
     }
   }
 }

@@ -66,7 +66,7 @@ export default fp<UnderPressurePluginOptions>(
           await Promise.race([healthCheckPromise, timeout.promise]);
           return true;
         } catch (error) {
-          fastifyInstance.log.error({ error, timeout: healthCheckTimeout }, "Firestore health check failed");
+          fastifyInstance.log.error({ err: error, timeout: healthCheckTimeout }, "Firestore health check failed");
           return false;
         } finally {
           timeout.clear();
@@ -77,6 +77,12 @@ export default fp<UnderPressurePluginOptions>(
         url: "/status",
         routeOpts: {
           logLevel: "warn",
+        },
+        routeSchemaOpts: {
+          operationId: "getReadiness",
+          summary: "Readiness check",
+          description: "Confirms that the API and its required Firestore dependency can serve traffic",
+          tags: ["Health"],
         },
       },
     });

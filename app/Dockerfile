@@ -25,17 +25,20 @@ FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
-# Uses bind mounts for package files and cache mount for npm cache
-RUN --mount=type=cache,target=/root/.npm \
+# Uses bind mounts for package files and a cache mount for the pnpm store
+RUN corepack enable && corepack install --global pnpm@11.13.0
+RUN --mount=type=cache,target=/pnpm/store \
     --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=package-lock.json,target=package-lock.json \
-    npm ci --ignore-scripts
+    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY . .
 
 # Build TypeScript to JavaScript
-RUN npm run build
+RUN pnpm build
 
 # Production dependencies stage: install only production deps
 FROM ${NODE_IMAGE} AS deps
@@ -43,10 +46,13 @@ FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
 # Install production dependencies only
-RUN --mount=type=cache,target=/root/.npm \
+RUN corepack enable && corepack install --global pnpm@11.13.0
+RUN --mount=type=cache,target=/pnpm/store \
     --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=package-lock.json,target=package-lock.json \
-    npm ci --omit=dev --ignore-scripts
+    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
+    --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --prod --frozen-lockfile
 
 # Runtime stage: uses minimal distroless image
 FROM ${RUNTIME_IMAGE} AS runtime
@@ -80,4 +86,4 @@ EXPOSE 8080
 
 # Run the application (exec form for proper signal handling)
 # Distroless nodejs images have Node.js as the entrypoint
-CMD ["dist/app.js"]
+CMD ["dist/server.js"]

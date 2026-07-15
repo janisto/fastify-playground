@@ -2,7 +2,6 @@ import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFirebaseAppMock, createFirebaseAuthMock, createFirestoreMock } from "../../mocks/firebase.js";
 
-// Mock firebase-admin modules
 const mockApp = createFirebaseAppMock();
 const mockAuth = createFirebaseAuthMock();
 const mockFirestore = createFirestoreMock();
@@ -10,372 +9,116 @@ const mockFirestore = createFirestoreMock();
 vi.mock("firebase-admin/app", () => ({
   getApps: vi.fn(() => [mockApp]),
   initializeApp: vi.fn(() => mockApp),
-  cert: vi.fn(),
 }));
+vi.mock("firebase-admin/auth", () => ({ getAuth: vi.fn(() => mockAuth) }));
+vi.mock("firebase-admin/firestore", () => ({ getFirestore: vi.fn(() => mockFirestore) }));
 
-vi.mock("firebase-admin/auth", () => ({
-  getAuth: vi.fn(() => mockAuth),
-}));
+describe("Firebase authentication", () => {
+  const apps: ReturnType<typeof Fastify>[] = [];
 
-vi.mock("firebase-admin/firestore", () => ({
-  getFirestore: vi.fn(() => mockFirestore),
-}));
-
-describe("Auth Plugin", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
+  beforeEach(() => vi.clearAllMocks());
   afterEach(async () => {
-    vi.resetModules();
+    await Promise.all(apps.splice(0).map((app) => app.close()));
   });
 
-  describe("Plugin Registration", () => {
-    it("should register authenticate decorator", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
+  async function build(checkRevoked = false) {
+    const [{ default: sensible }, { default: firebase }, { default: auth }] = await Promise.all([
+      import("../../../src/plugins/sensible.js"),
+      import("../../../src/plugins/firebase.js"),
+      import("../../../src/plugins/auth.js"),
+    ]);
+    const app = Fastify({ logger: false });
+    apps.push(app);
+    app.register(sensible);
+    app.register(firebase);
+    app.register(auth, { checkRevoked });
+    app.register(async (scope) => {
+      scope.get("/protected", { preHandler: [scope.authenticate] }, async (request) => ({
+        uid: request.user?.uid,
+      }));
+    });
+    return app;
+  }
 
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-      await fastify.ready();
+  it.each(["Bearer", "bearer", "BEARER"])("verifies a valid token with a %s scheme", async (scheme) => {
+    mockAuth.verifyIdToken.mockResolvedValueOnce({ uid: "user-123" });
+    const app = await build();
 
-      expect(fastify.authenticate).toBeDefined();
-      expect(typeof fastify.authenticate).toBe("function");
-
-      await fastify.close();
+    const response = await app.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: `${scheme} valid-token` },
     });
 
-    it("should decorate request with user property", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
-
-      const mockDecodedToken = {
-        uid: "test-user-123",
-        email: "test@example.com",
-        email_verified: true,
-      };
-      mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/test", { preHandler: [fastify.authenticate] }, async (request) => {
-        return { userId: request.user?.uid };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/test",
-        headers: {
-          authorization: "Bearer valid-token",
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ userId: "test-user-123" });
-
-      await fastify.close();
-    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ uid: "user-123" });
+    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", false);
   });
 
-  describe("Authentication", () => {
-    it("should return 401 when authorization header is missing", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
+  it("rejects a missing authorization header before Firebase", async () => {
+    const response = await (await build()).inject({ method: "GET", url: "/protected" });
 
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-      });
-
-      expect(response.statusCode).toBe(401);
-      const body = response.json();
-      expect(body.message).toContain("Missing authorization header");
-
-      await fastify.close();
-    });
-
-    it("should return 401 when authorization header has invalid format", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "InvalidFormat token",
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
-      const body = response.json();
-      expect(body.message).toContain("Invalid authorization header format");
-
-      await fastify.close();
-    });
-
-    it("should return 401 when token is missing after Bearer", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "Bearer ",
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
-
-      await fastify.close();
-    });
-
-    it("should return 401 when token verification fails", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
-
-      mockAuth.verifyIdToken.mockRejectedValue(new Error("Token expired"));
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "Bearer expired-token",
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
-      const body = response.json();
-      expect(body.message).toContain("Invalid or expired token");
-
-      await fastify.close();
-    });
-
-    it("should allow access with valid token", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
-
-      const mockDecodedToken = {
-        uid: "user-456",
-        email: "valid@example.com",
-        email_verified: true,
-        iss: "https://securetoken.google.com/test-project",
-        aud: "test-project",
-        auth_time: Math.floor(Date.now() / 1000),
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
-        firebase: {
-          identities: { email: ["valid@example.com"] },
-          sign_in_provider: "password",
-        },
-      };
-      mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async (request) => {
-        return {
-          success: true,
-          email: request.user?.email,
-        };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "Bearer valid-token-here",
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({
-        success: true,
-        email: "valid@example.com",
-      });
-      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token-here", false);
-
-      await fastify.close();
-    });
-
-    it("should handle case-insensitive Bearer scheme", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
-
-      const mockDecodedToken = { uid: "user-789" };
-      mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "bearer lowercase-token",
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("lowercase-token", false);
-
-      await fastify.close();
-    });
+    expect(response.statusCode).toBe(401);
+    expect(response.json().message).toBe("Missing authorization header");
+    expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
   });
 
-  describe("Token Revocation Check", () => {
-    it("should pass checkRevoked=true when option is enabled", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
-
-      const mockDecodedToken = { uid: "user-123" };
-      mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin, { checkRevoked: true });
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "Bearer valid-token",
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", true);
-
-      await fastify.close();
+  it.each([
+    ["wrong scheme", "Basic token"],
+    ["missing token", "Bearer"],
+    ["extra field", "Bearer valid-token extra"],
+    ["multiple spaces", "Bearer  valid-token"],
+    ["tab separator", "Bearer\tvalid-token"],
+    ["leading whitespace", " Bearer valid-token"],
+  ])("rejects an authorization header with %s before Firebase", async (_case, authorization) => {
+    const response = await (await build()).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization },
     });
 
-    it("should return 401 with specific message when token is revoked", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
+    expect(response.statusCode).toBe(401);
+    expect(response.json().message).toBe("Invalid authorization header format. Expected: Bearer <token>");
+    expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
+  });
 
-      const revokedError = Object.assign(new Error("Token has been revoked"), {
-        code: "auth/id-token-revoked",
-      });
-      mockAuth.verifyIdToken.mockRejectedValue(revokedError);
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin, { checkRevoked: true });
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "Bearer revoked-token",
-        },
-      });
-
-      expect(response.statusCode).toBe(401);
-      const body = response.json();
-      expect(body.message).toContain("Token has been revoked");
-
-      await fastify.close();
+  it("maps verification failure to a controlled authentication error", async () => {
+    mockAuth.verifyIdToken.mockRejectedValueOnce(new Error("provider detail canary"));
+    const response = await (await build()).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: "Bearer expired-token" },
     });
 
-    it("should default to checkRevoked=false when option is not provided", async () => {
-      const { default: sensiblePlugin } = await import("../../../src/plugins/sensible.js");
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: authPlugin } = await import("../../../src/plugins/auth.js");
+    expect(response.statusCode).toBe(401);
+    expect(response.json().message).toBe("Invalid or expired token");
+    expect(response.payload).not.toContain("provider detail canary");
+  });
 
-      const mockDecodedToken = { uid: "user-123" };
-      mockAuth.verifyIdToken.mockResolvedValue(mockDecodedToken);
-
-      const fastify = Fastify();
-      await fastify.register(sensiblePlugin);
-      await fastify.register(firebasePlugin);
-      await fastify.register(authPlugin);
-
-      fastify.get("/protected", { preHandler: [fastify.authenticate] }, async () => {
-        return { success: true };
-      });
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/protected",
-        headers: {
-          authorization: "Bearer valid-token",
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", false);
-
-      await fastify.close();
+  it("passes the revocation check through when enabled", async () => {
+    mockAuth.verifyIdToken.mockResolvedValueOnce({ uid: "user-123" });
+    const response = await (await build(true)).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: "Bearer valid-token" },
     });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", true);
+  });
+
+  it("distinguishes a revoked token from other verification failures", async () => {
+    mockAuth.verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error("provider revocation canary"), { code: "auth/id-token-revoked" }),
+    );
+    const response = await (await build(true)).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: "Bearer revoked-token" },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().message).toBe("Token has been revoked. Please sign in again.");
+    expect(response.payload).not.toContain("provider revocation canary");
   });
 });

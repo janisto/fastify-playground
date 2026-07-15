@@ -7,7 +7,6 @@ const REPO_PATTERN = "^[a-zA-Z0-9_\\-\\.]{1,100}$";
 // Path Parameters
 export const OwnerParamsSchema = Type.Object({
   owner: Type.String({
-    default: "octocat",
     description: "GitHub username",
     examples: ["octocat"],
     pattern: OWNER_PATTERN,
@@ -16,13 +15,11 @@ export const OwnerParamsSchema = Type.Object({
 
 export const RepoParamsSchema = Type.Object({
   owner: Type.String({
-    default: "octocat",
     description: "GitHub username",
     examples: ["octocat"],
     pattern: OWNER_PATTERN,
   }),
   repo: Type.String({
-    default: "git-consortium",
     description: "Repository name",
     examples: ["git-consortium"],
     pattern: REPO_PATTERN,
@@ -123,7 +120,6 @@ export const GitHubTagSchema = Type.Object(
 // Response Wrapper Schemas
 export const GitHubOwnerReposResponseSchema = Type.Object(
   {
-    $schema: Type.Optional(Type.String()),
     repos: Type.Array(GitHubRepoSchema),
     count: Type.Integer({ description: "Number of repositories returned" }),
   },
@@ -132,7 +128,6 @@ export const GitHubOwnerReposResponseSchema = Type.Object(
 
 export const GitHubActivityListResponseSchema = Type.Object(
   {
-    $schema: Type.Optional(Type.String()),
     activities: Type.Array(GitHubActivitySchema),
     count: Type.Integer({ description: "Number of activities returned" }),
   },
@@ -141,7 +136,6 @@ export const GitHubActivityListResponseSchema = Type.Object(
 
 export const GitHubLanguagesResponseSchema = Type.Object(
   {
-    $schema: Type.Optional(Type.String()),
     languages: Type.Array(GitHubLanguageSchema, { description: "Repository languages with byte counts" }),
   },
   { $id: "GitHubLanguagesResponse" },
@@ -149,7 +143,6 @@ export const GitHubLanguagesResponseSchema = Type.Object(
 
 export const GitHubTagsResponseSchema = Type.Object(
   {
-    $schema: Type.Optional(Type.String()),
     tags: Type.Array(GitHubTagSchema),
     count: Type.Integer({ description: "Number of tags returned" }),
   },

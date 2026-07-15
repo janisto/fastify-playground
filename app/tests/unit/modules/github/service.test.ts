@@ -124,16 +124,14 @@ describe("GitHubService", () => {
   });
 
   describe("listRepoActivity", () => {
-    it("throws InvalidCursorError for invalid cursor format", async () => {
+    it.each(["", "invalid!!!"])("rejects malformed cursor %j before calling GitHub", async (cursor) => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
 
-      await expect(service.listRepoActivity("octocat", "repo", { cursor: "invalid!!!" })).rejects.toThrow(
-        InvalidCursorError,
-      );
+      await expect(service.listRepoActivity("octocat", "repo", { cursor })).rejects.toThrow(InvalidCursorError);
+      expect(mockClient.listRepoActivity).not.toHaveBeenCalled();
     });
 
     it("throws InvalidCursorError for cursor type mismatch", async () => {
-      // Encode a cursor with wrong type
       const wrongTypeCursor = Buffer.from("wrong-type:somevalue").toString("base64url");
 
       const service = new GitHubService(mockClient as unknown as GitHubClient);
@@ -144,7 +142,6 @@ describe("GitHubService", () => {
     });
 
     it("accepts cursor with matching type", async () => {
-      // Encode a valid cursor with correct type
       const validCursor = Buffer.from("gh-activity:cursor123").toString("base64url");
 
       mockClient.listRepoActivity.mockResolvedValueOnce({
@@ -177,7 +174,7 @@ describe("GitHubService", () => {
       const result = await service.listRepoActivity("octocat", "repo");
 
       expect(result.items).toHaveLength(1);
-      expect(result.nextCursor).toBeDefined();
+      expect(result.nextCursor).toBe("Z2gtYWN0aXZpdHk6Y3Vyc29yMTIz");
     });
 
     it("returns undefined nextCursor when no more pages", async () => {

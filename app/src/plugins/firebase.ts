@@ -1,6 +1,6 @@
 import fp from "fastify-plugin";
-import type { App, ServiceAccount } from "firebase-admin/app";
-import { cert, getApps, initializeApp } from "firebase-admin/app";
+import type { App } from "firebase-admin/app";
+import { getApps, initializeApp } from "firebase-admin/app";
 import type { Auth } from "firebase-admin/auth";
 import { getAuth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
@@ -37,31 +37,13 @@ export default fp(
     let app: App;
 
     // Check if Firebase app is already initialized (prevents re-initialization in tests)
-    const existingApps = getApps();
-    if (existingApps.length > 0) {
-      app = existingApps[0];
+    const existingApp = getApps().at(0);
+    if (existingApp) {
+      app = existingApp;
       fastify.log.debug("Using existing Firebase app instance");
     } else {
-      // Initialize with ADC (Application Default Credentials)
-      // In Cloud Run / GCE, this uses the service account automatically
-      // Locally, set GOOGLE_APPLICATION_CREDENTIALS or use emulators
-      /* v8 ignore start -- @preserve */
-      const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      if (serviceAccountPath) {
-        // Dynamic import for service account file
-        const { default: serviceAccount } = (await import(serviceAccountPath, { with: { type: "json" } })) as {
-          default: ServiceAccount;
-        };
-        app = initializeApp({
-          credential: cert(serviceAccount),
-        });
-        fastify.log.info("Firebase Admin SDK initialized with service account");
-      } else {
-        // Use ADC (works in Cloud Run, GCE, or with emulators)
-        app = initializeApp();
-        fastify.log.info("Firebase Admin SDK initialized with Application Default Credentials");
-      }
-      /* v8 ignore stop -- @preserve */
+      app = initializeApp();
+      fastify.log.info("Firebase Admin SDK initialized with Application Default Credentials");
     }
 
     const auth = getAuth(app);

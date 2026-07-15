@@ -280,7 +280,7 @@ export interface ItemsListResult {
   items: Item[];
   total: number;
   nextCursor?: string;
-  prevCursor?: string;
+  prevCursor?: string | null;
 }
 
 export class ItemsService {
@@ -307,8 +307,8 @@ export class ItemsService {
     return {
       items: pageItems,
       total: filtered.length,
-      nextCursor,
-      prevCursor,
+      ...(nextCursor ? { nextCursor } : {}),
+      ...(prevCursor !== undefined ? { prevCursor } : {}),
     };
   }
 
@@ -328,14 +328,20 @@ export class ItemsService {
     pageItems: Item[],
     startIndex: number,
     limit: number,
-  ): { nextCursor: string | undefined; prevCursor: string | undefined } {
+  ): { nextCursor: string | undefined; prevCursor: string | null | undefined } {
     const hasNext = startIndex + limit < items.length;
     const hasPrev = startIndex > 0;
 
-    const nextCursor = hasNext
-      ? encodeCursor({ type: CURSOR_TYPE, value: pageItems[pageItems.length - 1].id })
+    const lastPageItem = pageItems.at(-1);
+    const previousPageCursorIndex = startIndex - limit - 1;
+    const previousPageCursorItem = previousPageCursorIndex >= 0 ? items.at(previousPageCursorIndex) : undefined;
+    const nextCursor =
+      hasNext && lastPageItem ? encodeCursor({ type: CURSOR_TYPE, value: lastPageItem.id }) : undefined;
+    const prevCursor = hasPrev
+      ? previousPageCursorItem
+        ? encodeCursor({ type: CURSOR_TYPE, value: previousPageCursorItem.id })
+        : null
       : undefined;
-    const prevCursor = hasPrev ? encodeCursor({ type: CURSOR_TYPE, value: items[startIndex - 1].id }) : undefined;
 
     return { nextCursor, prevCursor };
   }

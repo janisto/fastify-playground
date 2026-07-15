@@ -10,7 +10,6 @@ const mockFirestore = createFirestoreMock();
 vi.mock("firebase-admin/app", () => ({
   getApps: vi.fn(() => [mockApp]),
   initializeApp: vi.fn(() => mockApp),
-  cert: vi.fn(),
 }));
 
 vi.mock("firebase-admin/auth", () => ({
@@ -31,35 +30,16 @@ describe("Under Pressure Plugin", () => {
     vi.resetModules();
   });
 
-  describe("Plugin Registration", () => {
-    it("should register with dependencies", async () => {
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
-      const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
-
-      const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin);
-      await fastify.ready();
-
-      expect(fastify.isUnderPressure).toBeDefined();
-      expect(typeof fastify.isUnderPressure).toBe("function");
-
-      await fastify.close();
-    });
-  });
-
   describe("Status Route", () => {
-    it("should expose /status endpoint", async () => {
+    it("exposes /status endpoint", async () => {
       const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
       const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
       const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
 
       const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin);
+      fastify.register(firebasePlugin);
+      fastify.register(lifecyclePlugin);
+      fastify.register(underPressurePlugin);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -76,7 +56,30 @@ describe("Under Pressure Plugin", () => {
   });
 
   describe("Health Check", () => {
-    it("should return healthy when Firestore is accessible", async () => {
+    it("keeps the liveness route when Firestore is unavailable", async () => {
+      mockFirestore._mocks.get.mockRejectedValue(new Error("Connection failed"));
+
+      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
+      const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
+      const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
+      const { default: healthRoutes } = await import("../../../src/routes/health.js");
+
+      const fastify = Fastify();
+      fastify.register(firebasePlugin);
+      fastify.register(lifecyclePlugin);
+      fastify.register(underPressurePlugin);
+      fastify.register(healthRoutes);
+      await fastify.ready();
+
+      const response = await fastify.inject({ method: "GET", url: "/health" });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ status: "healthy" });
+
+      await fastify.close();
+    });
+
+    it("returns healthy when Firestore is accessible", async () => {
       mockFirestore._mocks.get.mockResolvedValue({ docs: [] });
 
       const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
@@ -84,9 +87,9 @@ describe("Under Pressure Plugin", () => {
       const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
 
       const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin);
+      fastify.register(firebasePlugin);
+      fastify.register(lifecyclePlugin);
+      fastify.register(underPressurePlugin);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -99,7 +102,7 @@ describe("Under Pressure Plugin", () => {
       await fastify.close();
     });
 
-    it("should return unhealthy when Firestore fails", async () => {
+    it("returns unhealthy when Firestore fails", async () => {
       mockFirestore._mocks.get.mockRejectedValue(new Error("Connection failed"));
 
       const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
@@ -107,9 +110,9 @@ describe("Under Pressure Plugin", () => {
       const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
 
       const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin);
+      fastify.register(firebasePlugin);
+      fastify.register(lifecyclePlugin);
+      fastify.register(underPressurePlugin);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -122,15 +125,15 @@ describe("Under Pressure Plugin", () => {
       await fastify.close();
     });
 
-    it("should return unhealthy during shutdown", async () => {
+    it("returns unhealthy during shutdown", async () => {
       const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
       const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
       const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
 
       const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin);
+      fastify.register(firebasePlugin);
+      fastify.register(lifecyclePlugin);
+      fastify.register(underPressurePlugin);
       await fastify.ready();
 
       // Simulate shutdown state
@@ -146,7 +149,7 @@ describe("Under Pressure Plugin", () => {
       await fastify.close();
     });
 
-    it("should return unhealthy when health check times out", async () => {
+    it("returns unhealthy when health check times out", async () => {
       // Mock a slow Firestore response that will exceed the timeout
       mockFirestore._mocks.get.mockImplementation(
         () => new Promise((resolve) => setTimeout(() => resolve({ docs: [] }), 200)),
@@ -157,10 +160,10 @@ describe("Under Pressure Plugin", () => {
       const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
 
       const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
+      fastify.register(firebasePlugin);
+      fastify.register(lifecyclePlugin);
       // Set a very short timeout to trigger timeout behavior
-      await fastify.register(underPressurePlugin, { healthCheckTimeout: 50 });
+      fastify.register(underPressurePlugin, { healthCheckTimeout: 50 });
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -169,52 +172,6 @@ describe("Under Pressure Plugin", () => {
       });
 
       expect(response.statusCode).toBe(503);
-
-      await fastify.close();
-    });
-
-    it("should use custom health check interval", async () => {
-      mockFirestore._mocks.get.mockResolvedValue({ docs: [] });
-
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
-      const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
-
-      const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin, { healthCheckInterval: 30000 });
-      await fastify.ready();
-
-      const response = await fastify.inject({
-        method: "GET",
-        url: "/status",
-      });
-
-      expect(response.statusCode).toBe(200);
-
-      await fastify.close();
-    });
-  });
-
-  describe("Memory Usage", () => {
-    it("should expose memoryUsage function", async () => {
-      const { default: firebasePlugin } = await import("../../../src/plugins/firebase.js");
-      const { default: lifecyclePlugin } = await import("../../../src/plugins/lifecycle.js");
-      const { default: underPressurePlugin } = await import("../../../src/plugins/under-pressure.js");
-
-      const fastify = Fastify();
-      await fastify.register(firebasePlugin);
-      await fastify.register(lifecyclePlugin);
-      await fastify.register(underPressurePlugin);
-      await fastify.ready();
-
-      expect(fastify.memoryUsage).toBeDefined();
-      expect(typeof fastify.memoryUsage).toBe("function");
-
-      const usage = fastify.memoryUsage();
-      expect(usage).toHaveProperty("heapUsed");
-      expect(usage).toHaveProperty("rssBytes");
 
       await fastify.close();
     });

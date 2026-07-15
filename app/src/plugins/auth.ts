@@ -70,9 +70,9 @@ export default fp<AuthPluginOptions>(
         throw fastify.httpErrors.unauthorized("Missing authorization header");
       }
 
-      const [scheme, token] = authHeader.split(" ");
-
-      if (scheme?.toLowerCase() !== "bearer" || !token) {
+      const authorization = /^Bearer ([^\s]+)$/i.exec(authHeader);
+      const token = authorization?.[1];
+      if (!token) {
         throw fastify.httpErrors.unauthorized("Invalid authorization header format. Expected: Bearer <token>");
       }
 
@@ -81,11 +81,12 @@ export default fp<AuthPluginOptions>(
         request.user = decodedToken;
       } catch (error) {
         const firebaseError = error as { code?: string };
+        const firebaseErrorCode = firebaseError.code ?? "unknown";
         if (firebaseError.code === "auth/id-token-revoked") {
-          request.log.warn({ error }, "Firebase token has been revoked");
+          request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token has been revoked");
           throw fastify.httpErrors.unauthorized("Token has been revoked. Please sign in again.");
         }
-        request.log.warn({ error }, "Firebase token verification failed");
+        request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token verification failed");
         throw fastify.httpErrors.unauthorized("Invalid or expired token");
       }
     };

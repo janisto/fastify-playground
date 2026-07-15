@@ -25,7 +25,6 @@ async function parseCbor(_request: FastifyRequest, payload: Buffer): Promise<unk
 
 const cborParserPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addContentTypeParser("application/cbor", { parseAs: "buffer", bodyLimit: 1048576 }, parseCbor);
-  fastify.addContentTypeParser(/^application\/.+\+cbor$/, { parseAs: "buffer", bodyLimit: 1048576 }, parseCbor);
 };
 
 export default fp(cborParserPlugin, {
