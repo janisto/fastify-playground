@@ -11,6 +11,10 @@ export interface Cursor {
   value: string;
 }
 
+export class InvalidCursorError extends Error {
+  public override readonly name = "InvalidCursorError";
+}
+
 export function encodeCursor(cursor: Cursor): string {
   const data = `${cursor.type}:${cursor.value}`;
   return Buffer.from(data).toString("base64url");

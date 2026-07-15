@@ -1,4 +1,4 @@
-import { type Cursor, decodeCursor, encodeCursor } from "../../utils/pagination.js";
+import { type Cursor, decodeCursor, encodeCursor, InvalidCursorError } from "../../utils/pagination.js";
 import type { Category, Item } from "./schemas.js";
 
 const MOCK_ITEMS: Item[] = [
@@ -287,10 +287,10 @@ export class ItemsService {
   validateCursor(encodedCursor: string | undefined): Cursor {
     const cursor = decodeCursor(encodedCursor);
     if (cursor === null) {
-      throw new Error("invalid cursor format");
+      throw new InvalidCursorError("invalid cursor format");
     }
     if (cursor.type && cursor.type !== CURSOR_TYPE) {
-      throw new Error("cursor type mismatch");
+      throw new InvalidCursorError("cursor type mismatch");
     }
     return cursor;
   }
@@ -318,7 +318,7 @@ export class ItemsService {
     }
     const cursorIndex = items.findIndex((item) => item.id === cursor.value);
     if (cursorIndex === -1) {
-      throw new Error("cursor references unknown item");
+      throw new InvalidCursorError("cursor references unknown item");
     }
     return cursorIndex + 1;
   }

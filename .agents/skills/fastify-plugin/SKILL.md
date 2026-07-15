@@ -13,7 +13,7 @@ Read `AGENTS.md`, `app/src/app.ts`, `app/src/server.ts` when lifecycle is involv
 - Wrap a plugin with `fastify-plugin` only when its decorators or hooks must escape Fastify encapsulation.
 - Give wrapped plugins a stable name, Fastify compatibility range, and accurate `dependencies` list.
 - Extend Fastify module types next to each decorator. Decorate instance or request state before assigning values.
-- Initialize clients and services once at registration. Clean up owned resources in `onClose`.
+- Initialize clients and services once at registration. Clean up only resources owned by the plugin in `onClose`.
 - Keep plugin registration order explicit in `app/src/app.ts` and update its layer description when the dependency graph changes.
 - Register Swagger before any plugin that creates a documented route. Keep process signals in `app/src/server.ts`; application plugins do not own process-global handlers.
 

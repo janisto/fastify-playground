@@ -17,6 +17,25 @@ export interface AuthPluginOptions {
   checkRevoked?: boolean;
 }
 
+const INVALID_IDENTITY_CODES = new Set([
+  "auth/argument-error",
+  "auth/id-token-expired",
+  "auth/invalid-id-token",
+  "auth/id-token-revoked",
+  "auth/user-disabled",
+  "auth/user-not-found",
+]);
+
+class AuthenticationServiceError extends Error {
+  public override readonly name = "AuthenticationServiceError";
+  public readonly code = "AUTH_SERVICE_UNAVAILABLE";
+  public readonly statusCode = 503;
+
+  constructor(options: ErrorOptions) {
+    super("Authentication service is unavailable", options);
+  }
+}
+
 declare module "fastify" {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -86,8 +105,11 @@ export default fp<AuthPluginOptions>(
           request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token has been revoked");
           throw fastify.httpErrors.unauthorized("Token has been revoked. Please sign in again.");
         }
-        request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token verification failed");
-        throw fastify.httpErrors.unauthorized("Invalid or expired token");
+        if (INVALID_IDENTITY_CODES.has(firebaseErrorCode)) {
+          request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token verification failed");
+          throw fastify.httpErrors.unauthorized("Invalid or expired token");
+        }
+        throw new AuthenticationServiceError({ cause: error });
       }
     };
 

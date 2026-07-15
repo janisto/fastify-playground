@@ -14,7 +14,7 @@ Read `AGENTS.md`, the affected route or environment module, neighboring schemas,
 - Add useful descriptions, formats, defaults, bounds, and examples that runtime validation actually honors.
 - Add `$id` to reusable response schemas and register or reference them so OpenAPI and `/schemas/<Name>.json` can discover them.
 - Reuse `ErrorModelSchema` for RFC 9457 errors.
-- Keep API fields camelCase and Firestore fields snake_case; map them at the persistence boundary.
+- Keep API fields camelCase and map any future persistence representation explicitly at its boundary.
 
 ## Environment schemas
 

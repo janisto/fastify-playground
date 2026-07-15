@@ -23,6 +23,8 @@ Use camelCase for API fields. Add `$id` to reusable response schemas so schema d
 
 Protect authenticated routes with `preHandler: [fastify.authenticate]`. Never accept a client-selected identity in place of `request.user`.
 
+For outbound work, pass `request.signal` through the service and client layers. Keep external deadlines below the application handler deadline, validate successful upstream payloads, and expose controlled errors rather than provider details.
+
 Use 200 for reads, 201 for creation, and 204 only when there is no response body. Cursors are canonical unpadded Base64URL with a 2,048-character maximum. Reject malformed, empty, invalid UTF-8, wrong-resource, and stale cursors; previous links must navigate to the preceding page without repeating the current page. Treat schema validation failures as 422. Throw the narrowest `@fastify/sensible` error and let the global handler produce RFC 9457 responses.
 
 ## Workflow

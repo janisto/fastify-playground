@@ -71,6 +71,14 @@ describe("environment configuration", () => {
 
       expect(env.NODE_ENV).toBe("test");
     });
+
+    it("does not expose the test-only GitHub token to runtime configuration", async () => {
+      process.env["GITHUB_TOKEN"] = "private-resource-capable-canary";
+
+      const { env } = await import("../../src/env.js");
+
+      expect("GITHUB_TOKEN" in env).toBe(false);
+    });
   });
 
   describe("log levels", () => {

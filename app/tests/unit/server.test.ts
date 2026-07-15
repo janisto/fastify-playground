@@ -31,12 +31,28 @@ describe("server shutdown", () => {
   });
 
   it("coalesces repeated shutdown requests", async () => {
-    const app = await build();
-    const close = vi.spyOn(app, "close");
+    const cleanup = Promise.withResolvers<void>();
+    const close = vi.fn<() => Promise<void>>(() => cleanup.promise);
+    const app = {
+      isShuttingDown: false,
+      log: { error: vi.fn(), info: vi.fn() },
+      addHook: vi.fn(),
+      close,
+    };
 
-    await Promise.all([shutdown(app, "SIGTERM"), shutdown(app, "SIGINT")]);
+    const first = shutdown(app, "SIGTERM");
+    const second = shutdown(app, "SIGINT");
 
+    expect(second).toBe(first);
     expect(close).toHaveBeenCalledOnce();
+    const secondSettled = vi.fn();
+    void second.then(secondSettled);
+    await Promise.resolve();
+    expect(secondSettled).not.toHaveBeenCalled();
+
+    cleanup.resolve();
+    await second;
+    expect(secondSettled).toHaveBeenCalledOnce();
   });
 
   it("sets a failing exit code when resource cleanup rejects", async () => {

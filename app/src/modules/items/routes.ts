@@ -27,31 +27,25 @@ const itemsRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           500: ErrorModelSchema,
+          503: ErrorModelSchema,
         },
       },
     },
     async (request, reply) => {
       const { limit = 20, category } = request.query;
 
-      try {
-        const result = service.list(request.query);
+      const result = service.list(request.query);
 
-        const query = new URLSearchParams();
-        if (category) query.set("category", category);
-        query.set("limit", String(limit));
+      const query = new URLSearchParams();
+      if (category) query.set("category", category);
+      query.set("limit", String(limit));
 
-        const linkHeader = buildLinkHeader("/v1/items", query, result.nextCursor, result.prevCursor);
-        if (linkHeader) {
-          reply.header("Link", linkHeader);
-        }
-
-        return { items: result.items, total: result.total };
-      } catch (error) {
-        if (error instanceof Error) {
-          throw fastify.httpErrors.badRequest(error.message);
-        }
-        throw error;
+      const linkHeader = buildLinkHeader("/v1/items", query, result.nextCursor, result.prevCursor);
+      if (linkHeader) {
+        reply.header("Link", linkHeader);
       }
+
+      return { items: result.items, total: result.total };
     },
   );
 };

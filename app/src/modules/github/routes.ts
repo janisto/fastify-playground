@@ -52,11 +52,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           429: ErrorModelSchema,
           502: ErrorModelSchema,
+          503: ErrorModelSchema,
+          504: ErrorModelSchema,
         },
       },
     },
     async (request) => {
-      return service.getOwner(request.params.owner);
+      return service.getOwner(request.params.owner, request.signal);
     },
   );
 
@@ -78,11 +80,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           429: ErrorModelSchema,
           502: ErrorModelSchema,
+          503: ErrorModelSchema,
+          504: ErrorModelSchema,
         },
       },
     },
     async (request) => {
-      return service.listOwnerRepos(request.params.owner);
+      return service.listOwnerRepos(request.params.owner, request.signal);
     },
   );
 
@@ -104,11 +108,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           429: ErrorModelSchema,
           502: ErrorModelSchema,
+          503: ErrorModelSchema,
+          504: ErrorModelSchema,
         },
       },
     },
     async (request) => {
-      return service.getRepo(request.params.owner, request.params.repo);
+      return service.getRepo(request.params.owner, request.params.repo, request.signal);
     },
   );
 
@@ -133,6 +139,8 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           429: ErrorModelSchema,
           502: ErrorModelSchema,
+          503: ErrorModelSchema,
+          504: ErrorModelSchema,
         },
       },
     },
@@ -140,14 +148,19 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       const { owner, repo } = request.params;
       const { cursor, limit = 20 } = request.query;
 
-      const result = await service.listRepoActivity(owner, repo, {
-        limit,
-        ...(cursor ? { cursor } : {}),
-      });
+      const result = await service.listRepoActivity(
+        owner,
+        repo,
+        {
+          limit,
+          ...(cursor ? { cursor } : {}),
+        },
+        request.signal,
+      );
 
       const query = new URLSearchParams({ limit: String(limit) });
       const linkHeader = buildLinkHeader(
-        `/v1/github/repos/${owner}/${repo}/activity`,
+        `/v1/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/activity`,
         query,
         result.nextCursor,
         undefined,
@@ -179,11 +192,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           429: ErrorModelSchema,
           502: ErrorModelSchema,
+          503: ErrorModelSchema,
+          504: ErrorModelSchema,
         },
       },
     },
     async (request) => {
-      return service.listRepoLanguages(request.params.owner, request.params.repo);
+      return service.listRepoLanguages(request.params.owner, request.params.repo, request.signal);
     },
   );
 
@@ -205,11 +220,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           429: ErrorModelSchema,
           502: ErrorModelSchema,
+          503: ErrorModelSchema,
+          504: ErrorModelSchema,
         },
       },
     },
     async (request) => {
-      return service.listRepoTags(request.params.owner, request.params.repo);
+      return service.listRepoTags(request.params.owner, request.params.repo, request.signal);
     },
   );
 };

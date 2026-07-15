@@ -1,4 +1,4 @@
-name: App linting, typing, tests and coverage
+name: App typing, tests, coverage and container
 
 on:
   push:
@@ -31,11 +31,11 @@ jobs:
         with:
           version: 11.13.0
 
-      - name: Use Node.js 24
+      - name: Use pinned Node.js
         uses: actions/setup-node@v7.0.0
         with:
           cache-dependency-path: "app/pnpm-lock.yaml"
-          node-version: 24
+          node-version-file: ".node-version"
           cache: "pnpm"
 
       - name: Install dependencies
@@ -64,3 +64,49 @@ jobs:
         with:
           name: app-coverage
           path: app/coverage
+
+  container:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Build production image
+        run: docker build --tag fastify-playground:ci .
+
+      - name: Smoke startup, probes, and graceful shutdown
+        run: |
+          set -euo pipefail
+          container_id="$(docker run --detach --publish 127.0.0.1::8080 fastify-playground:ci)"
+          cleanup() {
+            docker logs "$container_id" || true
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          port="$(docker port "$container_id" 8080/tcp | sed 's/.*://')"
+          ready=false
+          for _attempt in $(seq 1 30); do
+            if curl --fail --silent "http://127.0.0.1:${port}/health" >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "Container did not become healthy" >&2
+            exit 1
+          fi
+
+          curl --fail --silent "http://127.0.0.1:${port}/health" | jq --exit-status '.status == "healthy"'
+          curl --fail --silent "http://127.0.0.1:${port}/status" | jq --exit-status '.status == "ready"'
+
+          docker stop --time 10 "$container_id" >/dev/null
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$container_id")" -eq 0
+          docker rm "$container_id" >/dev/null
+          trap - EXIT

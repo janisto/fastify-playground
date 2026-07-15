@@ -33,7 +33,7 @@ import { schemaErrorFormatter } from "./utils/schema-error-formatter.js";
  * 1. Observability: canonical logger, request ID, trace context, access record
  * 2. Core: sensible, helmet, cors (no dependencies)
  * 3. HTTP lifecycle: Vary, CBOR parsing, content negotiation
- * 4. Infrastructure: firebase, lifecycle, swagger, under-pressure
+ * 4. Infrastructure: Firebase Auth, lifecycle, Swagger, process pressure
  * 5. Application: auth, error-handler
  * 6. Response metadata: schema registry and discovery
  * 7. Routes: health, schemas, and versioned modules
@@ -53,6 +53,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const fastify = Fastify({
     connectionTimeout: 10000,
     requestTimeout: 30000,
+    handlerTimeout: 15000,
     loggerInstance: logger,
     requestIdHeader: false,
     genReqId: createRequestIdGenerator(),

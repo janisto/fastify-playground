@@ -3,9 +3,10 @@ import { encode as cborEncode } from "cbor2";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { env } from "../env.js";
-import { GitHubApiError, InvalidCursorError } from "../modules/github/errors.js";
+import { GitHubApiError } from "../modules/github/errors.js";
 import { CBOR_MEDIA_TYPE, negotiateProblemMediaType, PROBLEM_JSON_MEDIA_TYPE } from "../utils/content-negotiation.js";
 import { addSchemaLinkHeader } from "../utils/link-header.js";
+import { InvalidCursorError } from "../utils/pagination.js";
 import type { SchemaValidationError } from "../utils/schema-error-formatter.js";
 
 function determineStatusCode(error: FastifyError): number {
@@ -33,6 +34,8 @@ function mapGitHubErrorCode(code: string): number {
       return 429;
     case "github_forbidden":
       return 403;
+    case "github_timeout":
+      return 504;
     default:
       return 502;
   }
@@ -46,6 +49,8 @@ function mapGitHubErrorDetail(code: string): string {
       return "GitHub API rate limit exceeded";
     case "github_forbidden":
       return "GitHub request forbidden";
+    case "github_timeout":
+      return "GitHub service timed out";
     default:
       return "GitHub service is unavailable";
   }
@@ -58,6 +63,9 @@ function sendProblemDetails(
   problemDetails: Record<string, unknown>,
 ): void {
   reply.header("Vary", ["Accept", "Origin"]);
+  if (statusCode === 503 && !reply.hasHeader("Retry-After")) {
+    reply.header("Retry-After", "10");
+  }
   addSchemaLinkHeader(reply, "ErrorModel");
 
   if (negotiateProblemMediaType(request.headers.accept ?? "") === CBOR_MEDIA_TYPE) {

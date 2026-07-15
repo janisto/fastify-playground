@@ -3,18 +3,9 @@
 #
 # Uses multi-stage build with official Node.js and distroless images.
 # See: https://docs.docker.com/language/nodejs/build-images/
-#
-# Cloud Run automatic base image updates:
-# Deploy with automatic base image updates so Google can patch the base without a rebuild:
-#   gcloud run deploy fastify-playground \
-#     --image REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest \
-#     --platform managed \
-#     --region REGION \
-#     --base-image nodejs24 \
-#     --automatic-updates
 
 # Builder image: includes Node.js toolchain for compilation
-ARG NODE_IMAGE=node:24-trixie-slim
+ARG NODE_IMAGE=node:24.18.0-trixie-slim
 # Runtime image: minimal distroless Node.js image (no shell, no package manager)
 ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot
 # Build arguments for version injection

@@ -14,8 +14,22 @@ export const HealthResponseSchema = Type.Object(
   },
 );
 
+export const ReadinessResponseSchema = Type.Object(
+  {
+    status: Type.Literal("ready", {
+      description: "Readiness status indicator",
+      examples: ["ready"],
+    }),
+  },
+  {
+    $id: "ReadinessResponse",
+    description: "Successful response indicating the API can accept traffic",
+  },
+);
+
 const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
   fastify.addSchema(HealthResponseSchema);
+  fastify.addSchema(ReadinessResponseSchema);
   fastify.get(
     "/health",
     {
@@ -31,11 +45,37 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
         response: {
           200: HealthResponseSchema,
           406: ErrorModelSchema,
+          503: ErrorModelSchema,
         },
       },
     },
     async () => {
       return { status: "healthy" as const };
+    },
+  );
+
+  fastify.get(
+    "/status",
+    {
+      schema: {
+        operationId: "getReadiness",
+        description: "Confirms that the API process is ready and not shutting down or under excessive load",
+        produces: ["application/json"],
+        tags: ["Health"],
+        summary: "Readiness check",
+        response: {
+          200: ReadinessResponseSchema,
+          406: ErrorModelSchema,
+          503: ErrorModelSchema,
+        },
+      },
+    },
+    async (_request, reply) => {
+      if (fastify.isShuttingDown) {
+        reply.header("Retry-After", "10");
+        throw fastify.httpErrors.serviceUnavailable("Service is shutting down");
+      }
+      return { status: "ready" as const };
     },
   );
 };

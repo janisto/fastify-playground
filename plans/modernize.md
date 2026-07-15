@@ -297,3 +297,53 @@ The largest risk in a public example is a broad green suite that verifies framew
 
 - The seven real GitHub contract tests require `GITHUB_TOKEN` and were intentionally skipped in the default gate.
 - Firestore readiness success and Firebase Authentication against emulators were not exercised because this repository does not include an emulator project configuration. Deterministic unit tests cover successful, failed, timed-out, and shutdown readiness behavior.
+
+## 2026-07-15: Post-modernization review remediation
+
+### Investigation
+
+- [x] Reproduce the Firestore readiness timeout and shutdown race against failed and blackholed emulator addresses.
+- [x] Trace `GITHUB_TOKEN` from environment decoding through the public, caller-selected GitHub proxy routes.
+- [x] Compare GitHub repository permissions, primary and secondary rate-limit behavior, the 2026-03-10 REST API contract, and live activity payloads with the client implementation.
+- [x] Verify Fastify 5 handler deadlines and cooperative `request.signal` cancellation against the installed and current upstream documentation.
+- [x] Verify Firebase Admin app ownership and `deleteApp()` lifecycle requirements.
+- [x] Compare the generated `/status` contract with its runtime media types, headers, and error envelope.
+- [x] Verify Cloud Run automatic base-image updates require a scratch application image and are incompatible with this repository's complete distroless runtime image.
+- [x] Audit item error classification, shutdown coalescing, CI runtime pinning, container coverage, and unused dependencies.
+
+### Decisions
+
+- Keep `GITHUB_TOKEN` only for opt-in, direct GitHub client integration tests. The running public API must never read or forward a server credential because GitHub's repository endpoints can return private resources when a token has access.
+- Accept GitHub's lower unauthenticated quota for the public example instead of creating a credential-confused deputy. Document the quota honestly; production deployments that need more capacity require a different authenticated product boundary, caching, and distributed abuse controls.
+- Remove Firestore integration. It has no business consumer, its non-cancellable probe globally gates unrelated routes, and `terminate()` can hang shutdown after a timed-out query. Retain Firebase Admin only for an implemented protected identity endpoint.
+- Own `/status` in application code so runtime negotiation, RFC 9457 errors, schema discovery, and OpenAPI describe the same behavior. Readiness covers shutdown state and configured process-pressure thresholds, not optional external services.
+- Bound GitHub requests below the application handler deadline, propagate Fastify cancellation, validate every successful upstream payload, and upgrade the explicit GitHub REST API version to 2026-03-10 after confirming its breaking changes do not affect the used endpoints.
+- Deploy the checked-in complete distroless image to Cloud Run without automatic base-image flags. Applying those flags requires a separate scratch-image or buildpacks flow; the documented image must be rebuilt and redeployed for runtime patches.
+
+### Implementation progress
+
+- [x] Remove runtime GitHub credential forwarding and document the test-only environment variable.
+- [x] Replace unused Firestore readiness with process readiness and add a real Firebase-protected endpoint.
+- [x] Add GitHub cancellation, deadlines, response validation, nullability fixes, and rate-limit classification.
+- [x] Narrow item cursor error handling and make concurrent shutdown callers await the same cleanup.
+- [x] Align OpenAPI, README, AGENTS, `.env.example`, Docker, CI, and dependencies.
+- [x] Add adversarial regressions for privacy, malformed upstream data, timeouts, cleanup ownership, readiness, and unexpected failures.
+- [x] Isolate composed-app tests from developer `.env` files by pinning every decoded application variable in the fixture.
+- [x] Run focused tests, full non-mutating gates, coverage, build, dependency audit, and container lifecycle smoke.
+
+### Validation
+
+- `just qa` passed on Node.js 24.18.0 and pnpm 11.13.0. Biome made no changes, TypeScript 7 accepted source and tests, and 321 tests passed; the seven credential-gated direct GitHub client tests were skipped.
+- `just check` passed every non-mutating gate. Coverage remained above policy at 96.94% statements, 92.22% branches, 97.94% functions, and 98.76% lines.
+- `pnpm --dir app build`, `pnpm --dir app dedupe --check`, `just install`, and `git diff --check` passed.
+- A focused composed-app run passed with deliberately invalid ambient application variables, proving its explicit fixture is isolated from developer `.env` files.
+- `pnpm --dir app outdated --long` reported only `@types/node` 26. It remains intentionally on `^24.13.3` because types must match the pinned Node.js 24 runtime.
+- The production-only dependency audit found no high or critical vulnerabilities. One known moderate `uuid@9.0.1` advisory remains in Firebase Admin's optional Google Cloud Storage dependency tree; application code does not use that package's affected buffer-writing API.
+- The distroless non-root image rebuilt from frozen development and production installs. Image metadata confirmed UID/GID `65532:65532`, the distroless Node entrypoint, and no source-map runtime flag.
+- Production-image smoke passed without credentials: `/health` returned 200, application-owned `/status` returned 200, `/v1/auth/me` returned the expected 401, and a live unauthenticated `/v1/github/owners/octocat` request returned the public account. SIGTERM cleanup completed with exit code 0.
+- Historical Firestore validation entries above are retained as the chronological modernization record. This remediation supersedes them: Firestore is no longer a runtime dependency or readiness condition.
+
+### Remaining external validation
+
+- Firebase Authentication was not exercised against a real project or emulator because no credentialed/emulator environment is part of the repository. Deterministic tests cover token success, invalid and revoked identity failures, provider/configuration failures, minimal claim projection, and owned-versus-borrowed Firebase app cleanup.
+- The seven token-gated direct GitHub client contract tests remain opt-in. The production smoke separately verified the deployed unauthenticated public-proxy path against GitHub.

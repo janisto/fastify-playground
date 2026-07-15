@@ -2,6 +2,7 @@ export const GITHUB_ERROR_NOT_FOUND = "github_not_found";
 export const GITHUB_ERROR_RATE_LIMIT = "github_rate_limit";
 export const GITHUB_ERROR_FORBIDDEN = "github_forbidden";
 export const GITHUB_ERROR_UPSTREAM = "github_upstream";
+export const GITHUB_ERROR_TIMEOUT = "github_timeout";
 
 export class GitHubApiError extends Error {
   public override readonly name = "GitHubApiError";
@@ -15,8 +16,4 @@ export class GitHubApiError extends Error {
     this.code = code;
     this.retryAfter = retryAfter;
   }
-}
-
-export class InvalidCursorError extends Error {
-  public override readonly name = "InvalidCursorError";
 }

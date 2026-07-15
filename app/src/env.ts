@@ -35,7 +35,6 @@ const EnvSchema = Type.Object({
     ],
     { default: "info" },
   ),
-  GITHUB_TOKEN: Type.Optional(Type.String({ description: "GitHub API token for authenticated requests" })),
   CORS_ORIGINS: Type.String({
     default: "",
     description: "JSON array or comma-separated list of exact browser origins",
@@ -100,7 +99,6 @@ const decodedEnv = Value.Decode(EnvSchema, {
   PORT: process.env["PORT"],
   HOST: process.env["HOST"],
   LOG_LEVEL: process.env["LOG_LEVEL"],
-  GITHUB_TOKEN: process.env["GITHUB_TOKEN"],
   CORS_ORIGINS: process.env["CORS_ORIGINS"],
 });
 

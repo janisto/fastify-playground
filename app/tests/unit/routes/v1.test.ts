@@ -11,6 +11,7 @@ describe("v1 routes", () => {
 
   beforeEach(async () => {
     fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler);
+    fastify.decorate("authenticate", async () => undefined);
     fastify.register(sensible);
     fastify.register(errorHandler);
     fastify.register(v1Routes, { prefix: "/v1" });

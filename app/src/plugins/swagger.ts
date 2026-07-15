@@ -29,9 +29,9 @@ const COMMON_RESPONSE_HEADERS: Record<string, OpenAPIV3_1.HeaderObject> = {
 
 function alignResponseHeaders(status: string, response: OpenAPIV3_1.ResponseObject): void {
   response.headers = { ...COMMON_RESPONSE_HEADERS, ...response.headers };
-  if (status === "429") {
+  if (status === "429" || status === "503") {
     response.headers["Retry-After"] = {
-      description: "Delay before retrying the upstream request.",
+      description: "Delay in seconds before retrying the request.",
       schema: { type: "string" },
     };
   }
@@ -105,7 +105,8 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
         },
       ],
       tags: [
-        { name: "Health", description: "Process liveness" },
+        { name: "Health", description: "Process liveness and readiness" },
+        { name: "Authentication", description: "Firebase-authenticated identity" },
         { name: "Hello", description: "Greeting examples" },
         { name: "Items", description: "Paginated item examples" },
         { name: "GitHub", description: "Public GitHub data" },

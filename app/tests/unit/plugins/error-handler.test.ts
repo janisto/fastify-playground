@@ -5,12 +5,13 @@ import {
   GITHUB_ERROR_FORBIDDEN,
   GITHUB_ERROR_NOT_FOUND,
   GITHUB_ERROR_RATE_LIMIT,
+  GITHUB_ERROR_TIMEOUT,
   GITHUB_ERROR_UPSTREAM,
   GitHubApiError,
-  InvalidCursorError,
 } from "../../../src/modules/github/errors.js";
 import errorHandler from "../../../src/plugins/error-handler.js";
 import sensiblePlugin from "../../../src/plugins/sensible.js";
+import { InvalidCursorError } from "../../../src/utils/pagination.js";
 import { schemaErrorFormatter } from "../../../src/utils/schema-error-formatter.js";
 
 vi.mock("../../../src/env.js", () => ({
@@ -439,6 +440,43 @@ describe("Error Handler Plugin", () => {
     expect(body.detail).toBe("GitHub service is unavailable");
     expect(response.payload).not.toContain("raw upstream detail canary");
 
+    await fastify.close();
+  });
+
+  it("maps a GitHub deadline to Gateway Timeout without exposing transport details", async () => {
+    const fastify = Fastify();
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
+
+    fastify.get("/github-timeout", async () => {
+      throw new GitHubApiError("transport-timeout-canary", 504, GITHUB_ERROR_TIMEOUT);
+    });
+
+    const response = await fastify.inject({ method: "GET", url: "/github-timeout" });
+
+    expect(response.statusCode).toBe(504);
+    expect(response.json()).toEqual({
+      title: "Gateway Timeout",
+      status: 504,
+      detail: "GitHub service timed out",
+    });
+    expect(response.payload).not.toContain("transport-timeout-canary");
+    await fastify.close();
+  });
+
+  it("adds a retry delay to generic service-unavailable responses", async () => {
+    const fastify = Fastify();
+    fastify.register(sensiblePlugin);
+    fastify.register(errorHandler);
+
+    fastify.get("/unavailable", async () => {
+      throw fastify.httpErrors.serviceUnavailable("temporarily unavailable");
+    });
+
+    const response = await fastify.inject({ method: "GET", url: "/unavailable" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.headers["retry-after"]).toBe("10");
     await fastify.close();
   });
 

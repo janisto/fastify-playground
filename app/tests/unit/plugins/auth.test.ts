@@ -1,17 +1,16 @@
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFirebaseAppMock, createFirebaseAuthMock, createFirestoreMock } from "../../mocks/firebase.js";
+import { createFirebaseAppMock, createFirebaseAuthMock } from "../../mocks/firebase.js";
 
 const mockApp = createFirebaseAppMock();
 const mockAuth = createFirebaseAuthMock();
-const mockFirestore = createFirestoreMock();
 
 vi.mock("firebase-admin/app", () => ({
+  deleteApp: vi.fn().mockResolvedValue(undefined),
   getApps: vi.fn(() => [mockApp]),
   initializeApp: vi.fn(() => mockApp),
 }));
 vi.mock("firebase-admin/auth", () => ({ getAuth: vi.fn(() => mockAuth) }));
-vi.mock("firebase-admin/firestore", () => ({ getFirestore: vi.fn(() => mockFirestore) }));
 
 describe("Firebase authentication", () => {
   const apps: ReturnType<typeof Fastify>[] = [];
@@ -83,7 +82,9 @@ describe("Firebase authentication", () => {
   });
 
   it("maps verification failure to a controlled authentication error", async () => {
-    mockAuth.verifyIdToken.mockRejectedValueOnce(new Error("provider detail canary"));
+    mockAuth.verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error("provider detail canary"), { code: "auth/id-token-expired" }),
+    );
     const response = await (await build()).inject({
       method: "GET",
       url: "/protected",
@@ -93,6 +94,26 @@ describe("Firebase authentication", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json().message).toBe("Invalid or expired token");
     expect(response.payload).not.toContain("provider detail canary");
+  });
+
+  it.each([
+    ["invalid credentials", "auth/invalid-credential"],
+    ["internal provider failure", "auth/internal-error"],
+    ["an unknown failure", null],
+  ])("maps %s to controlled service unavailability", async (_case, code) => {
+    const providerError = new Error("provider infrastructure canary");
+    if (code !== null) Object.assign(providerError, { code });
+    mockAuth.verifyIdToken.mockRejectedValueOnce(providerError);
+
+    const response = await (await build()).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: "Bearer structurally-valid-token" },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().message).toBe("Authentication service is unavailable");
+    expect(response.payload).not.toContain("provider infrastructure canary");
   });
 
   it("passes the revocation check through when enabled", async () => {

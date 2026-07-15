@@ -1,8 +1,9 @@
 import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
 import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { itemsRoutes } from "../../../../src/modules/items/index.js";
+import { ItemsService } from "../../../../src/modules/items/service.js";
 import errorHandler from "../../../../src/plugins/error-handler.js";
 import sensible from "../../../../src/plugins/sensible.js";
 import { encodeCursor } from "../../../../src/utils/pagination.js";
@@ -20,6 +21,7 @@ describe("items routes", () => {
 
   afterEach(async () => {
     await fastify.close();
+    vi.restoreAllMocks();
   });
 
   describe("GET /", () => {
@@ -96,6 +98,17 @@ describe("items routes", () => {
       const body = response.json();
       expect(body.status).toBe(400);
       expect(body.detail).toContain("invalid cursor format");
+    });
+
+    it("does not misclassify an unexpected service failure as a client cursor error", async () => {
+      vi.spyOn(ItemsService.prototype, "list").mockImplementationOnce(() => {
+        throw new Error("unexpected-service-failure-canary");
+      });
+
+      const response = await fastify.inject({ method: "GET", url: "/" });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({ status: 500, title: "Internal Server Error" });
     });
 
     it("rejects limit exceeding maximum with 422 error", async () => {

@@ -1,8 +1,6 @@
-import { env } from "../../env.js";
-import { type Cursor, decodeCursor, encodeCursor } from "../../utils/pagination.js";
+import { type Cursor, decodeCursor, encodeCursor, InvalidCursorError } from "../../utils/pagination.js";
 
-import { GitHubClient, type GitHubClientOptions } from "./client.js";
-import { InvalidCursorError } from "./errors.js";
+import { GitHubClient } from "./client.js";
 import type {
   GitHubActivity,
   GitHubLanguage,
@@ -27,33 +25,30 @@ export interface PaginatedResult<T> {
 }
 
 export class GitHubService {
-  private client: GitHubClient;
+  private readonly client: GitHubClient;
 
-  constructor(client?: GitHubClient) {
-    const options: GitHubClientOptions = {};
-    if (env.GITHUB_TOKEN) {
-      options.token = env.GITHUB_TOKEN;
-    }
-    this.client = client ?? new GitHubClient(options);
+  constructor(client = new GitHubClient()) {
+    this.client = client;
   }
 
-  async getOwner(owner?: string): Promise<GitHubOwner> {
-    return this.client.getOwner(owner ?? DEFAULT_OWNER);
+  async getOwner(owner?: string, signal?: AbortSignal): Promise<GitHubOwner> {
+    return this.client.getOwner(owner ?? DEFAULT_OWNER, signal);
   }
 
-  async listOwnerRepos(owner?: string): Promise<{ repos: GitHubRepo[]; count: number }> {
-    const repos = await this.client.listOwnerRepos(owner ?? DEFAULT_OWNER);
+  async listOwnerRepos(owner?: string, signal?: AbortSignal): Promise<{ repos: GitHubRepo[]; count: number }> {
+    const repos = await this.client.listOwnerRepos(owner ?? DEFAULT_OWNER, 30, signal);
     return { repos, count: repos.length };
   }
 
-  async getRepo(owner?: string, repo?: string): Promise<GitHubRepoDetail> {
-    return this.client.getRepo(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO);
+  async getRepo(owner?: string, repo?: string, signal?: AbortSignal): Promise<GitHubRepoDetail> {
+    return this.client.getRepo(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO, signal);
   }
 
   async listRepoActivity(
     owner?: string,
     repo?: string,
     options?: PaginationOptions,
+    signal?: AbortSignal,
   ): Promise<PaginatedResult<GitHubActivity>> {
     const cursor = this.validateCursor(options?.cursor, ACTIVITY_CURSOR_TYPE);
     const limit = options?.limit ?? 20;
@@ -63,6 +58,7 @@ export class GitHubService {
       repo ?? DEFAULT_REPO,
       limit,
       cursor.value || undefined,
+      signal,
     );
 
     const nextCursor = result.nextCursor
@@ -75,16 +71,24 @@ export class GitHubService {
     };
   }
 
-  async listRepoLanguages(owner?: string, repo?: string): Promise<{ languages: GitHubLanguage[] }> {
-    const languagesMap = await this.client.listRepoLanguages(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO);
+  async listRepoLanguages(
+    owner?: string,
+    repo?: string,
+    signal?: AbortSignal,
+  ): Promise<{ languages: GitHubLanguage[] }> {
+    const languagesMap = await this.client.listRepoLanguages(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO, signal);
     const languages = Object.entries(languagesMap)
       .map(([name, bytes]) => ({ name, bytes }))
       .toSorted((a, b) => b.bytes - a.bytes);
     return { languages };
   }
 
-  async listRepoTags(owner?: string, repo?: string): Promise<{ tags: GitHubTag[]; count: number }> {
-    const tags = await this.client.listRepoTags(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO);
+  async listRepoTags(
+    owner?: string,
+    repo?: string,
+    signal?: AbortSignal,
+  ): Promise<{ tags: GitHubTag[]; count: number }> {
+    const tags = await this.client.listRepoTags(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO, 30, signal);
     return { tags, count: tags.length };
   }
 

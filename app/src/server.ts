@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import type { FastifyBaseLogger } from "fastify";
 import { buildApp } from "./app.js";
 import { env } from "./env.js";
@@ -11,19 +12,26 @@ interface ServerLifecycle {
   close(): Promise<void>;
 }
 
-export async function shutdown(app: ServerLifecycle, signal: ShutdownSignal): Promise<void> {
-  if (app.isShuttingDown) return;
+const shutdownOperations = new WeakMap<ServerLifecycle, Promise<void>>();
+
+export function shutdown(app: ServerLifecycle, signal: ShutdownSignal): Promise<void> {
+  const existingOperation = shutdownOperations.get(app);
+  if (existingOperation) return existingOperation;
 
   app.isShuttingDown = true;
   app.log.info({ signal }, "Shutdown requested");
 
-  try {
-    await app.close();
-    app.log.info({ signal }, "Server closed successfully");
-  } catch (error) {
-    app.log.error({ err: error, signal }, "Server shutdown failed");
-    process.exitCode = 1;
-  }
+  const operation = (async () => {
+    try {
+      await app.close();
+      app.log.info({ signal }, "Server closed successfully");
+    } catch (error) {
+      app.log.error({ err: error, signal }, "Server shutdown failed");
+      process.exitCode = 1;
+    }
+  })();
+  shutdownOperations.set(app, operation);
+  return operation;
 }
 
 export function installSignalHandlers(app: ServerLifecycle): () => void {
@@ -56,7 +64,8 @@ async function startServer(): Promise<void> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const entryPoint = process.argv[1];
+if (entryPoint !== undefined && import.meta.url === pathToFileURL(entryPoint).href) {
   await startServer();
 }
 /* v8 ignore stop -- @preserve */

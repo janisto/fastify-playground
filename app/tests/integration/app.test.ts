@@ -1,24 +1,20 @@
 import { Writable } from "node:stream";
 import { decode as cborDecode, encode as cborEncode } from "cbor2";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFirebaseAppMock, createFirebaseAuthMock, createFirestoreMock } from "../mocks/firebase.js";
+import { createFirebaseAppMock, createFirebaseAuthMock } from "../mocks/firebase.js";
 
 // Mock firebase-admin modules
 const mockApp = createFirebaseAppMock();
 const mockAuth = createFirebaseAuthMock();
-const mockFirestore = createFirestoreMock();
 
 vi.mock("firebase-admin/app", () => ({
+  deleteApp: vi.fn().mockResolvedValue(undefined),
   getApps: vi.fn(() => [mockApp]),
   initializeApp: vi.fn(() => mockApp),
 }));
 
 vi.mock("firebase-admin/auth", () => ({
   getAuth: vi.fn(() => mockAuth),
-}));
-
-vi.mock("firebase-admin/firestore", () => ({
-  getFirestore: vi.fn(() => mockFirestore),
 }));
 
 interface LogRecord {
@@ -48,19 +44,25 @@ class JsonLineStream extends Writable {
 describe("App Integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFirestore._mocks.get.mockResolvedValue({ docs: [] });
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PORT", "3000");
+    vi.stubEnv("HOST", "127.0.0.1");
+    vi.stubEnv("LOG_LEVEL", "silent");
+    vi.stubEnv("CORS_ORIGINS", "http://localhost:3000");
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     vi.resetModules();
   });
 
-  it("initializes app successfully and register all routes", async () => {
+  it("initializes app successfully and registers all routes", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
 
     // Verify app is ready without errors
     await fastify.ready();
+    expect(fastify.initialConfig).toMatchObject({ handlerTimeout: 15_000 });
 
     // Verify key routes are registered
     const routes = fastify.printRoutes({ commonPrefix: false });
@@ -68,6 +70,101 @@ describe("App Integration", () => {
     expect(routes).toContain("health (GET, HEAD)");
     expect(routes).toContain("api-docs");
 
+    await fastify.close();
+  });
+
+  it("reports readiness without requiring an unused external datastore", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const [response, unsupported] = await Promise.all([
+      fastify.inject({ method: "GET", url: "/status" }),
+      fastify.inject({ method: "GET", url: "/status", headers: { accept: "application/cbor" } }),
+    ]);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.headers.link).toBe('</schemas/ReadinessResponse.json>; rel="describedBy"');
+    expect(response.headers.vary).toEqual(["Accept", "Origin"]);
+    expect(response.json()).toEqual({ status: "ready" });
+    expect(unsupported.statusCode).toBe(406);
+    expect(unsupported.headers["content-type"]).toBe("application/cbor");
+    expect(cborDecode(unsupported.rawPayload)).toMatchObject({ status: 406 });
+    await fastify.close();
+  });
+
+  it("rejects readiness during shutdown while leaving liveness available", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+    fastify.isShuttingDown = true;
+
+    const [status, statusCbor, health] = await Promise.all([
+      fastify.inject({ method: "GET", url: "/status" }),
+      fastify.inject({
+        method: "GET",
+        url: "/status",
+        headers: { accept: "application/cbor, application/json;q=0.5" },
+      }),
+      fastify.inject({ method: "GET", url: "/health" }),
+    ]);
+
+    expect(status.statusCode).toBe(503);
+    expect(status.headers["retry-after"]).toBe("10");
+    expect(status.headers["content-type"]).toContain("application/problem+json");
+    expect(status.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(status.json()).toMatchObject({ status: 503, detail: "Service is shutting down" });
+    expect(statusCbor.statusCode).toBe(503);
+    expect(statusCbor.headers["content-type"]).toBe("application/cbor");
+    expect(cborDecode(statusCbor.rawPayload)).toMatchObject({ status: 503 });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toEqual({ status: "healthy" });
+    await fastify.close();
+  });
+
+  it("protects the authenticated identity endpoint and returns only the public identity projection", async () => {
+    mockAuth.verifyIdToken.mockResolvedValueOnce({
+      uid: "user-123",
+      email: "private-email-canary@example.com",
+    });
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const unauthenticated = await fastify.inject({ method: "GET", url: "/v1/auth/me" });
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(unauthenticated.headers["content-type"]).toContain("application/problem+json");
+    expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
+
+    const authenticated = await fastify.inject({
+      method: "GET",
+      url: "/v1/auth/me",
+      headers: {
+        accept: "application/cbor",
+        authorization: "Bearer valid-token",
+      },
+    });
+
+    expect(authenticated.statusCode).toBe(200);
+    expect(authenticated.headers["content-type"]).toBe("application/cbor");
+    expect(cborDecode(authenticated.rawPayload)).toEqual({ userId: "user-123" });
+    expect(authenticated.payload).not.toContain("private-email-canary");
+    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", false);
+
+    mockAuth.verifyIdToken.mockRejectedValueOnce(
+      Object.assign(new Error("firebase-provider-detail-canary"), { code: "auth/internal-error" }),
+    );
+    const unavailable = await fastify.inject({
+      method: "GET",
+      url: "/v1/auth/me",
+      headers: { authorization: "Bearer another-token" },
+    });
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.headers["retry-after"]).toBe("10");
+    expect(unavailable.json()).toMatchObject({
+      title: "Service Unavailable",
+      status: 503,
+      detail: "Authentication service is unavailable",
+    });
+    expect(unavailable.payload).not.toContain("firebase-provider-detail-canary");
     await fastify.close();
   });
 
@@ -277,6 +374,8 @@ describe("App Integration", () => {
     const document = response.json();
     const getHello = document.paths["/v1/hello/"].get;
     const postHello = document.paths["/v1/hello/"].post;
+    const readiness = document.paths["/status"].get;
+    const authenticatedUser = document.paths["/v1/auth/me"].get;
 
     expect(Object.keys(getHello.responses["200"].content)).toEqual(["application/json", "application/cbor"]);
     expect(Object.keys(getHello.responses["406"].content)).toEqual(["application/problem+json", "application/cbor"]);
@@ -284,6 +383,11 @@ describe("App Integration", () => {
     expect(getHello.responses["200"].headers).toHaveProperty("X-Request-ID");
     expect(getHello.responses["200"].headers).toHaveProperty("Link");
     expect(Object.keys(postHello.requestBody.content)).toEqual(["application/json", "application/cbor"]);
+    expect(Object.keys(readiness.responses["200"].content)).toEqual(["application/json"]);
+    expect(Object.keys(readiness.responses["503"].content)).toEqual(["application/problem+json", "application/cbor"]);
+    expect(readiness.responses["503"].headers).toHaveProperty("Retry-After");
+    expect(authenticatedUser.security).toEqual([{ bearerAuth: [] }]);
+    expect(Object.keys(authenticatedUser.responses["200"].content)).toEqual(["application/json", "application/cbor"]);
     expect(document.servers).toEqual([{ url: "/", description: "Current server" }]);
 
     const operationIds: string[] = [];
@@ -291,10 +395,13 @@ describe("App Integration", () => {
       for (const operation of Object.values(path)) {
         if (typeof operation !== "object" || operation === null || !("responses" in operation)) continue;
         expect(operation).toHaveProperty("operationId");
+        const responses = (operation as { responses: Record<string, { headers?: Record<string, unknown> }> }).responses;
+        expect(responses).toHaveProperty("503");
+        expect(responses["503"]?.headers).toHaveProperty("Retry-After");
         operationIds.push((operation as { operationId: string }).operationId);
       }
     }
-    expect(operationIds).toHaveLength(11);
+    expect(operationIds).toHaveLength(12);
     expect(new Set(operationIds).size).toBe(operationIds.length);
     expect(JSON.stringify(document)).not.toContain("application/problem+cbor");
     await fastify.close();

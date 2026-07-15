@@ -1,28 +1,27 @@
 import { type Static, Type } from "@fastify/type-provider-typebox";
 
-// Pattern validation
-const OWNER_PATTERN = "^[a-zA-Z0-9][a-zA-Z0-9\\-\\.]{0,38}$";
-const REPO_PATTERN = "^[a-zA-Z0-9_\\-\\.]{1,100}$";
-
 // Path Parameters
 export const OwnerParamsSchema = Type.Object({
   owner: Type.String({
-    description: "GitHub username",
+    description: "GitHub account name",
     examples: ["octocat"],
-    pattern: OWNER_PATTERN,
+    minLength: 1,
+    maxLength: 100,
   }),
 });
 
 export const RepoParamsSchema = Type.Object({
   owner: Type.String({
-    description: "GitHub username",
+    description: "GitHub account name",
     examples: ["octocat"],
-    pattern: OWNER_PATTERN,
+    minLength: 1,
+    maxLength: 100,
   }),
   repo: Type.String({
     description: "Repository name",
     examples: ["git-consortium"],
-    pattern: REPO_PATTERN,
+    minLength: 1,
+    maxLength: 100,
   }),
 });
 
@@ -62,9 +61,9 @@ const GitHubRepoBaseSchema = Type.Object({
   visibility: Type.String(),
   fork: Type.Boolean(),
   archived: Type.Boolean(),
-  createdAt: Type.String({ format: "date-time" }),
-  updatedAt: Type.String({ format: "date-time" }),
-  pushedAt: Type.String({ format: "date-time" }),
+  createdAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  updatedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  pushedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
 });
 
 // Repo Summary Schema
@@ -91,11 +90,16 @@ export const GitHubRepoDetailSchema = Type.Object(
 export const GitHubActivitySchema = Type.Object(
   {
     id: Type.Integer({ examples: [1] }),
-    actor: Type.String({ examples: ["octocat"], description: "Actor username" }),
+    actor: Type.Union([Type.String(), Type.Null()], {
+      examples: ["octocat"],
+      description: "Actor username, or null when the GitHub account no longer exists",
+    }),
     ref: Type.String({ examples: ["refs/heads/master"], description: "Git reference" }),
     timestamp: Type.String({ format: "date-time" }),
     activityType: Type.String({ examples: ["push"], description: "Type of activity" }),
-    actorAvatarUrl: Type.String({ format: "uri", description: "Actor avatar URL" }),
+    actorAvatarUrl: Type.Union([Type.String({ format: "uri" }), Type.Null()], {
+      description: "Actor avatar URL, or null when the GitHub account no longer exists",
+    }),
   },
   { $id: "GitHubActivity" },
 );

@@ -1,14 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GitHubClient } from "../../../../src/modules/github/client.js";
-import { InvalidCursorError } from "../../../../src/modules/github/errors.js";
 import { GitHubService } from "../../../../src/modules/github/service.js";
-
-vi.mock("../../../../src/env.js", () => ({
-  env: {
-    GITHUB_TOKEN: undefined,
-  },
-}));
+import { InvalidCursorError } from "../../../../src/utils/pagination.js";
 
 describe("GitHubService", () => {
   const mockClient = {
@@ -31,16 +25,17 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.getOwner();
 
-      expect(mockClient.getOwner).toHaveBeenCalledWith("octocat");
+      expect(mockClient.getOwner).toHaveBeenCalledWith("octocat", undefined);
     });
 
     it("uses provided owner", async () => {
       mockClient.getOwner.mockResolvedValueOnce({ login: "testuser" });
 
       const service = new GitHubService(mockClient as unknown as GitHubClient);
-      await service.getOwner("testuser");
+      const signal = new AbortController().signal;
+      await service.getOwner("testuser", signal);
 
-      expect(mockClient.getOwner).toHaveBeenCalledWith("testuser");
+      expect(mockClient.getOwner).toHaveBeenCalledWith("testuser", signal);
     });
   });
 
@@ -54,7 +49,7 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       const result = await service.listOwnerRepos();
 
-      expect(mockClient.listOwnerRepos).toHaveBeenCalledWith("octocat");
+      expect(mockClient.listOwnerRepos).toHaveBeenCalledWith("octocat", 30, undefined);
       expect(result.repos).toHaveLength(2);
       expect(result.count).toBe(2);
     });
@@ -67,7 +62,7 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.getRepo();
 
-      expect(mockClient.getRepo).toHaveBeenCalledWith("octocat", "git-consortium");
+      expect(mockClient.getRepo).toHaveBeenCalledWith("octocat", "git-consortium", undefined);
     });
 
     it("uses provided owner and repo", async () => {
@@ -76,7 +71,7 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.getRepo("testuser", "myrepo");
 
-      expect(mockClient.getRepo).toHaveBeenCalledWith("testuser", "myrepo");
+      expect(mockClient.getRepo).toHaveBeenCalledWith("testuser", "myrepo", undefined);
     });
   });
 
@@ -152,7 +147,7 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.listRepoActivity("octocat", "repo", { cursor: validCursor });
 
-      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "repo", 20, "cursor123");
+      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "repo", 20, "cursor123", undefined);
     });
 
     it("returns paginated activities with cursor", async () => {
@@ -207,7 +202,7 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.listRepoActivity("octocat", "repo", {});
 
-      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "repo", 20, undefined);
+      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "repo", 20, undefined, undefined);
     });
 
     it("uses custom limit when provided", async () => {
@@ -219,7 +214,7 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.listRepoActivity("octocat", "repo", { limit: 50 });
 
-      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "repo", 50, undefined);
+      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "repo", 50, undefined, undefined);
     });
 
     it("uses default owner and repo when not provided", async () => {
@@ -231,22 +226,20 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.listRepoActivity();
 
-      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "git-consortium", 20, undefined);
+      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "git-consortium", 20, undefined, undefined);
     });
   });
 });
 
-describe("GitHubService with GITHUB_TOKEN", () => {
+describe("GitHubService credential boundary", () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it("creates client with token when GITHUB_TOKEN is set", async () => {
-    vi.doMock("../../../../src/env.js", () => ({
-      env: {
-        GITHUB_TOKEN: "test-token-123",
-      },
-    }));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("never derives an outbound credential from the process GITHUB_TOKEN", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "private-resource-capable-canary");
 
     const clientModule = await import("../../../../src/modules/github/client.js");
     const constructorSpy = vi.spyOn(clientModule, "GitHubClient");
@@ -254,22 +247,6 @@ describe("GitHubService with GITHUB_TOKEN", () => {
     const serviceModule = await import("../../../../src/modules/github/service.js");
     new serviceModule.GitHubService();
 
-    expect(constructorSpy).toHaveBeenCalledWith({ token: "test-token-123" });
-  });
-
-  it("creates client without token when GITHUB_TOKEN is not set", async () => {
-    vi.doMock("../../../../src/env.js", () => ({
-      env: {
-        GITHUB_TOKEN: undefined,
-      },
-    }));
-
-    const clientModule = await import("../../../../src/modules/github/client.js");
-    const constructorSpy = vi.spyOn(clientModule, "GitHubClient");
-
-    const serviceModule = await import("../../../../src/modules/github/service.js");
-    new serviceModule.GitHubService();
-
-    expect(constructorSpy).toHaveBeenCalledWith({});
+    expect(constructorSpy).toHaveBeenCalledWith();
   });
 });
