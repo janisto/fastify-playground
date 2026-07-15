@@ -88,6 +88,7 @@ just container-build
 - Keep production 5xx response details generic while retaining structured server-side terminal errors.
 - Treat upstream response bodies and transport errors as untrusted. Preserve diagnostics in the error chain but expose controlled public details for upstream failures.
 - Public GitHub proxy routes are deliberately unauthenticated upstream. `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly; the running application must never read or attach an ambient token to caller-selected owner or repository paths.
+- Never add `GH_TOKEN: ${{ github.token }}` to a GitHub Actions workflow in this repository.
 - Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
