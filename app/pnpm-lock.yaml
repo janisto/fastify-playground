@@ -36,8 +36,8 @@ importers:
         specifier: ^5.10.0
         version: 5.10.0
       fastify-observability:
-        specifier: ^0.2.0
-        version: 0.2.0(fastify@5.10.0)
+        specifier: ^0.2.1
+        version: 0.2.1(fastify@5.10.0)
       fastify-plugin:
         specifier: ^6.0.0
         version: 6.0.0
@@ -851,8 +851,8 @@ packages:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
 
-  ast-v8-to-istanbul@1.0.4:
-    resolution: {integrity: sha512-0bC0/4bTSrnwdhU3IsZDwEdojvuPrSg59OYZfKsLRtJZ0u8VBx9DebfqqG8bRdCC0I7vjgxmPi41P0lpkhJHtA==}
+  ast-v8-to-istanbul@1.0.5:
+    resolution: {integrity: sha512-UPAgKJFSEGMWSDr3LX4tqnAb4f7KGT8O40Tyx8wbYmmZ/yn58lNCm8h3svs3eXgiGd5AXxz8NDOvXWvicq+rJA==}
 
   async-retry@1.3.3:
     resolution: {integrity: sha512-wfr/jstw9xNi/0teMHrRW7dsz3Lt5ARhYNZ2ewpadnhaIp5mbALhOAP+EAdsC7t4Z6wqsDVv9+W6gm1Dk9mEyw==}
@@ -1061,8 +1061,8 @@ packages:
     resolution: {integrity: sha512-SLhnTEqE5QpJHq/6zl9bsmImEP2adv+y6Wy+cJa7nVTRzQh1OZfCe9k29M5xN74LWnu0xa1zrUrq3KnOKl92Fg==}
     hasBin: true
 
-  fastify-observability@0.2.0:
-    resolution: {integrity: sha512-XqQcQps1WQX+8gfHkD4V2V/cCDZ4LwG73uHpZNtM6Jn+/YXD+D2w37yvuWFZ0dK0YXaOX505foP86SVVFYAKsg==}
+  fastify-observability@0.2.1:
+    resolution: {integrity: sha512-xhb5+nGFDGlNAWYZ6QZBEf1y3c4gkXS1wGCiNxyi3Dl3CZJ7Xwq+qemzvi7+6zSpbeT9Cn7Xa9wBK8CxDEZZ9A==}
     engines: {node: '>=24'}
     peerDependencies:
       fastify: ^5.10.0
@@ -2562,7 +2562,7 @@ snapshots:
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
       '@vitest/utils': 4.1.10
-      ast-v8-to-istanbul: 1.0.4
+      ast-v8-to-istanbul: 1.0.5
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-report: 3.0.1
       istanbul-reports: 3.2.0
@@ -2662,7 +2662,7 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  ast-v8-to-istanbul@1.0.4:
+  ast-v8-to-istanbul@1.0.5:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       estree-walker: 3.0.3
@@ -2903,7 +2903,7 @@ snapshots:
       xml-naming: 0.3.0
     optional: true
 
-  fastify-observability@0.2.0(fastify@5.10.0):
+  fastify-observability@0.2.1(fastify@5.10.0):
     dependencies:
       fastify: 5.10.0
       fastify-plugin: 6.0.0
