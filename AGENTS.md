@@ -87,7 +87,9 @@ just container-build
 - The GCP preset uses the validated bare W3C trace ID. Do not restore project-qualified trace resources, expose the incoming parent as a current span, claim span creation, or require a Google Cloud project ID for correlation.
 - Keep production 5xx response details generic while retaining structured server-side terminal errors.
 - Treat upstream response bodies and transport errors as untrusted. Preserve diagnostics in the error chain but expose controlled public details for upstream failures.
-- Public GitHub proxy routes are deliberately unauthenticated upstream. `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly; the running application must never read or attach an ambient token to caller-selected owner or repository paths.
+- Use **API `GITHUB_TOKEN`** for the optional application/test environment variable. Public GitHub proxy routes are deliberately unauthenticated upstream; the API `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly, and the running application must never read or attach it to caller-selected owner or repository paths.
+- Use **Merge `GITHUB_TOKEN`** for GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`. Keep `.github/workflows/dependabot-auto-merge.yml` unchanged: its metadata input and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` mapping intentionally authenticate Dependabot labeling, approval, and squash auto-merge without a personal access token or manually configured secret.
+- Reference GitHub Actions by explicit release tags, not full commit SHAs. Keep `actions/checkout@v7.0.0` and the equivalent exact-version style for other actions; Dependabot updates those release tags.
 - Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
@@ -98,7 +100,7 @@ just container-build
 - Do not retest Fastify or third-party plugin APIs. Remove tests that only prove registration succeeds, a decorator exists, or a mock returns its configured value.
 - Use Vitest with explicit imports; globals are disabled.
 - Unit tests do not use real network, filesystem, Firebase, or other external services.
-- Direct GitHub client integration tests are opt-in through the test-only `GITHUB_TOKEN` and skipped otherwise. Tests must prove the running application's GitHub path does not consume it.
+- Direct GitHub client integration tests are opt-in through the API `GITHUB_TOKEN` and skipped otherwise. Tests must prove the running application's GitHub path does not consume it.
 - Cover success, validation, error, and boundary behavior for every change.
 - Global V8 coverage thresholds are 90% for lines, functions, branches, and statements across `src/**/*.ts`.
 - Coverage exceptions require a narrow `/* v8 ignore ... -- @preserve */` comment and a genuinely untestable boundary.

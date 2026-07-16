@@ -13,7 +13,7 @@ Apply `.agents/skills/adversarial-testing/SKILL.md` and state the most important
 - Test pure services, schemas, utilities, and isolated plugins under `app/tests/unit/`.
 - Test composed application behavior and real HTTP contracts under `app/tests/integration/` with `fastify.inject()`.
 - Mock GitHub with Undici `MockAgent` and Firebase with shared local mocks.
-- Keep direct real-GitHub client tests opt-in through the test-only `GITHUB_TOKEN`; do not add live network calls or ambient GitHub credentials to the default application suite.
+- Keep direct real-GitHub client tests opt-in through the API `GITHUB_TOKEN`; do not add live network calls or ambient GitHub credentials to the default application suite. This is unrelated to the Merge `GITHUB_TOKEN` used by GitHub Actions.
 
 Import Vitest APIs explicitly; globals are disabled. Register plugins, await `fastify.ready()` when boot matters, and always close instances. Do not await synchronous values such as `fastify.register()`.
 

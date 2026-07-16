@@ -284,7 +284,7 @@ Firebase Authentication configuration:
 | `GOOGLE_APPLICATION_CREDENTIALS` | Local path used directly by Application Default Credentials; the application does not read the key file |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Auth emulator address (e.g., `localhost:9099`) |
 
-`GITHUB_TOKEN` in `.env.example` is test-only. It raises the limit for opt-in tests that instantiate `GitHubClient` directly; the running API deliberately does not decode or forward it. Prefer a fine-grained token without private-repository access.
+The **API `GITHUB_TOKEN`** in `.env.example` is test-only. It raises the limit for opt-in tests that instantiate `GitHubClient` directly; the running API deliberately does not decode or forward it. Prefer a fine-grained token without private-repository access. It is separate from the **Merge `GITHUB_TOKEN`**, GitHub Actions' automatic token for repository workflows.
 
 ## Plugin Architecture
 
@@ -325,7 +325,7 @@ GitHub's [unauthenticated primary rate limit](https://docs.github.com/en/rest/us
 - **Coverage threshold**: 90% (lines, functions, branches, statements)
 - **Coverage scope**: Full unit and integration suite across all `src/**/*.ts` files
 - **Unit tests**: `tests/unit/` with mocked external dependencies
-- **Integration tests**: `tests/integration/`; direct real-GitHub client tests require the test-only `GITHUB_TOKEN` and otherwise skip
+- **Integration tests**: `tests/integration/`; direct real-GitHub client tests require the API `GITHUB_TOKEN` and otherwise skip
 
 ## Code Style Requirements
 
@@ -343,7 +343,7 @@ GitHub Actions workflows in `.github/workflows/`:
 | `labeler-manual.yml` | Manual labeling for historical PRs |
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
 
-Dependabot is configured in `.github/dependabot.yml` for automated dependency updates.
+Dependabot is configured in `.github/dependabot.yml` for automated dependency updates. The auto-merge workflow intentionally maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication; contributors do not need to configure that secret. Workflow actions intentionally use explicit release tags such as `actions/checkout@v7.0.0`, rather than full commit SHAs, so Dependabot can propose readable version updates.
 
 ## Contributing
 

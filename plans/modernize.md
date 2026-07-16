@@ -4,6 +4,49 @@
 
 Modernize this undeployed public example without preserving backward compatibility. Record completed work, validation, and remaining risks as the modernization proceeds.
 
+## Current status (2026-07-16)
+
+- [x] Complete the npm-to-pnpm migration, Node.js 24 and TypeScript 7 alignment, codebase modernization, content-negotiation hardening, observability migration, adversarial test pass, and post-review remediation.
+- [x] Align application CI, linting, the production container build and smoke, dependency automation, repository guidance, and portable agent skills with the modernized application.
+- [x] Add README status badges for application CI, code quality, Node.js, pnpm, Fastify, TypeScript, license, and the public example status.
+- [x] Reconcile the GitHub Actions authentication model with current GitHub documentation and the repository's intended automatic dependency workflow.
+- [x] Preserve `.github/workflows/dependabot-auto-merge.yml` unchanged after the workflow-token review and rollback.
+- [x] Reconcile all non-plan Markdown guidance around the Merge `GITHUB_TOKEN` and API `GITHUB_TOKEN` distinction.
+
+### Locked GitHub Actions decisions
+
+- **Merge `GITHUB_TOKEN`:** Keep `.github/workflows/dependabot-auto-merge.yml` unchanged. The metadata input `github-token: "${{ secrets.GITHUB_TOKEN }}"` and the GitHub CLI environment mapping `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` intentionally follow [GitHub's documented `GITHUB_TOKEN` workflow pattern](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) and use the automatic per-job token created by GitHub Actions. They do not require a personal access token or a manually configured repository or Dependabot secret.
+- Keep automatic labeling, approval, and squash auto-merge for Dependabot patch and minor updates. Automatic dependency maintenance is an intentional feature of this playground and matches the other playground repositories.
+- Keep GitHub Action dependencies on explicit release tags, not full commit SHAs. `actions/checkout@v7.0.0` is the canonical style; Dependabot remains responsible for proposing release-tag updates.
+- **API `GITHUB_TOKEN`:** Keep the application/test environment variable separate from workflow authentication. The optional local `GITHUB_TOKEN` in `.env.example` is a user-supplied token only for opt-in direct `GitHubClient` integration tests. The running application does not consume it.
+
+### Remaining external validation
+
+- The seven direct GitHub client contract tests remain opt-in and require the user-supplied API `GITHUB_TOKEN`.
+- Firebase Authentication against a real project or emulator remains external to the repository; deterministic tests cover the application-owned behavior.
+
+### Remaining repository follow-up
+
+#### Priority
+
+- [ ] Make the `container` job a required status check when this branch reaches `main`, or add one required aggregate job that fails unless both `ci` and `container` succeed. The live ruleset currently requires only `ci` and `lint`, so a container build, probe, or graceful-shutdown failure would not block merging.
+- [ ] Key the automatic labeler's concurrency group by `github.event.pull_request.number`. Under `pull_request_target`, `github.ref` identifies the default branch, so the current group can cancel labeling for an unrelated PR; live runs have already been cancelled this way.
+- [ ] Require dependency PRs to be validated against current `main` before auto-merge by enabling strict required status checks or adopting a merge queue. The live ruleset currently permits a Dependabot PR to merge after another PR changes `main` without retesting their combined state.
+
+#### Lower priority
+
+- [ ] Make the manual labeler's `maxCount` and `scope` inputs explicit and validated, reject malformed or negative values, cap expansion within GitHub's 256-job matrix limit, and avoid interpreting invalid input as all PRs.
+- [ ] Remove `issues: write` from the automatic and manual labeler workflows while all configured labels are pre-created; retain `contents: read` and `pull-requests: write` for label application.
+- [ ] Add explicit, workload-appropriate `timeout-minutes` values to CI, container, Dependabot, and labeler jobs.
+- [ ] Set `persist-credentials: false` on checkout steps that do not perform authenticated Git operations after checkout.
+
+### Documentation validation
+
+- `git diff --check`: passed.
+- `actionlint .github/workflows/*.yml`: passed.
+- Vitest skill structural validation: passed.
+- `.github/workflows/dependabot-auto-merge.yml` retained SHA-256 `8e09e86e36b031daf9c67726af6079eb4c8166947a63248b7e67bc7cf1ad9f3b`, unchanged from before this documentation update.
+
 ## 2026-07-14: npm to pnpm migration
 
 ### Scope
@@ -313,7 +356,7 @@ The largest risk in a public example is a broad green suite that verifies framew
 
 ### Decisions
 
-- Keep `GITHUB_TOKEN` only for opt-in, direct GitHub client integration tests. The running public API must never read or forward a server credential because GitHub's repository endpoints can return private resources when a token has access.
+- Keep the API `GITHUB_TOKEN`, the application/test environment variable, only for opt-in direct GitHub client integration tests. The running public API must never read or forward that server credential because GitHub's repository endpoints can return private resources when a token has access. This application boundary is separate from the Merge `GITHUB_TOKEN`, GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`, which intentionally authenticates repository workflows.
 - Accept GitHub's lower unauthenticated quota for the public example instead of creating a credential-confused deputy. Document the quota honestly; production deployments that need more capacity require a different authenticated product boundary, caching, and distributed abuse controls.
 - Remove Firestore integration. It has no business consumer, its non-cancellable probe globally gates unrelated routes, and `terminate()` can hang shutdown after a timed-out query. Retain Firebase Admin only for an implemented protected identity endpoint.
 - Own `/status` in application code so runtime negotiation, RFC 9457 errors, schema discovery, and OpenAPI describe the same behavior. Readiness covers shutdown state and configured process-pressure thresholds, not optional external services.
