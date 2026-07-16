@@ -67,9 +67,10 @@ explicitly prefers CBOR.
 
 API responses with a body default to JSON. CBOR is selected only by an explicit, positive-quality
 `Accept: application/cbor`; wildcards and equal quality values keep JSON. RFC 9110 quality values and specificity are
-honored, including exact `q=0` exclusions. If an explicit `Accept` value excludes every supported success
-representation, the API returns 406 before parsing the request body or running the handler. A 204 or 205 response has
-no representation, so `Accept` does not gate it.
+honored, including exact `q=0` exclusions. JSON-family ranges may include `charset=utf-8`; unsupported media
+parameters remain non-matching. If an explicit `Accept` value excludes every supported success representation, the API
+returns 406 before parsing the request body or running the handler. A 204 or 205 response has no representation, so
+`Accept` does not gate it.
 
 | Response class | Media types | Policy |
 |----------------|-------------|--------|

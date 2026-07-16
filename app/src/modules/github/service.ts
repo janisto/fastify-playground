@@ -1,6 +1,6 @@
-import { type Cursor, decodeCursor, encodeCursor, InvalidCursorError } from "../../utils/pagination.js";
+import { decodeCursor, encodeCursor, InvalidCursorError } from "../../utils/pagination.js";
 
-import { GitHubClient } from "./client.js";
+import { type ActivityCursor, GitHubClient } from "./client.js";
 import type {
   GitHubActivity,
   GitHubLanguage,
@@ -12,7 +12,8 @@ import type {
 
 const DEFAULT_OWNER = "octocat";
 const DEFAULT_REPO = "git-consortium";
-const ACTIVITY_CURSOR_TYPE = "gh-activity";
+const ACTIVITY_AFTER_CURSOR_TYPE = "gh-activity-after";
+const ACTIVITY_BEFORE_CURSOR_TYPE = "gh-activity-before";
 
 export interface PaginationOptions {
   cursor?: string;
@@ -22,6 +23,7 @@ export interface PaginationOptions {
 export interface PaginatedResult<T> {
   items: T[];
   nextCursor?: string;
+  prevCursor?: string;
 }
 
 export class GitHubService {
@@ -50,24 +52,28 @@ export class GitHubService {
     options?: PaginationOptions,
     signal?: AbortSignal,
   ): Promise<PaginatedResult<GitHubActivity>> {
-    const cursor = this.validateCursor(options?.cursor, ACTIVITY_CURSOR_TYPE);
+    const cursor = this.validateActivityCursor(options?.cursor);
     const limit = options?.limit ?? 20;
 
     const result = await this.client.listRepoActivity(
       owner ?? DEFAULT_OWNER,
       repo ?? DEFAULT_REPO,
       limit,
-      cursor.value || undefined,
+      cursor,
       signal,
     );
 
     const nextCursor = result.nextCursor
-      ? encodeCursor({ type: ACTIVITY_CURSOR_TYPE, value: result.nextCursor })
+      ? encodeCursor({ type: ACTIVITY_AFTER_CURSOR_TYPE, value: result.nextCursor })
+      : undefined;
+    const prevCursor = result.prevCursor
+      ? encodeCursor({ type: ACTIVITY_BEFORE_CURSOR_TYPE, value: result.prevCursor })
       : undefined;
 
     return {
       items: result.activities,
       ...(nextCursor ? { nextCursor } : {}),
+      ...(prevCursor ? { prevCursor } : {}),
     };
   }
 
@@ -92,17 +98,15 @@ export class GitHubService {
     return { tags, count: tags.length };
   }
 
-  private validateCursor(encodedCursor: string | undefined, expectedType: string): Cursor {
-    if (encodedCursor === undefined) {
-      return { type: "", value: "" };
-    }
+  private validateActivityCursor(encodedCursor: string | undefined): ActivityCursor | undefined {
+    if (encodedCursor === undefined) return undefined;
+
     const cursor = decodeCursor(encodedCursor);
     if (cursor === null) {
       throw new InvalidCursorError("invalid cursor format");
     }
-    if (cursor.type && cursor.type !== expectedType) {
-      throw new InvalidCursorError(`cursor type mismatch: expected ${expectedType}`);
-    }
-    return cursor;
+    if (cursor.type === ACTIVITY_AFTER_CURSOR_TYPE) return { direction: "after", value: cursor.value };
+    if (cursor.type === ACTIVITY_BEFORE_CURSOR_TYPE) return { direction: "before", value: cursor.value };
+    throw new InvalidCursorError("cursor type mismatch: expected a GitHub activity cursor");
   }
 }

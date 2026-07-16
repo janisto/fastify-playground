@@ -42,6 +42,12 @@ type RequestResult = Dispatcher.ResponseData & { timeoutSignal: AbortSignal };
 export interface ActivityPage {
   activities: GitHubActivity[];
   nextCursor: string | null;
+  prevCursor: string | null;
+}
+
+export interface ActivityCursor {
+  direction: "after" | "before";
+  value: string;
 }
 
 function getHeader(headers: ResponseHeaders, name: string): string | undefined {
@@ -127,13 +133,12 @@ export class GitHubClient {
     owner: string,
     repo: string,
     limit = 20,
-    afterCursor?: string,
+    cursor?: ActivityCursor,
     signal?: AbortSignal,
   ): Promise<ActivityPage> {
-    let url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/activity?per_page=${limit}`;
-    if (afterCursor) {
-      url += `&after=${encodeURIComponent(afterCursor)}`;
-    }
+    const query = new URLSearchParams({ per_page: String(limit) });
+    if (cursor) query.set(cursor.direction, cursor.value);
+    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/activity?${query}`;
 
     const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
 
@@ -142,11 +147,14 @@ export class GitHubClient {
     }
 
     const data = await this.readValidatedBody(body, RawGitHubActivityListSchema, signal, timeoutSignal);
-    const nextCursor = this.parseLinkHeader(getHeader(headers, "link") ?? null);
+    const linkHeader = getHeader(headers, "link") ?? null;
+    const nextCursor = this.parseLinkCursor(linkHeader, "next", "after");
+    const prevCursor = this.parseLinkCursor(linkHeader, "prev", "before");
 
     return {
       activities: data.map((activity) => this.toGitHubActivity(activity)),
       nextCursor,
+      prevCursor,
     };
   }
 
@@ -318,12 +326,16 @@ export class GitHubClient {
     return "60";
   }
 
-  private parseLinkHeader(header: string | null): string | null {
+  private parseLinkCursor(
+    header: string | null,
+    relation: "next" | "prev",
+    parameter: "after" | "before",
+  ): string | null {
     if (!header) return null;
 
     for (const part of header.split(",")) {
       const trimmed = part.trim();
-      if (!trimmed.includes('rel="next"')) continue;
+      if (!trimmed.includes(`rel="${relation}"`)) continue;
 
       const start = trimmed.indexOf("<");
       const end = trimmed.indexOf(">");
@@ -331,8 +343,8 @@ export class GitHubClient {
 
       try {
         const linkUrl = new URL(trimmed.slice(start + 1, end));
-        const after = linkUrl.searchParams.get("after");
-        if (after) return after;
+        const cursor = linkUrl.searchParams.get(parameter);
+        if (cursor) return cursor;
       } catch {}
     }
     return null;

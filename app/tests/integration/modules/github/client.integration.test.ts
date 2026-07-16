@@ -67,5 +67,6 @@ describe.skipIf(!GITHUB_TOKEN)("GitHubClient integration", () => {
 
     expect(result.activities).toEqual(expect.any(Array));
     expect(result.nextCursor === null || typeof result.nextCursor === "string").toBe(true);
+    expect(result.prevCursor === null || typeof result.prevCursor === "string").toBe(true);
   });
 });

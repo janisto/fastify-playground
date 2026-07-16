@@ -10,27 +10,64 @@ export function normalizeMediaType(mediaType: string): string {
   return mediaType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }
 
-function parseQuality(parameters: readonly string[]): number | null {
+function isJsonMediaType(mediaType: string): boolean {
+  const subtype = mediaType.split("/").at(1);
+  return subtype === "json" || subtype?.endsWith("+json") === true;
+}
+
+function normalizeParameterValue(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+interface ParsedParameters {
+  mediaParameterCount: number;
+  quality: number;
+}
+
+type ParsedParameter = { kind: "media"; name: string } | { kind: "quality"; value: number };
+
+function parseParameter(parameter: string, target: string): ParsedParameter | null {
+  const separator = parameter.indexOf("=");
+  if (separator <= 0) return null;
+
+  const name = parameter.slice(0, separator).trim().toLowerCase();
+  const value = parameter.slice(separator + 1).trim();
+  if (name === "q") {
+    return QVALUE_PATTERN.test(value) ? { kind: "quality", value: Number(value) } : null;
+  }
+  if (name === "charset" && isJsonMediaType(target) && normalizeParameterValue(value).toLowerCase() === "utf-8") {
+    return { kind: "media", name };
+  }
+  return null;
+}
+
+function parseParameters(parameters: readonly string[], target: string): ParsedParameters | null {
   let quality = 1;
   let qualitySeen = false;
-  let hasMediaParameter = false;
+  const mediaParameters = new Set<string>();
 
   for (const rawParameter of parameters) {
     const parameter = rawParameter.trim();
     if (!parameter) continue;
 
-    if (parameter.toLowerCase().startsWith("q=")) {
+    const parsed = parseParameter(parameter, target);
+    if (!parsed) return null;
+    if (parsed.kind === "quality") {
       if (qualitySeen) return null;
-      const rawQuality = parameter.slice(2);
-      if (!QVALUE_PATTERN.test(rawQuality)) return null;
-      quality = Number(rawQuality);
+      quality = parsed.value;
       qualitySeen = true;
-    } else {
-      hasMediaParameter = true;
+      continue;
     }
+
+    if (mediaParameters.has(parsed.name)) return null;
+    mediaParameters.add(parsed.name);
   }
 
-  return hasMediaParameter ? null : quality;
+  return { mediaParameterCount: mediaParameters.size, quality };
 }
 
 function rangeSpecificity(range: string, target: string): number | null {
@@ -44,6 +81,7 @@ function rangeSpecificity(range: string, target: string): number | null {
 }
 
 interface MediaRangeMatch {
+  mediaParameterCount: number;
   quality: number;
   specificity: number;
 }
@@ -54,18 +92,19 @@ function matchMediaRange(rawItem: string, target: string, explicitOnly: boolean)
 
   const [rawRange, ...parameters] = item.split(";");
   const range = normalizeMediaType(rawRange ?? "");
-  const quality = parseQuality(parameters);
-  if (quality === null || !range.includes("/")) return null;
+  const parsedParameters = parseParameters(parameters, target);
+  if (parsedParameters === null || !range.includes("/")) return null;
 
   const specificity = rangeSpecificity(range, target);
   if (specificity === null || (explicitOnly && specificity < 2)) return null;
-  return { quality, specificity };
+  return { ...parsedParameters, specificity };
 }
 
 function mediaTypeQuality(acceptHeader: string, mediaType: string, explicitOnly = false): number | null {
   if (!acceptHeader) return null;
 
   const target = normalizeMediaType(mediaType);
+  let bestMediaParameterCount = -1;
   let bestSpecificity = -1;
   let bestQuality = 0;
 
@@ -73,10 +112,14 @@ function mediaTypeQuality(acceptHeader: string, mediaType: string, explicitOnly 
     const match = matchMediaRange(rawItem, target, explicitOnly);
     if (!match) continue;
 
-    if (match.specificity > bestSpecificity) {
+    if (
+      match.specificity > bestSpecificity ||
+      (match.specificity === bestSpecificity && match.mediaParameterCount > bestMediaParameterCount)
+    ) {
       bestSpecificity = match.specificity;
+      bestMediaParameterCount = match.mediaParameterCount;
       bestQuality = match.quality;
-    } else if (match.specificity === bestSpecificity) {
+    } else if (match.specificity === bestSpecificity && match.mediaParameterCount === bestMediaParameterCount) {
       bestQuality = Math.max(bestQuality, match.quality);
     }
   }

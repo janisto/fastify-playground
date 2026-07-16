@@ -64,6 +64,7 @@ describe("Content negotiation plugin", () => {
   it.each([
     ["application/json, application/cbor", "application/json"],
     ["*/*", "application/json"],
+    ["application/json; charset=utf-8", "application/json"],
     ["application/json;q=0.4, application/cbor;q=0.8", "application/cbor"],
   ])("selects the server policy for %s", async (accept, expected) => {
     const fastify = await buildServer();

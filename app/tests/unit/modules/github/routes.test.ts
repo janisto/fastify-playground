@@ -179,6 +179,7 @@ describe("GitHub routes", () => {
         },
       ],
       nextCursor: "abc123",
+      prevCursor: "previous123",
     });
 
     const fastify = Fastify();
@@ -194,7 +195,7 @@ describe("GitHub routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ activities: [{ actor: "user" }], count: 1 });
     expect(response.headers.link).toBe(
-      '</v1/github/repos/managed%20account/repo%23name/activity?cursor=abc123&limit=20>; rel="next"',
+      '</v1/github/repos/managed%20account/repo%23name/activity?cursor=abc123&limit=20>; rel="next", </v1/github/repos/managed%20account/repo%23name/activity?cursor=previous123&limit=20>; rel="prev"',
     );
     expect(spy).toHaveBeenCalledWith("managed account", "repo#name", { limit: 20 }, expect.any(AbortSignal));
 

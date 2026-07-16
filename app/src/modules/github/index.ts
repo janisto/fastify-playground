@@ -1,4 +1,4 @@
-export { type ActivityPage, GitHubClient, type GitHubClientOptions } from "./client.js";
+export { type ActivityCursor, type ActivityPage, GitHubClient, type GitHubClientOptions } from "./client.js";
 export {
   GITHUB_ERROR_FORBIDDEN,
   GITHUB_ERROR_NOT_FOUND,

@@ -136,8 +136,8 @@ describe("GitHubService", () => {
       );
     });
 
-    it("accepts cursor with matching type", async () => {
-      const validCursor = Buffer.from("gh-activity:cursor123").toString("base64url");
+    it("decodes a forward cursor for GitHub's after parameter", async () => {
+      const validCursor = Buffer.from("gh-activity-after:cursor123").toString("base64url");
 
       mockClient.listRepoActivity.mockResolvedValueOnce({
         activities: [],
@@ -147,7 +147,29 @@ describe("GitHubService", () => {
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       await service.listRepoActivity("octocat", "repo", { cursor: validCursor });
 
-      expect(mockClient.listRepoActivity).toHaveBeenCalledWith("octocat", "repo", 20, "cursor123", undefined);
+      expect(mockClient.listRepoActivity).toHaveBeenCalledWith(
+        "octocat",
+        "repo",
+        20,
+        { direction: "after", value: "cursor123" },
+        undefined,
+      );
+    });
+
+    it("decodes a backward cursor for GitHub's before parameter", async () => {
+      const validCursor = Buffer.from("gh-activity-before:cursor456").toString("base64url");
+      mockClient.listRepoActivity.mockResolvedValueOnce({ activities: [], nextCursor: null, prevCursor: null });
+
+      const service = new GitHubService(mockClient as unknown as GitHubClient);
+      await service.listRepoActivity("octocat", "repo", { cursor: validCursor });
+
+      expect(mockClient.listRepoActivity).toHaveBeenCalledWith(
+        "octocat",
+        "repo",
+        20,
+        { direction: "before", value: "cursor456" },
+        undefined,
+      );
     });
 
     it("returns paginated activities with cursor", async () => {
@@ -163,13 +185,15 @@ describe("GitHubService", () => {
           },
         ],
         nextCursor: "cursor123",
+        prevCursor: "cursor456",
       });
 
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       const result = await service.listRepoActivity("octocat", "repo");
 
       expect(result.items).toHaveLength(1);
-      expect(result.nextCursor).toBe("Z2gtYWN0aXZpdHk6Y3Vyc29yMTIz");
+      expect(result.nextCursor).toBe("Z2gtYWN0aXZpdHktYWZ0ZXI6Y3Vyc29yMTIz");
+      expect(result.prevCursor).toBe("Z2gtYWN0aXZpdHktYmVmb3JlOmN1cnNvcjQ1Ng");
     });
 
     it("returns undefined nextCursor when no more pages", async () => {

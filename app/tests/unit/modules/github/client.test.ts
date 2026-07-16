@@ -268,7 +268,7 @@ describe("GitHubClient", () => {
   });
 
   describe("listRepoActivity", () => {
-    it("parses Link header for pagination cursor", async () => {
+    it("parses both directions from a pagination Link header", async () => {
       mockPool.intercept({ path: /\/repos\/octocat\/repo\/activity/, method: "GET" }).reply(
         200,
         [
@@ -282,7 +282,7 @@ describe("GitHubClient", () => {
         ],
         {
           headers: {
-            Link: '<https://api.github.com/repos/octocat/repo/activity?after=cursor123>; rel="next"',
+            Link: '<https://api.github.com/repos/octocat/repo/activity?after=cursor123>; rel="next", <https://api.github.com/repos/octocat/repo/activity?before=cursor456>; rel="prev"',
           },
         },
       );
@@ -291,6 +291,7 @@ describe("GitHubClient", () => {
       const result = await client.listRepoActivity("octocat", "repo");
 
       expect(result.nextCursor).toBe("cursor123");
+      expect(result.prevCursor).toBe("cursor456");
       expect(result.activities).toHaveLength(1);
     });
 
@@ -342,7 +343,7 @@ describe("GitHubClient", () => {
       });
     });
 
-    it("includes afterCursor in URL when provided", async () => {
+    it("uses the after parameter for a forward cursor", async () => {
       mockPool
         .intercept({
           path: /\/repos\/octocat\/repo\/activity\?.*per_page=20.*after=abc123|\/repos\/octocat\/repo\/activity\?.*after=abc123.*per_page=20/,
@@ -351,7 +352,19 @@ describe("GitHubClient", () => {
         .reply(200, []);
 
       const client = new GitHubClient({ dispatcher: mockAgent });
-      await client.listRepoActivity("octocat", "repo", 20, "abc123");
+      await client.listRepoActivity("octocat", "repo", 20, { direction: "after", value: "abc123" });
+    });
+
+    it("uses the before parameter for a backward cursor", async () => {
+      mockPool
+        .intercept({
+          path: /\/repos\/octocat\/repo\/activity\?.*per_page=20.*before=abc123|\/repos\/octocat\/repo\/activity\?.*before=abc123.*per_page=20/,
+          method: "GET",
+        })
+        .reply(200, []);
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+      await client.listRepoActivity("octocat", "repo", 20, { direction: "before", value: "abc123" });
     });
 
     it("returns null cursor when Link header has malformed URL", async () => {

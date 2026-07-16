@@ -428,6 +428,36 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
+  it("documents GitHub validation failures and rejects them before calling the service", async () => {
+    const { GitHubService } = await import("../../src/modules/github/service.js");
+    const listActivity = vi.spyOn(GitHubService.prototype, "listRepoActivity");
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const invalid = await fastify.inject({
+      method: "GET",
+      url: "/v1/github/repos/octocat/git-consortium/activity?limit=101",
+    });
+    const document = await fastify.inject({ method: "GET", url: "/api-docs/json" }).then((response) => response.json());
+    const githubOperations = Object.entries(document.paths)
+      .filter(([path]) => path.startsWith("/v1/github/"))
+      .flatMap(([, pathItem]) => Object.values(pathItem as Record<string, unknown>))
+      .filter(
+        (operation): operation is { responses: Record<string, unknown> } =>
+          typeof operation === "object" && operation !== null && "responses" in operation,
+      );
+
+    expect(invalid.statusCode).toBe(422);
+    expect(invalid.headers["content-type"]).toContain("application/problem+json");
+    expect(invalid.json()).toMatchObject({ status: 422, detail: "validation failed" });
+    expect(listActivity).not.toHaveBeenCalled();
+    expect(githubOperations).toHaveLength(6);
+    for (const operation of githubOperations) {
+      expect(operation.responses).toHaveProperty("422");
+    }
+    await fastify.close();
+  });
+
   it("publishes a deployment-neutral, uniquely identified OpenAPI contract", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
