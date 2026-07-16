@@ -2,8 +2,11 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    globals: true,
     environment: "node",
+    env: {
+      CORS_ORIGINS: "http://localhost:3000",
+      LOG_LEVEL: "silent",
+    },
 
     // Test file patterns per guidelines
     include: ["tests/**/*.test.ts"],
@@ -30,24 +33,17 @@ export default defineConfig({
       reporter: ["text", "json", "json-summary", "html", "lcov"],
       reportsDirectory: "./coverage",
 
-      // Thresholds per guidelines (70%+ overall)
+      // Enforce meaningful global coverage across the full test suite.
       thresholds: {
-        lines: 70,
-        functions: 70,
-        branches: 70,
-        statements: 70,
-        perFile: false, // Enforce globally, not per-file
+        lines: 90,
+        functions: 90,
+        branches: 90,
+        statements: 90,
+        perFile: false,
       },
 
       // Exclude patterns
-      exclude: [
-        "**/coverage/**",
-        "**/dist/**",
-        "**/node_modules/**",
-        "**/tests/**",
-        "**/types/**",
-        "**/app.ts", // Entry point with AutoLoad, tested via integration
-      ],
+      exclude: ["**/coverage/**", "**/dist/**", "**/node_modules/**", "**/tests/**", "**/types/**"],
 
       // Include all source files
       include: ["src/**/*.ts"],

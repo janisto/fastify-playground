@@ -1,4 +1,4 @@
-name: App linting, typing, tests and coverage
+name: App typing, tests, coverage and container
 
 on:
   push:
@@ -6,18 +6,18 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  ci:
+  app:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      pull-requests: write
 
     defaults:
       run:
@@ -26,23 +26,33 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
 
-      - name: Use Node.js 24
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.0.9
+        with:
+          version: 11.13.0
+
+      - name: Use pinned Node.js
         uses: actions/setup-node@v7.0.0
         with:
-          cache-dependency-path: "app/package-lock.json"
-          node-version: 24
-          cache: "npm"
+          cache-dependency-path: "app/pnpm-lock.yaml"
+          node-version-file: ".node-version"
+          cache: "pnpm"
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
-      - name: Run build check
-        run: npm run build:check
+      - name: Typecheck source and tests
+        run: pnpm typecheck
+
+      - name: Build application
+        run: pnpm build
 
       - name: Run test coverage
         id: test-coverage
-        run: npm run test:coverage
+        run: pnpm test:coverage
 
       - name: Report coverage summary
         if: ${{ !cancelled() && steps.test-coverage.outcome != 'skipped' }}
@@ -57,3 +67,76 @@ jobs:
         with:
           name: app-coverage
           path: app/coverage
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build production image
+        run: docker build --tag fastify-playground:ci .
+
+      - name: Smoke startup, probes, and graceful shutdown
+        run: |
+          set -euo pipefail
+          container_id="$(docker run --detach --publish 127.0.0.1::8080 fastify-playground:ci)"
+          cleanup() {
+            docker logs "$container_id" || true
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          port="$(docker port "$container_id" 8080/tcp | sed 's/.*://')"
+          ready=false
+          for _attempt in $(seq 1 30); do
+            if curl --fail --silent "http://127.0.0.1:${port}/health" >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "Container did not become healthy" >&2
+            exit 1
+          fi
+
+          curl --fail --silent "http://127.0.0.1:${port}/health" | jq --exit-status '.status == "healthy"'
+          curl --fail --silent "http://127.0.0.1:${port}/status" | jq --exit-status '.status == "ready"'
+
+          docker stop --time 10 "$container_id" >/dev/null
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$container_id")" -eq 0
+          docker rm "$container_id" >/dev/null
+          trap - EXIT
+
+  ci:
+    if: ${{ always() }}
+    needs:
+      - app
+      - container
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions: {}
+
+    steps:
+      - name: Require application and container success
+        env:
+          APP_RESULT: ${{ needs.app.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+        run: |
+          if [[ "$APP_RESULT" != "success" || "$CONTAINER_RESULT" != "success" ]]; then
+            echo "Required job failed: app=$APP_RESULT container=$CONTAINER_RESULT" >&2
+            exit 1
+          fi

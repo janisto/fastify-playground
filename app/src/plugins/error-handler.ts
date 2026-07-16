@@ -3,11 +3,11 @@ import { encode as cborEncode } from "cbor2";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { env } from "../env.js";
-import { GitHubApiError, InvalidCursorError } from "../modules/github/errors.js";
-import { prefersCbor } from "../utils/cbor.js";
+import { GitHubApiError } from "../modules/github/errors.js";
+import { CBOR_MEDIA_TYPE, negotiateProblemMediaType, PROBLEM_JSON_MEDIA_TYPE } from "../utils/content-negotiation.js";
 import { addSchemaLinkHeader } from "../utils/link-header.js";
+import { InvalidCursorError } from "../utils/pagination.js";
 import type { SchemaValidationError } from "../utils/schema-error-formatter.js";
-import { buildSchemaUrl } from "../utils/schema-url.js";
 
 function determineStatusCode(error: FastifyError): number {
   if (error.validation) {
@@ -26,14 +26,6 @@ function determineErrorDetail(error: FastifyError, statusCode: number): string {
   return error.message;
 }
 
-function logError(request: FastifyRequest, error: Error, statusCode: number): void {
-  if (statusCode >= 500) {
-    request.log.error({ err: error, requestId: request.id }, "Server error");
-  } else {
-    request.log.warn({ err: error, requestId: request.id }, "Client error");
-  }
-}
-
 function mapGitHubErrorCode(code: string): number {
   switch (code) {
     case "github_not_found":
@@ -42,8 +34,25 @@ function mapGitHubErrorCode(code: string): number {
       return 429;
     case "github_forbidden":
       return 403;
+    case "github_timeout":
+      return 504;
     default:
       return 502;
+  }
+}
+
+function mapGitHubErrorDetail(code: string): string {
+  switch (code) {
+    case "github_not_found":
+      return "GitHub resource not found";
+    case "github_rate_limit":
+      return "GitHub API rate limit exceeded";
+    case "github_forbidden":
+      return "GitHub request forbidden";
+    case "github_timeout":
+      return "GitHub service timed out";
+    default:
+      return "GitHub service is unavailable";
   }
 }
 
@@ -53,38 +62,35 @@ function sendProblemDetails(
   statusCode: number,
   problemDetails: Record<string, unknown>,
 ): void {
-  reply.header("X-Request-ID", request.id);
-  reply.header("Vary", "Accept");
+  reply.header("Vary", ["Accept", "Origin"]);
+  if (statusCode === 503 && !reply.hasHeader("Retry-After")) {
+    reply.header("Retry-After", "10");
+  }
   addSchemaLinkHeader(reply, "ErrorModel");
 
-  if (prefersCbor(request.headers.accept)) {
+  if (negotiateProblemMediaType(request.headers.accept ?? "") === CBOR_MEDIA_TYPE) {
     reply
       .status(statusCode)
-      .type("application/problem+cbor")
+      .type(CBOR_MEDIA_TYPE)
       .send(Buffer.from(cborEncode(problemDetails)));
     return;
   }
-  reply.status(statusCode).type("application/problem+json").send(problemDetails);
+  reply.status(statusCode).type(PROBLEM_JSON_MEDIA_TYPE).send(problemDetails);
 }
 
 function handleGitHubApiError(error: Error, request: FastifyRequest, reply: FastifyReply): boolean {
   if (!(error instanceof GitHubApiError)) return false;
 
   const httpStatus = mapGitHubErrorCode(error.code);
-  const schemaUrl = buildSchemaUrl(request, "ErrorModel");
-
   if (error.retryAfter) {
     reply.header("Retry-After", error.retryAfter);
   }
 
-  logError(request, error, httpStatus);
-
   const problemDetails = {
-    $schema: schemaUrl,
     /* v8 ignore next -- @preserve */
     title: http.STATUS_CODES[httpStatus] || "Error",
     status: httpStatus,
-    detail: error.message,
+    detail: mapGitHubErrorDetail(error.code),
   };
 
   sendProblemDetails(request, reply, httpStatus, problemDetails);
@@ -95,12 +101,7 @@ function handleInvalidCursorError(error: Error, request: FastifyRequest, reply: 
   if (!(error instanceof InvalidCursorError)) return false;
 
   const httpStatus = 400;
-  const schemaUrl = buildSchemaUrl(request, "ErrorModel");
-
-  logError(request, error, httpStatus);
-
   const problemDetails = {
-    $schema: schemaUrl,
     title: "Bad Request",
     status: httpStatus,
     detail: error.message,
@@ -115,15 +116,14 @@ function handleInvalidCursorError(error: Error, request: FastifyRequest, reply: 
  *
  * This plugin sets up a global error handler that:
  * - Returns RFC 9457 Problem Details format for all errors
- * - Logs errors appropriately based on status code (error/warn)
+ * - Leaves generic error logging to the terminal observability access record
  * - Handles validation errors with structured errors array
- * - Supports CBOR content negotiation (application/problem+cbor)
+ * - Supports CBOR content negotiation with the registered application/cbor media type
  * - Hides internal details in production for 5xx errors
  *
  * RFC 9457 Problem Details response format:
  * ```json
  * {
- *   "$schema": "http://host/schemas/ProblemDetails.json",
  *   "title": "Not Found",
  *   "status": 404,
  *   "detail": "Error details here",
@@ -142,13 +142,9 @@ export default fp(
       if (handleInvalidCursorError(error, request, reply)) return;
 
       const statusCode = determineStatusCode(error);
-      const schemaUrl = buildSchemaUrl(request, "ErrorModel");
       const detail = determineErrorDetail(error, statusCode);
 
-      logError(request, error, statusCode);
-
       const problemDetails: Record<string, unknown> = {
-        $schema: schemaUrl,
         /* v8 ignore next -- @preserve */
         title: http.STATUS_CODES[statusCode] || "Error",
         status: statusCode,
@@ -157,44 +153,20 @@ export default fp(
 
       if (error.validation) {
         const validationError = error as unknown as SchemaValidationError;
-        problemDetails.errors = validationError.formattedErrors;
+        problemDetails["errors"] = validationError.formattedErrors;
       }
 
-      reply.header("X-Request-ID", request.id);
-      reply.header("Vary", "Accept");
-      addSchemaLinkHeader(reply, "ErrorModel");
-
-      if (prefersCbor(request.headers.accept)) {
-        return reply
-          .status(statusCode)
-          .type("application/problem+cbor")
-          .send(Buffer.from(cborEncode(problemDetails)));
-      }
-
-      return reply.status(statusCode).type("application/problem+json").send(problemDetails);
+      sendProblemDetails(request, reply, statusCode, problemDetails);
     });
 
     fastify.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
-      const schemaUrl = buildSchemaUrl(request, "ErrorModel");
       const problemDetails = {
-        $schema: schemaUrl,
         title: "Not Found",
         status: 404,
         detail: "resource not found",
       };
 
-      reply.header("X-Request-ID", request.id);
-      reply.header("Vary", "Accept");
-      addSchemaLinkHeader(reply, "ErrorModel");
-
-      if (prefersCbor(request.headers.accept)) {
-        return reply
-          .status(404)
-          .type("application/problem+cbor")
-          .send(Buffer.from(cborEncode(problemDetails)));
-      }
-
-      return reply.status(404).type("application/problem+json").send(problemDetails);
+      sendProblemDetails(request, reply, 404, problemDetails);
     });
   },
   {

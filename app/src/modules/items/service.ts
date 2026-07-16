@@ -1,4 +1,4 @@
-import { type Cursor, decodeCursor, encodeCursor } from "../../utils/pagination.js";
+import { type Cursor, decodeCursor, encodeCursor, InvalidCursorError } from "../../utils/pagination.js";
 import type { Category, Item } from "./schemas.js";
 
 const MOCK_ITEMS: Item[] = [
@@ -280,17 +280,17 @@ export interface ItemsListResult {
   items: Item[];
   total: number;
   nextCursor?: string;
-  prevCursor?: string;
+  prevCursor?: string | null;
 }
 
 export class ItemsService {
   validateCursor(encodedCursor: string | undefined): Cursor {
     const cursor = decodeCursor(encodedCursor);
     if (cursor === null) {
-      throw new Error("invalid cursor format");
+      throw new InvalidCursorError("invalid cursor format");
     }
     if (cursor.type && cursor.type !== CURSOR_TYPE) {
-      throw new Error("cursor type mismatch");
+      throw new InvalidCursorError("cursor type mismatch");
     }
     return cursor;
   }
@@ -307,8 +307,8 @@ export class ItemsService {
     return {
       items: pageItems,
       total: filtered.length,
-      nextCursor,
-      prevCursor,
+      ...(nextCursor ? { nextCursor } : {}),
+      ...(prevCursor !== undefined ? { prevCursor } : {}),
     };
   }
 
@@ -318,7 +318,7 @@ export class ItemsService {
     }
     const cursorIndex = items.findIndex((item) => item.id === cursor.value);
     if (cursorIndex === -1) {
-      throw new Error("cursor references unknown item");
+      throw new InvalidCursorError("cursor references unknown item");
     }
     return cursorIndex + 1;
   }
@@ -328,14 +328,20 @@ export class ItemsService {
     pageItems: Item[],
     startIndex: number,
     limit: number,
-  ): { nextCursor: string | undefined; prevCursor: string | undefined } {
+  ): { nextCursor: string | undefined; prevCursor: string | null | undefined } {
     const hasNext = startIndex + limit < items.length;
     const hasPrev = startIndex > 0;
 
-    const nextCursor = hasNext
-      ? encodeCursor({ type: CURSOR_TYPE, value: pageItems[pageItems.length - 1].id })
+    const lastPageItem = pageItems.at(-1);
+    const previousPageCursorIndex = startIndex - limit - 1;
+    const previousPageCursorItem = previousPageCursorIndex >= 0 ? items.at(previousPageCursorIndex) : undefined;
+    const nextCursor =
+      hasNext && lastPageItem ? encodeCursor({ type: CURSOR_TYPE, value: lastPageItem.id }) : undefined;
+    const prevCursor = hasPrev
+      ? previousPageCursorItem
+        ? encodeCursor({ type: CURSOR_TYPE, value: previousPageCursorItem.id })
+        : null
       : undefined;
-    const prevCursor = hasPrev ? encodeCursor({ type: CURSOR_TYPE, value: items[startIndex - 1].id }) : undefined;
 
     return { nextCursor, prevCursor };
   }

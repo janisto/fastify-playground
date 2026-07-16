@@ -34,7 +34,6 @@ export const ItemsQuerySchema = Type.Intersect([
 
 export const ItemsResponseSchema = Type.Object(
   {
-    $schema: Type.Optional(Type.String()),
     items: Type.Array(ItemSchema),
     total: Type.Integer(),
   },

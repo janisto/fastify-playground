@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fastify Endpoint"
+  short_description: "Build project-standard Fastify endpoints"
+  default_prompt: "Use $fastify-endpoint to implement and test the requested Fastify endpoint with the repository routing, schema, OpenAPI, and response conventions."

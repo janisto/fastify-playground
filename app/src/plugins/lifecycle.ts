@@ -4,42 +4,34 @@ declare module "fastify" {
   interface FastifyInstance {
     isShuttingDown: boolean;
   }
+
+  interface FastifyContextConfig {
+    allowDuringShutdown?: boolean;
+  }
 }
 
-/**
- * Lifecycle hooks plugin for Fastify.
- *
- * This plugin sets up:
- * - Graceful shutdown handlers for SIGTERM and SIGINT signals
- * - `isShuttingDown` decorator to track shutdown state
- * - onReady hook for initialization logging
- * - onListen hook for server startup logging
- * - onClose hook for cleanup operations
- *
- * Graceful shutdown ensures:
- * - All in-flight requests complete before shutdown
- * - Resources are properly cleaned up
- * - Process exits with appropriate exit code
- *
- * @see https://fastify.dev/docs/latest/Reference/Hooks/#application-lifecycle-hooks
- */
+/** Tracks application lifecycle state and emits application-owned lifecycle records. */
 export default fp(
   async (fastify) => {
-    // Decorate with shutdown state
     fastify.decorate("isShuttingDown", false);
 
-    // onReady: Triggered before server starts listening
+    fastify.addHook("onRequest", async (request, reply) => {
+      if (!fastify.isShuttingDown || request.routeOptions.config.allowDuringShutdown === true) return;
+
+      reply.header("Retry-After", "10");
+      throw fastify.httpErrors.serviceUnavailable("Service is shutting down");
+    });
+
     fastify.addHook("onReady", async () => {
       fastify.log.info("Server is ready and initialized");
     });
 
-    // onListen: Triggered when server starts listening
-    /* v8 ignore start -- @preserve */
+    /* v8 ignore start -- requires a real listening socket; covered by container smoke tests -- @preserve */
     fastify.addHook("onListen", async () => {
       fastify.log.info(
         {
           address: fastify.server.address(),
-          nodeVersion: process.version,
+          node_version: process.version,
           pid: process.pid,
         },
         "Server listening",
@@ -47,55 +39,17 @@ export default fp(
     });
     /* v8 ignore stop -- @preserve */
 
-    // onClose: Triggered when fastify.close() is called
-    fastify.addHook("onClose", async (instance) => {
-      instance.log.info("Server closing, cleaning up resources...");
-      // Add cleanup logic here:
-      // - Close database connections
-      // - Close message queue connections
-      // - Flush logs
-      // - Clear caches
-    });
-
-    // Graceful shutdown handler
-    /* v8 ignore next -- @preserve */
-    const closeGracefully = async (signal: string) => {
-      fastify.log.info(`Received ${signal}, shutting down gracefully`);
+    fastify.addHook("preClose", async () => {
       fastify.isShuttingDown = true;
-
-      try {
-        // Close the server and trigger onClose hooks
-        await fastify.close();
-        fastify.log.info("Server closed successfully");
-        process.exit(0);
-      } catch (error) {
-        fastify.log.error(error, "Error during graceful shutdown");
-        process.exit(1);
-      }
-    };
-
-    // Register signal handlers for graceful shutdown - Process signal handlers cannot be reliably tested
-    /* v8 ignore next -- @preserve */
-    process.on("SIGTERM", () => closeGracefully("SIGTERM"));
-    /* v8 ignore next -- @preserve */
-    process.on("SIGINT", () => closeGracefully("SIGINT"));
-
-    // Handle uncaught exceptions
-    /* v8 ignore next -- @preserve */
-    process.on("uncaughtException", (error) => {
-      fastify.log.fatal(error, "Uncaught exception");
-      void closeGracefully("uncaughtException");
     });
 
-    // Handle unhandled promise rejections
-    /* v8 ignore next -- @preserve */
-    process.on("unhandledRejection", (reason, promise) => {
-      fastify.log.fatal({ reason, promise }, "Unhandled promise rejection");
-      void closeGracefully("unhandledRejection");
+    fastify.addHook("onClose", async (instance) => {
+      instance.log.info("Server closing, cleaning up resources");
     });
   },
   {
     name: "lifecycle",
     fastify: "5.x",
+    dependencies: ["sensible"],
   },
 );

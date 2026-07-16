@@ -1,10 +1,6 @@
-import { Buffer } from "node:buffer";
-import { decode as cborDecode, encode as cborEncode } from "cbor2";
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest, RouteOptions } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest, RouteOptions } from "fastify";
 import fp from "fastify-plugin";
-import { isCborContentType } from "../utils/cbor.js";
 import { addSchemaLinkHeader } from "../utils/link-header.js";
-import { buildSchemaUrl } from "../utils/schema-url.js";
 
 interface SchemaWithId {
   $ref?: string;
@@ -25,24 +21,17 @@ function getSchemaName(request: FastifyRequest, statusCode: number): string | un
   return undefined;
 }
 
-function checkCborContentType(reply: FastifyReply): boolean {
-  const contentType = reply.getHeader("content-type");
-  /* v8 ignore next -- @preserve */
-  const ct = typeof contentType === "string" ? contentType : contentType ? String(contentType) : undefined;
-  return isCborContentType(ct);
-}
-
 /**
  * Schema Discovery Plugin
  *
- * Adds JSON Schema discovery headers and `$schema` field to responses:
- * - Adds `Link` header with `rel="describedBy"` pointing to schema endpoint
- * - Adds `$schema` field to JSON and CBOR response bodies
+ * Adds a `Link` header with `rel="describedBy"` pointing to the response schema.
  *
  * Only applies to successful responses (< 400 status code).
  * Error responses are handled by the error handler plugin.
  *
- * @see https://json-schema.org/draft/2020-12/json-schema-core.html#name-the-schema-keyword
+ * Response instances are not JSON Schema documents, so they do not receive a `$schema` property.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc8288.html
  */
 const schemaDiscoveryPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onSend", async (request, reply, payload) => {
@@ -52,30 +41,6 @@ const schemaDiscoveryPlugin: FastifyPluginAsync = async (fastify) => {
     if (!schemaName) return payload;
 
     addSchemaLinkHeader(reply, schemaName);
-
-    const schemaUrl = buildSchemaUrl(request, schemaName);
-
-    if (Buffer.isBuffer(payload) && checkCborContentType(reply)) {
-      try {
-        const body = cborDecode(new Uint8Array(payload)) as Record<string, unknown>;
-        body.$schema = schemaUrl;
-        return Buffer.from(cborEncode(body));
-      } catch {
-        return payload;
-      }
-    }
-
-    if (typeof payload === "string") {
-      try {
-        const body = JSON.parse(payload) as Record<string, unknown>;
-        body.$schema = schemaUrl;
-        return JSON.stringify(body);
-        /* v8 ignore next 2 -- @preserve */
-      } catch {
-        return payload;
-      }
-    }
-
     return payload;
   });
 };

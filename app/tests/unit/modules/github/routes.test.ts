@@ -34,7 +34,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -44,7 +44,40 @@ describe("GitHub routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ login: "octocat" });
+    expect(spy).toHaveBeenCalledWith("octocat", expect.any(AbortSignal));
 
+    await fastify.close();
+  });
+
+  it("passes an unconventional account name upstream instead of guessing GitHub naming policy", async () => {
+    const spy = vi.spyOn(githubService.GitHubService.prototype, "getOwner");
+    spy.mockResolvedValueOnce({
+      login: "managed_account",
+      id: 1,
+      avatarUrl: "https://example.com/avatar",
+      htmlUrl: "https://github.com/managed_account",
+      type: "User",
+      name: null,
+      company: null,
+      blog: null,
+      location: null,
+      bio: null,
+      publicRepos: 0,
+      followers: 0,
+      following: 0,
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    });
+
+    const fastify = Fastify();
+    const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
+    fastify.register(githubRoutes);
+    await fastify.ready();
+
+    const response = await fastify.inject({ method: "GET", url: "/owners/managed_account" });
+
+    expect(response.statusCode).toBe(200);
+    expect(spy).toHaveBeenCalledWith("managed_account", expect.any(AbortSignal));
     await fastify.close();
   });
 
@@ -75,7 +108,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -118,7 +151,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -146,21 +179,25 @@ describe("GitHub routes", () => {
         },
       ],
       nextCursor: "abc123",
+      prevCursor: "previous123",
     });
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
       method: "GET",
-      url: "/repos/octocat/Hello-World/activity",
+      url: "/repos/managed%20account/repo%23name/activity",
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ activities: [{ actor: "user" }], count: 1 });
-    expect(response.headers.link).toContain('rel="next"');
+    expect(response.headers.link).toBe(
+      '</v1/github/repos/managed%20account/repo%23name/activity?cursor=abc123&limit=20>; rel="next", </v1/github/repos/managed%20account/repo%23name/activity?cursor=previous123&limit=20>; rel="prev"',
+    );
+    expect(spy).toHaveBeenCalledWith("managed account", "repo#name", { limit: 20 }, expect.any(AbortSignal));
 
     await fastify.close();
   });
@@ -178,12 +215,11 @@ describe("GitHub routes", () => {
           actorAvatarUrl: "https://example.com/avatar",
         },
       ],
-      nextCursor: undefined,
     });
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -209,7 +245,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({
@@ -240,7 +276,7 @@ describe("GitHub routes", () => {
 
     const fastify = Fastify();
     const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
-    await fastify.register(githubRoutes);
+    fastify.register(githubRoutes);
     await fastify.ready();
 
     const response = await fastify.inject({

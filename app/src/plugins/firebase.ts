@@ -1,82 +1,38 @@
+import { randomUUID } from "node:crypto";
 import fp from "fastify-plugin";
-import type { App, ServiceAccount } from "firebase-admin/app";
-import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import type { Auth } from "firebase-admin/auth";
 import { getAuth } from "firebase-admin/auth";
-import type { Firestore } from "firebase-admin/firestore";
-import { getFirestore } from "firebase-admin/firestore";
+
+const DEFAULT_FIREBASE_APP = "[DEFAULT]";
+const OWNED_FIREBASE_APP_PREFIX = "fastify-playground-";
 
 declare module "fastify" {
   interface FastifyInstance {
-    firebase: App;
     firebaseAuth: Auth;
-    firestore: Firestore;
   }
 }
 
-/**
- * Firebase Admin SDK plugin for Fastify.
- *
- * This plugin initializes the Firebase Admin SDK and provides access to:
- * - `fastify.firebase` - The Firebase App instance
- * - `fastify.firebaseAuth` - Firebase Authentication service
- * - `fastify.firestore` - Cloud Firestore database service
- *
- * Credentials are loaded via Application Default Credentials (ADC):
- * - In production (Cloud Run, GCE): Automatically uses the service account
- * - In development: Uses GOOGLE_APPLICATION_CREDENTIALS env var or emulators
- *
- * Environment variables for emulators:
- * - FIRESTORE_EMULATOR_HOST - Firestore emulator (e.g., "localhost:8080")
- * - FIREBASE_AUTH_EMULATOR_HOST - Auth emulator (e.g., "localhost:9099")
- *
- * @see https://firebase.google.com/docs/admin/setup
- */
+/** Provides a Firebase Auth client backed by Application Default Credentials. */
 export default fp(
   async (fastify) => {
-    let app: App;
+    const existingApp = getApps().find((candidate) => candidate.name === DEFAULT_FIREBASE_APP);
+    const ownsApp = existingApp === undefined;
+    const app = existingApp ?? initializeApp(undefined, `${OWNED_FIREBASE_APP_PREFIX}${randomUUID()}`);
 
-    // Check if Firebase app is already initialized (prevents re-initialization in tests)
-    const existingApps = getApps();
-    if (existingApps.length > 0) {
-      app = existingApps[0];
-      fastify.log.debug("Using existing Firebase app instance");
+    if (ownsApp) {
+      fastify.log.info({ firebase_app_name: app.name }, "Firebase Admin SDK initialized");
     } else {
-      // Initialize with ADC (Application Default Credentials)
-      // In Cloud Run / GCE, this uses the service account automatically
-      // Locally, set GOOGLE_APPLICATION_CREDENTIALS or use emulators
-      /* v8 ignore start -- @preserve */
-      const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      if (serviceAccountPath) {
-        // Dynamic import for service account file
-        const { default: serviceAccount } = (await import(serviceAccountPath, { with: { type: "json" } })) as {
-          default: ServiceAccount;
-        };
-        app = initializeApp({
-          credential: cert(serviceAccount),
-        });
-        fastify.log.info("Firebase Admin SDK initialized with service account");
-      } else {
-        // Use ADC (works in Cloud Run, GCE, or with emulators)
-        app = initializeApp();
-        fastify.log.info("Firebase Admin SDK initialized with Application Default Credentials");
-      }
-      /* v8 ignore stop -- @preserve */
+      fastify.log.debug("Using existing default Firebase app instance");
     }
 
-    const auth = getAuth(app);
-    const firestore = getFirestore(app);
-
-    // Decorate Fastify instance
-    fastify.decorate("firebase", app);
-    fastify.decorate("firebaseAuth", auth);
-    fastify.decorate("firestore", firestore);
-
-    // Cleanup on close
-    fastify.addHook("onClose", async (instance) => {
-      instance.log.info("Closing Firestore connection...");
-      await firestore.terminate();
+    fastify.addHook("onClose", async () => {
+      if (!ownsApp) return;
+      await deleteApp(app);
+      fastify.log.info("Firebase Admin SDK resources closed");
     });
+
+    fastify.decorate("firebaseAuth", getAuth(app));
   },
   {
     name: "firebase",

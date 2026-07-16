@@ -25,7 +25,7 @@ coverage
 
 # Logs
 *.log
-npm-debug.log*
+pnpm-debug.log*
 
 # Development config (not needed at runtime)
 vitest.config.ts

@@ -27,13 +27,14 @@ const CONTEXT_TO_PREFIX: Record<string, string> = {
 };
 
 function buildLocation(instancePath: string, dataVar: string): string {
-  const prefix = CONTEXT_TO_PREFIX[dataVar] || dataVar;
+  const prefix = CONTEXT_TO_PREFIX[dataVar] ?? dataVar;
   const fieldPath = instancePath ? instancePath.replace(/^\//, "").replace(/\//g, ".") : "";
   return fieldPath ? `${prefix}.${fieldPath}` : prefix;
 }
 
 function buildMessage(error: FastifySchemaValidationError): string {
-  return error.message || "validation failed";
+  if (!error.message) return "validation failed";
+  return error.message;
 }
 
 function formatErrors(errors: FastifySchemaValidationError[], dataVar: string): FormattedValidationError[] {

@@ -15,9 +15,9 @@ describe("hello routes", () => {
 
   beforeEach(async () => {
     fastify = createFastify();
-    await fastify.register(sensible);
-    await fastify.register(errorHandler);
-    await fastify.register(helloRoutes);
+    fastify.register(sensible);
+    fastify.register(errorHandler);
+    fastify.register(helloRoutes);
     await fastify.ready();
   });
 

@@ -16,7 +16,7 @@ interface SchemaWithId {
  */
 const swaggerPlugin = fp(
   async (fastify) => {
-    await fastify.register(fastifySwagger, {
+    fastify.register(fastifySwagger, {
       openapi: {
         openapi: "3.1.0",
         info: { title: "Test API", version: "1.0.0" },
@@ -38,24 +38,15 @@ const swaggerPlugin = fp(
 async function createTestApp() {
   const fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler).withTypeProvider<TypeBoxTypeProvider>();
 
-  await fastify.register(sensible);
-  await fastify.register(swaggerPlugin);
+  fastify.register(sensible);
+  fastify.register(swaggerPlugin);
 
   return fastify;
 }
 
 describe("GET /schemas/:schemaName", () => {
-  describe("Route Registration", () => {
-    it("should register the route successfully", async () => {
-      const fastify = await createTestApp();
-      await fastify.register(schemasRoutes);
-      await fastify.ready();
-      await fastify.close();
-    });
-  });
-
   describe("Schema Retrieval", () => {
-    it("should return schema JSON for valid schema name", async () => {
+    it("returns schema JSON for valid schema name", async () => {
       const fastify = await createTestApp();
 
       const TestSchema = Type.Object(
@@ -80,7 +71,7 @@ describe("GET /schemas/:schemaName", () => {
         async () => ({ id: "1", name: "Test" }),
       );
 
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -92,16 +83,38 @@ describe("GET /schemas/:schemaName", () => {
       expect(response.headers["content-type"]).toContain("application/schema+json");
 
       const body = response.json();
+      expect(body.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
       expect(body.type).toBe("object");
-      expect(body.properties.id).toBeDefined();
-      expect(body.properties.name).toBeDefined();
+      expect(body.properties).toMatchObject({ id: { type: "string" }, name: { type: "string" } });
 
       await fastify.close();
     });
 
-    it("should return 404 for non-existent schema", async () => {
+    it("rewrite component references into standalone definitions", async () => {
       const fastify = await createTestApp();
-      await fastify.register(schemasRoutes);
+      const ChildSchema = Type.Object({ id: Type.String() }, { $id: "ChildSchema" });
+      const ParentSchema = Type.Object({ child: Type.Ref("ChildSchema") }, { $id: "ParentSchema" });
+      fastify.addSchema(ChildSchema);
+      fastify.addSchema(ParentSchema);
+      fastify.get("/parent", { schema: { response: { 200: { $ref: "ParentSchema#" } } } }, async () => ({
+        child: { id: "child-1" },
+      }));
+      fastify.register(schemasRoutes);
+      await fastify.ready();
+
+      const response = await fastify.inject({ method: "GET", url: "/schemas/ParentSchema.json" });
+      const body = response.json();
+
+      expect(response.statusCode).toBe(200);
+      expect(body.properties.child.$ref).toBe("#/$defs/ChildSchema");
+      expect(body.$defs.ChildSchema.properties.id.type).toBe("string");
+      expect(JSON.stringify(body)).not.toContain("#/components/schemas/");
+      await fastify.close();
+    });
+
+    it("returns 404 for non-existent schema", async () => {
+      const fastify = await createTestApp();
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -114,9 +127,9 @@ describe("GET /schemas/:schemaName", () => {
       await fastify.close();
     });
 
-    it("should return 400 for invalid schema name format", async () => {
+    it("returns 400 for invalid schema name format", async () => {
       const fastify = await createTestApp();
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -129,9 +142,9 @@ describe("GET /schemas/:schemaName", () => {
       await fastify.close();
     });
 
-    it("should return 400 for schema name with special characters", async () => {
+    it("returns 400 for schema name with special characters", async () => {
       const fastify = await createTestApp();
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -144,9 +157,9 @@ describe("GET /schemas/:schemaName", () => {
       await fastify.close();
     });
 
-    it("should return 400 for schema name starting with number", async () => {
+    it("returns 400 for schema name starting with number", async () => {
       const fastify = await createTestApp();
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -161,7 +174,7 @@ describe("GET /schemas/:schemaName", () => {
   });
 
   describe("Content-Type Header", () => {
-    it("should return application/schema+json content type", async () => {
+    it("returns application/schema+json content type", async () => {
       const fastify = await createTestApp();
 
       const TestSchema = Type.Object(
@@ -185,7 +198,7 @@ describe("GET /schemas/:schemaName", () => {
         async () => ({ data: "test" }),
       );
 
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -201,7 +214,7 @@ describe("GET /schemas/:schemaName", () => {
   });
 
   describe("Multiple Schemas", () => {
-    it("should return correct schema when multiple schemas are registered", async () => {
+    it("returns correct schema when multiple schemas are registered", async () => {
       const fastify = await createTestApp();
 
       const UserSchema = Type.Object(
@@ -247,7 +260,7 @@ describe("GET /schemas/:schemaName", () => {
         async () => ({ productId: "1", price: 100 }),
       );
 
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const userResponse = await fastify.inject({
@@ -258,7 +271,7 @@ describe("GET /schemas/:schemaName", () => {
       expect(userResponse.statusCode).toBe(200);
       const userBody = userResponse.json();
       expect(userBody.type).toBe("object");
-      expect(userBody.properties.userId).toBeDefined();
+      expect(userBody.properties.userId).toMatchObject({ type: "string" });
 
       const productResponse = await fastify.inject({
         method: "GET",
@@ -268,14 +281,14 @@ describe("GET /schemas/:schemaName", () => {
       expect(productResponse.statusCode).toBe(200);
       const productBody = productResponse.json();
       expect(productBody.type).toBe("object");
-      expect(productBody.properties.productId).toBeDefined();
+      expect(productBody.properties.productId).toMatchObject({ type: "string" });
 
       await fastify.close();
     });
   });
 
   describe("Schema Name Validation", () => {
-    it("should accept schema name with numbers after first letter", async () => {
+    it("accepts schema name with numbers after first letter", async () => {
       const fastify = await createTestApp();
 
       const TestSchema = Type.Object(
@@ -299,7 +312,7 @@ describe("GET /schemas/:schemaName", () => {
         async () => ({ value: "test" }),
       );
 
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -313,7 +326,7 @@ describe("GET /schemas/:schemaName", () => {
       await fastify.close();
     });
 
-    it("should accept PascalCase schema names", async () => {
+    it("accepts PascalCase schema names", async () => {
       const fastify = await createTestApp();
 
       const TestSchema = Type.Object(
@@ -337,7 +350,7 @@ describe("GET /schemas/:schemaName", () => {
         async () => ({ value: "test" }),
       );
 
-      await fastify.register(schemasRoutes);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       const response = await fastify.inject({
@@ -353,7 +366,7 @@ describe("GET /schemas/:schemaName", () => {
   });
 
   describe("Empty Schemas Handling", () => {
-    it("should handle missing components.schemas gracefully", async () => {
+    it("handles missing components.schemas gracefully", async () => {
       const fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler).withTypeProvider<TypeBoxTypeProvider>();
 
       // Register minimal swagger without any schemas
@@ -369,9 +382,9 @@ describe("GET /schemas/:schemaName", () => {
         { name: "swagger" },
       );
 
-      await fastify.register(sensible);
-      await fastify.register(minimalSwagger);
-      await fastify.register(schemasRoutes);
+      fastify.register(sensible);
+      fastify.register(minimalSwagger);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
       // Request a non-existent schema when components.schemas is empty/undefined
@@ -385,7 +398,7 @@ describe("GET /schemas/:schemaName", () => {
       await fastify.close();
     });
 
-    it("should handle undefined components object from swagger", async () => {
+    it("handles undefined components object from swagger", async () => {
       const fastify = Fastify().setValidatorCompiler(TypeBoxValidatorCompiler).withTypeProvider<TypeBoxTypeProvider>();
 
       // Create a mock swagger that returns an OpenAPI doc without components
@@ -401,12 +414,12 @@ describe("GET /schemas/:schemaName", () => {
         { name: "swagger" },
       );
 
-      await fastify.register(sensible);
-      await fastify.register(mockSwagger);
-      await fastify.register(schemasRoutes);
+      fastify.register(sensible);
+      fastify.register(mockSwagger);
+      fastify.register(schemasRoutes);
       await fastify.ready();
 
-      // Request any schema - should return 404 since there are no schemas
+      // No OpenAPI component schemas are available.
       const response = await fastify.inject({
         method: "GET",
         url: "/schemas/AnySchema.json",

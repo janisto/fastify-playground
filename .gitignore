@@ -1,5 +1,7 @@
 # mac files
 .DS_Store
+
+# Local planning files
 plans/
 
 # Environment variables
@@ -10,4 +12,7 @@ plans/
 # Logs
 logs
 *.log
-npm-debug.log*
+pnpm-debug.log*
+
+# Package manager cache
+/.pnpm-store/

@@ -10,12 +10,9 @@ const ErrorDetailSchema = Type.Object({
 
 export const ErrorModelSchema = Type.Object(
   {
-    $schema: Type.Optional(
-      Type.String({ format: "uri", readOnly: true, description: "A URL to the JSON Schema for this object." }),
-    ),
     type: Type.Optional(
       Type.String({
-        format: "uri",
+        format: "uri-reference",
         default: "about:blank",
         description: "A URI reference to human-readable documentation for the error.",
       }),
@@ -27,7 +24,7 @@ export const ErrorModelSchema = Type.Object(
     ),
     instance: Type.Optional(
       Type.String({
-        format: "uri",
+        format: "uri-reference",
         description: "A URI reference that identifies the specific occurrence of the problem.",
       }),
     ),

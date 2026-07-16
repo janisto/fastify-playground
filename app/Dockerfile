@@ -3,18 +3,9 @@
 #
 # Uses multi-stage build with official Node.js and distroless images.
 # See: https://docs.docker.com/language/nodejs/build-images/
-#
-# Cloud Run automatic base image updates:
-# Deploy with automatic base image updates so Google can patch the base without a rebuild:
-#   gcloud run deploy fastify-playground \
-#     --image REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest \
-#     --platform managed \
-#     --region REGION \
-#     --base-image nodejs24 \
-#     --automatic-updates
 
 # Builder image: includes Node.js toolchain for compilation
-ARG NODE_IMAGE=node:24-trixie-slim
+ARG NODE_IMAGE=node:24.18.0-trixie-slim
 # Runtime image: minimal distroless Node.js image (no shell, no package manager)
 ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot
 # Build arguments for version injection
@@ -24,18 +15,18 @@ FROM ${NODE_IMAGE} AS builder
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
-# Uses bind mounts for package files and cache mount for npm cache
-RUN --mount=type=cache,target=/root/.npm \
-    --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=package-lock.json,target=package-lock.json \
-    npm ci --ignore-scripts
+# Install dependencies first for layer caching.
+RUN corepack enable && corepack install --global pnpm@11.13.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY . .
 
 # Build TypeScript to JavaScript
-RUN npm run build
+RUN pnpm build
 
 # Production dependencies stage: install only production deps
 FROM ${NODE_IMAGE} AS deps
@@ -43,10 +34,11 @@ FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
 # Install production dependencies only
-RUN --mount=type=cache,target=/root/.npm \
-    --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=package-lock.json,target=package-lock.json \
-    npm ci --omit=dev --ignore-scripts
+RUN corepack enable && corepack install --global pnpm@11.13.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm install --prod --frozen-lockfile
 
 # Runtime stage: uses minimal distroless image
 FROM ${RUNTIME_IMAGE} AS runtime
@@ -80,4 +72,4 @@ EXPOSE 8080
 
 # Run the application (exec form for proper signal handling)
 # Distroless nodejs images have Node.js as the entrypoint
-CMD ["dist/app.js"]
+CMD ["dist/server.js"]

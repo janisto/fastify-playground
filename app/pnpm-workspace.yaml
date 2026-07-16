@@ -1,0 +1,8 @@
+autoInstallPeers: false
+allowBuilds:
+  '@firebase/util': true
+  esbuild: true
+  protobufjs: false
+minimumReleaseAgeExclude:
+  - '@fastify/swagger@9.8.1'
+  - fastify-observability@0.2.1

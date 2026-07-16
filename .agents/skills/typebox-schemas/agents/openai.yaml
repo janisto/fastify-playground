@@ -1,0 +1,4 @@
+interface:
+  display_name: "TypeBox Schemas"
+  short_description: "Define and verify project TypeBox schemas"
+  default_prompt: "Use $typebox-schemas to implement and test the requested TypeBox route, response, or environment schema."

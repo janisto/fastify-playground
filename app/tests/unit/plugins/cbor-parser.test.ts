@@ -5,9 +5,9 @@ import cborParser from "../../../src/plugins/cbor-parser.js";
 
 describe("CBOR Parser Plugin", () => {
   describe("Plugin Registration", () => {
-    it("should register content type parser for application/cbor", async () => {
+    it("registers content type parser for application/cbor", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -31,9 +31,9 @@ describe("CBOR Parser Plugin", () => {
   });
 
   describe("Valid CBOR Parsing", () => {
-    it("should parse valid CBOR object", async () => {
+    it("parses valid CBOR object", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -55,9 +55,9 @@ describe("CBOR Parser Plugin", () => {
       await fastify.close();
     });
 
-    it("should parse valid CBOR array", async () => {
+    it("parses valid CBOR array", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -79,9 +79,9 @@ describe("CBOR Parser Plugin", () => {
       await fastify.close();
     });
 
-    it("should parse CBOR with nested structures", async () => {
+    it("parses CBOR with nested structures", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -114,9 +114,9 @@ describe("CBOR Parser Plugin", () => {
   });
 
   describe("Empty Body Handling", () => {
-    it("should handle empty body and return undefined", async () => {
+    it("handles empty body and return undefined", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body ?? null };
@@ -139,9 +139,9 @@ describe("CBOR Parser Plugin", () => {
   });
 
   describe("Invalid CBOR Handling", () => {
-    it("should return 400 for invalid CBOR data", async () => {
+    it("returns 400 for invalid CBOR data", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -163,9 +163,9 @@ describe("CBOR Parser Plugin", () => {
       await fastify.close();
     });
 
-    it("should return 400 for truncated CBOR data", async () => {
+    it("returns 400 for truncated CBOR data", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -189,10 +189,10 @@ describe("CBOR Parser Plugin", () => {
     });
   });
 
-  describe("Content-Type Suffix Pattern", () => {
-    it("should parse application/*+cbor content types", async () => {
+  describe("Unsupported structured suffixes", () => {
+    it("rejects unowned application/*+cbor content types", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -208,15 +208,14 @@ describe("CBOR Parser Plugin", () => {
         payload: Buffer.from(encode(testData)),
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ received: testData });
+      expect(response.statusCode).toBe(415);
 
       await fastify.close();
     });
 
-    it("should parse application/problem+cbor content type", async () => {
+    it("rejects the unregistered application/problem+cbor content type", async () => {
       const fastify = Fastify();
-      await fastify.register(cborParser);
+      fastify.register(cborParser);
 
       fastify.post("/test", async (request) => {
         return { received: request.body };
@@ -232,8 +231,7 @@ describe("CBOR Parser Plugin", () => {
         payload: Buffer.from(encode(testData)),
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ received: testData });
+      expect(response.statusCode).toBe(415);
 
       await fastify.close();
     });

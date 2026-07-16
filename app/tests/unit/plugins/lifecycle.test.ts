@@ -1,121 +1,74 @@
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import lifecycle from "../../../src/plugins/lifecycle.js";
+import sensible from "../../../src/plugins/sensible.js";
 
-describe("Lifecycle Plugin", () => {
-  describe("isShuttingDown Decorator", () => {
-    it("should decorate fastify with isShuttingDown", async () => {
-      const fastify = Fastify();
-      await fastify.register(lifecycle);
-      await fastify.ready();
+describe("application lifecycle state", () => {
+  const apps: ReturnType<typeof Fastify>[] = [];
 
-      expect(fastify.isShuttingDown).toBeDefined();
-      expect(fastify.isShuttingDown).toBe(false);
-
-      await fastify.close();
-    });
-
-    it("should allow setting isShuttingDown to true", async () => {
-      const fastify = Fastify();
-      await fastify.register(lifecycle);
-      await fastify.ready();
-
-      fastify.isShuttingDown = true;
-      expect(fastify.isShuttingDown).toBe(true);
-
-      await fastify.close();
-    });
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
   });
 
-  it("should register onReady hook", async () => {
-    const fastify = Fastify();
-    let onReadyCalled = false;
+  function build() {
+    const app = Fastify({ return503OnClosing: false });
+    apps.push(app);
+    app.register(sensible);
+    app.register(lifecycle);
+    return app;
+  }
 
-    await fastify.register(lifecycle);
+  it("rejects new application work during shutdown without invoking its handler", async () => {
+    const app = build();
+    const handler = vi.fn(async () => ({ accepted: true }));
+    app.get("/work", handler);
 
-    // Override the onReady hook to track if it was called
-    fastify.addHook("onReady", async () => {
-      onReadyCalled = true;
-    });
+    const beforeShutdown = await app.inject({ method: "GET", url: "/work" });
+    app.isShuttingDown = true;
+    const duringShutdown = await app.inject({ method: "GET", url: "/work" });
 
-    await fastify.ready();
-    expect(onReadyCalled).toBe(true);
-
-    await fastify.close();
+    expect(beforeShutdown.statusCode).toBe(200);
+    expect(duringShutdown.statusCode).toBe(503);
+    expect(duringShutdown.headers["retry-after"]).toBe("10");
+    expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("should register onClose hook", async () => {
-    const fastify = Fastify();
-    let onCloseCalled = false;
+  it("allows only routes that explicitly opt in during shutdown", async () => {
+    const app = build();
+    const handler = vi.fn(async () => ({ status: "healthy" }));
+    app.get("/health", { config: { allowDuringShutdown: true } }, handler);
+    await app.ready();
+    app.isShuttingDown = true;
 
-    await fastify.register(lifecycle);
-
-    fastify.addHook("onClose", async () => {
-      onCloseCalled = true;
-    });
-
-    await fastify.ready();
-    await fastify.close();
-
-    expect(onCloseCalled).toBe(true);
-  });
-
-  it("should allow server to start and handle requests", async () => {
-    const fastify = Fastify();
-    await fastify.register(lifecycle);
-
-    fastify.get("/test", async () => ({ status: "ok" }));
-
-    await fastify.ready();
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/test",
-    });
+    const response = await app.inject({ method: "GET", url: "/health" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: "ok" });
-
-    await fastify.close();
+    expect(response.json()).toEqual({ status: "healthy" });
+    expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("should properly cleanup resources on close", async () => {
-    const fastify = Fastify();
-    const cleanupActions: string[] = [];
-
-    await fastify.register(lifecycle);
-
-    // Add a custom cleanup hook
-    fastify.addHook("onClose", async () => {
-      cleanupActions.push("cleanup-1");
+  it("marks the application as shutting down for every close path", async () => {
+    const app = build();
+    let observedState = false;
+    app.addHook("preClose", async () => {
+      observedState = app.isShuttingDown;
     });
+    await app.ready();
 
-    fastify.addHook("onClose", async () => {
-      cleanupActions.push("cleanup-2");
-    });
+    await app.close();
 
-    await fastify.ready();
-    await fastify.close();
-
-    expect(cleanupActions).toContain("cleanup-1");
-    expect(cleanupActions).toContain("cleanup-2");
+    expect(observedState).toBe(true);
   });
 
-  it("should execute onReady before onListen", async () => {
-    const fastify = Fastify();
-    const executionOrder: string[] = [];
+  it("does not own process-global fatal-error handlers", async () => {
+    const before = {
+      uncaughtException: process.listenerCount("uncaughtException"),
+      unhandledRejection: process.listenerCount("unhandledRejection"),
+    };
+    const app = build();
+    await app.ready();
 
-    await fastify.register(lifecycle);
-
-    fastify.addHook("onReady", async () => {
-      executionOrder.push("ready");
-    });
-
-    // Note: onListen doesn't fire with inject() or ready()
-    // So we just test onReady fires
-    await fastify.ready();
-
-    expect(executionOrder).toContain("ready");
-    await fastify.close();
+    expect(process.listenerCount("uncaughtException")).toBe(before.uncaughtException);
+    expect(process.listenerCount("unhandledRejection")).toBe(before.unhandledRejection);
   });
 });

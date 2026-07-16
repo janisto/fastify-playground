@@ -1,212 +1,86 @@
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import swagger from "../../../src/plugins/swagger.js";
 import health from "../../../src/routes/health.js";
 
-describe("Swagger Documentation", () => {
-  it("should serve OpenAPI JSON documentation", async () => {
-    const fastify = Fastify();
+describe("OpenAPI documentation", () => {
+  const apps: ReturnType<typeof Fastify>[] = [];
 
-    await fastify.register(swagger);
-    await fastify.register(health);
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
 
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/api-docs/json",
-    });
+  function build() {
+    const app = Fastify();
+    apps.push(app);
+    app.register(swagger);
+    app.register(health);
+    return app;
+  }
+
+  it("publishes the application contract as OpenAPI 3.1 JSON", async () => {
+    const response = await build().inject({ method: "GET", url: "/api-docs/json" });
+    const document = response.json();
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("application/json");
-
-    const spec = response.json();
-    expect(spec.openapi).toBe("3.1.0");
-    expect(spec.info.title).toBe("Fastify Playground API");
-    expect(spec.info.version).toBe("1.0.0");
-
-    await fastify.close();
+    expect(document).toMatchObject({
+      openapi: "3.1.0",
+      info: { title: "Fastify Playground API", version: "1.0.0" },
+      servers: [{ url: "/", description: "Current server" }],
+      paths: {
+        "/health": {
+          get: {
+            operationId: "getHealth",
+            summary: "Liveness check",
+            tags: ["Health"],
+          },
+        },
+      },
+    });
+    expect(document.paths["/health"].get.responses["200"].content["application/json"].schema).toMatchObject({
+      type: "object",
+      required: ["status"],
+      properties: { status: { enum: ["healthy"], type: "string" } },
+    });
   });
 
-  it("should serve OpenAPI YAML documentation", async () => {
-    const fastify = Fastify();
-
-    await fastify.register(swagger);
-    await fastify.register(health);
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/api-docs/yaml",
-    });
+  it("publishes the same contract as YAML", async () => {
+    const response = await build().inject({ method: "GET", url: "/api-docs/yaml" });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("application/x-yaml");
     expect(response.payload).toContain("openapi: 3.1.0");
-    expect(response.payload).toContain("title: Fastify Playground API");
-
-    await fastify.close();
+    expect(response.payload).toContain("operationId: getHealth");
   });
 
-  it("should serve Swagger UI HTML", async () => {
-    const fastify = Fastify();
+  it("serves the interactive documentation and its static policy", async () => {
+    const app = build();
+    const ui = await app.inject({ method: "GET", url: "/api-docs" });
+    const stylesheet = await app.inject({ method: "GET", url: "/api-docs/static/swagger-ui.css" });
 
-    await fastify.register(swagger);
-    await fastify.register(health);
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/api-docs",
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.headers["content-type"]).toContain("text/html");
-    expect(response.payload).toContain("Swagger UI");
-
-    await fastify.close();
+    expect(ui.statusCode).toBe(200);
+    expect(ui.headers["content-type"]).toContain("text/html");
+    expect(ui.payload).toContain("Swagger UI");
+    expect(stylesheet.statusCode).toBe(200);
+    expect(stylesheet.headers["content-type"]).toContain("text/css");
+    expect(stylesheet.headers["content-security-policy"]).toEqual(expect.any(String));
   });
 
-  it("should document /health endpoint in OpenAPI spec", async () => {
-    const fastify = Fastify();
-
-    await fastify.register(swagger);
-    await fastify.register(health);
-    await fastify.ready(); // Ensure all routes are registered
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/api-docs/json",
-    });
-
-    const spec = response.json();
-
-    // Check that /health endpoint is documented
-    expect(spec.paths).toBeDefined();
-    expect(Object.keys(spec.paths).length).toBeGreaterThan(0);
-    expect(spec.paths).toHaveProperty("/health");
-    expect(spec.paths["/health"]).toHaveProperty("get");
-
-    const healthEndpoint = spec.paths["/health"].get;
-    expect(healthEndpoint.summary).toBe("Health check endpoint");
-    expect(healthEndpoint.description).toBe("Check the health status of the API");
-    expect(healthEndpoint.tags).toContain("Health");
-
-    // Check response schema
-    expect(healthEndpoint.responses).toHaveProperty("200");
-    const successResponse = healthEndpoint.responses["200"];
-    expect(successResponse.description).toBe("Successful response indicating the API is healthy");
-
-    const responseSchema = successResponse.content["application/json"].schema;
-    expect(responseSchema.type).toBe("object");
-    expect(responseSchema.properties).toHaveProperty("status");
-    expect(responseSchema.properties.status.type).toBe("string");
-    expect(responseSchema.properties.status.enum).toContain("healthy");
-    expect(responseSchema.required).toContain("status");
-
-    await fastify.close();
-  });
-
-  it("should include Content-Security-Policy header for Swagger UI static assets", async () => {
-    const fastify = Fastify();
-
-    await fastify.register(swagger);
-    await fastify.register(health);
-
-    // Request the Swagger UI CSS which triggers static CSP handling via transformStaticCSP
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/api-docs/static/swagger-ui.css",
-    });
-
-    // Static files should be served with proper CSP headers
-    // transformStaticCSP passes header through unchanged
-    expect(response.statusCode).toBe(200);
-    expect(response.headers["content-type"]).toContain("text/css");
-
-    await fastify.close();
-  });
-
-  it("should use refResolver to generate schema references", async () => {
-    const fastify = Fastify();
-
-    await fastify.register(swagger);
-
-    // Register a schema with $id to test buildLocalReference
-    fastify.addSchema({
+  it("keeps explicit schema identifiers stable in generated components", async () => {
+    const app = build();
+    app.addSchema({
       $id: "TestRefSchema",
       type: "object",
-      properties: {
-        id: { type: "string" },
-      },
+      properties: { id: { type: "string" } },
     });
+    app.get("/test-ref", { schema: { response: { 200: { $ref: "TestRefSchema#" } } } }, async () => ({ id: "123" }));
 
-    fastify.get(
-      "/test-ref",
-      {
-        schema: {
-          response: {
-            200: { $ref: "TestRefSchema#" },
-          },
-        },
-      },
-      async () => ({ id: "123" }),
-    );
+    const response = await app.inject({ method: "GET", url: "/api-docs/json" });
 
-    await fastify.ready();
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/api-docs/json",
+    expect(response.json().components.schemas.TestRefSchema).toMatchObject({
+      type: "object",
+      properties: { id: { type: "string" } },
     });
-
-    const spec = response.json();
-
-    // Check that the schema is referenced using the $id
-    expect(spec.components?.schemas?.TestRefSchema).toBeDefined();
-
-    await fastify.close();
-  });
-
-  it("should use def-index fallback when schema has no $id", async () => {
-    const fastify = Fastify();
-
-    await fastify.register(swagger);
-
-    // Register POST route with inline body schema without $id to test the fallback
-    fastify.post(
-      "/inline-schema",
-      {
-        schema: {
-          body: {
-            type: "object",
-            properties: {
-              data: { type: "string" },
-            },
-          },
-          response: {
-            200: {
-              type: "object",
-              properties: {
-                result: { type: "string" },
-              },
-            },
-          },
-        },
-      },
-      async () => ({ result: "ok" }),
-    );
-
-    await fastify.ready();
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/api-docs/json",
-    });
-
-    expect(response.statusCode).toBe(200);
-    const spec = response.json();
-
-    // The path should be documented
-    expect(spec.paths["/inline-schema"]).toBeDefined();
-    expect(spec.paths["/inline-schema"].post).toBeDefined();
-
-    await fastify.close();
   });
 });

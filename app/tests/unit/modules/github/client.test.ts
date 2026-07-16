@@ -2,7 +2,30 @@ import { MockAgent } from "undici";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GitHubClient } from "../../../../src/modules/github/client.js";
-import { GITHUB_ERROR_NOT_FOUND, GITHUB_ERROR_RATE_LIMIT } from "../../../../src/modules/github/errors.js";
+import {
+  GITHUB_ERROR_NOT_FOUND,
+  GITHUB_ERROR_RATE_LIMIT,
+  GITHUB_ERROR_TIMEOUT,
+  GITHUB_ERROR_UPSTREAM,
+} from "../../../../src/modules/github/errors.js";
+
+const OWNER_RESPONSE = {
+  login: "octocat",
+  id: 1,
+  avatar_url: "https://avatars.githubusercontent.com/u/1",
+  html_url: "https://github.com/octocat",
+  type: "User",
+  name: "The Octocat",
+  company: null,
+  blog: "",
+  location: "San Francisco",
+  bio: "A cat",
+  public_repos: 8,
+  followers: 1000,
+  following: 0,
+  created_at: "2011-01-25T18:44:36Z",
+  updated_at: "2024-01-01T00:00:00Z",
+} as const;
 
 describe("GitHubClient", () => {
   let mockAgent: MockAgent;
@@ -19,30 +42,28 @@ describe("GitHubClient", () => {
   });
 
   describe("getOwner", () => {
-    it("fetches owner successfully", async () => {
-      mockPool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, {
-        login: "octocat",
-        id: 1,
-        avatar_url: "https://avatars.githubusercontent.com/u/1",
-        html_url: "https://github.com/octocat",
-        type: "User",
-        name: "The Octocat",
-        company: null,
-        blog: "",
-        location: "San Francisco",
-        bio: "A cat",
-        public_repos: 8,
-        followers: 1000,
-        following: 0,
-        created_at: "2011-01-25T18:44:36Z",
-        updated_at: "2024-01-01T00:00:00Z",
-      });
+    it("fetches public owner data with the current API version and no ambient credential", async () => {
+      mockPool
+        .intercept({
+          path: "/users/octocat",
+          method: "GET",
+          headers: (headers) => {
+            expect(headers["x-github-api-version"]).toBe("2026-03-10");
+            expect(headers["authorization"]).toBeUndefined();
+            return true;
+          },
+        })
+        .reply(200, OWNER_RESPONSE);
 
       const client = new GitHubClient({ dispatcher: mockAgent });
       const owner = await client.getOwner("octocat");
 
       expect(owner.login).toBe("octocat");
       expect(owner.avatarUrl).toBe("https://avatars.githubusercontent.com/u/1");
+    });
+
+    it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])("rejects an invalid timeout %s", (timeoutMs) => {
+      expect(() => new GitHubClient({ timeoutMs })).toThrow(RangeError);
     });
 
     it("throws GitHubApiError on 404", async () => {
@@ -80,8 +101,8 @@ describe("GitHubClient", () => {
         .reply(200, {
           login: "octocat",
           id: 1,
-          avatar_url: "",
-          html_url: "",
+          avatar_url: "https://avatars.githubusercontent.com/u/1",
+          html_url: "https://github.com/octocat",
           type: "User",
           name: null,
           company: null,
@@ -91,8 +112,8 @@ describe("GitHubClient", () => {
           public_repos: 0,
           followers: 0,
           following: 0,
-          created_at: "",
-          updated_at: "",
+          created_at: "2011-01-25T18:44:36Z",
+          updated_at: "2024-01-01T00:00:00Z",
         });
 
       const client = new GitHubClient({ token: "test-token", dispatcher: mockAgent });
@@ -126,8 +147,8 @@ describe("GitHubClient", () => {
       const repos = await client.listOwnerRepos("octocat");
 
       expect(repos).toHaveLength(1);
-      expect(repos[0].name).toBe("Hello-World");
-      expect(repos[0].fullName).toBe("octocat/Hello-World");
+      expect(repos.at(0)?.name).toBe("Hello-World");
+      expect(repos.at(0)?.fullName).toBe("octocat/Hello-World");
     });
 
     it("throws error when user not found", async () => {
@@ -139,6 +160,33 @@ describe("GitHubClient", () => {
         name: "GitHubApiError",
         code: GITHUB_ERROR_NOT_FOUND,
       });
+    });
+
+    it("preserves nullable timestamps from GitHub instead of fabricating dates", async () => {
+      mockPool.intercept({ path: /\/users\/octocat\/repos/, method: "GET" }).reply(200, [
+        {
+          id: 1,
+          name: "empty",
+          full_name: "octocat/empty",
+          description: null,
+          html_url: "https://github.com/octocat/empty",
+          language: null,
+          stargazers_count: 0,
+          forks_count: 0,
+          open_issues_count: 0,
+          visibility: "public",
+          fork: false,
+          archived: false,
+          created_at: null,
+          updated_at: null,
+          pushed_at: null,
+        },
+      ]);
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+      const repos = await client.listOwnerRepos("octocat");
+
+      expect(repos.at(0)).toMatchObject({ createdAt: null, updatedAt: null, pushedAt: null });
     });
   });
 
@@ -186,7 +234,7 @@ describe("GitHubClient", () => {
       });
     });
 
-    it("handles repo with missing optional fields", async () => {
+    it("preserves required upstream values while defaulting only an omitted topics array", async () => {
       mockPool.intercept({ path: "/repos/octocat/minimal", method: "GET" }).reply(200, {
         id: 1,
         name: "minimal",
@@ -203,13 +251,16 @@ describe("GitHubClient", () => {
         created_at: "2011-01-25T18:44:36Z",
         updated_at: "2024-01-01T00:00:00Z",
         pushed_at: "2024-01-01T00:00:00Z",
-        // No default_branch, license, topics, disabled
+        default_branch: "trunk",
+        license: null,
+        disabled: false,
+        // GitHub may omit topics when the representation does not include them.
       });
 
       const client = new GitHubClient({ dispatcher: mockAgent });
       const repo = await client.getRepo("octocat", "minimal");
 
-      expect(repo.defaultBranch).toBe("main"); // default
+      expect(repo.defaultBranch).toBe("trunk");
       expect(repo.license).toBeNull();
       expect(repo.topics).toEqual([]);
       expect(repo.disabled).toBe(false);
@@ -217,13 +268,13 @@ describe("GitHubClient", () => {
   });
 
   describe("listRepoActivity", () => {
-    it("parses Link header for pagination cursor", async () => {
+    it("parses both directions from a pagination Link header", async () => {
       mockPool.intercept({ path: /\/repos\/octocat\/repo\/activity/, method: "GET" }).reply(
         200,
         [
           {
             id: 1,
-            actor: { login: "user", avatar_url: "" },
+            actor: { login: "user", avatar_url: "https://avatars.githubusercontent.com/u/1" },
             ref: "refs/heads/main",
             timestamp: "2024-01-01T00:00:00Z",
             activity_type: "push",
@@ -231,7 +282,7 @@ describe("GitHubClient", () => {
         ],
         {
           headers: {
-            Link: '<https://api.github.com/repos/octocat/repo/activity?after=cursor123>; rel="next"',
+            Link: '<https://api.github.com/repos/octocat/repo/activity?after=cursor123>; rel="next", <https://api.github.com/repos/octocat/repo/activity?before=cursor456>; rel="prev"',
           },
         },
       );
@@ -240,6 +291,7 @@ describe("GitHubClient", () => {
       const result = await client.listRepoActivity("octocat", "repo");
 
       expect(result.nextCursor).toBe("cursor123");
+      expect(result.prevCursor).toBe("cursor456");
       expect(result.activities).toHaveLength(1);
     });
 
@@ -250,6 +302,32 @@ describe("GitHubClient", () => {
       const result = await client.listRepoActivity("octocat", "repo");
 
       expect(result.nextCursor).toBeNull();
+    });
+
+    it("maps a deleted activity actor to explicit null fields", async () => {
+      mockPool.intercept({ path: /\/repos\/octocat\/repo\/activity/, method: "GET" }).reply(200, [
+        {
+          id: 1,
+          actor: null,
+          ref: "refs/heads/main",
+          timestamp: "2024-01-01T00:00:00Z",
+          activity_type: "push",
+        },
+      ]);
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+      const result = await client.listRepoActivity("octocat", "repo");
+
+      expect(result.activities).toEqual([
+        {
+          id: 1,
+          actor: null,
+          actorAvatarUrl: null,
+          ref: "refs/heads/main",
+          timestamp: "2024-01-01T00:00:00Z",
+          activityType: "push",
+        },
+      ]);
     });
 
     it("throws error when repo not found", async () => {
@@ -265,7 +343,7 @@ describe("GitHubClient", () => {
       });
     });
 
-    it("includes afterCursor in URL when provided", async () => {
+    it("uses the after parameter for a forward cursor", async () => {
       mockPool
         .intercept({
           path: /\/repos\/octocat\/repo\/activity\?.*per_page=20.*after=abc123|\/repos\/octocat\/repo\/activity\?.*after=abc123.*per_page=20/,
@@ -274,7 +352,19 @@ describe("GitHubClient", () => {
         .reply(200, []);
 
       const client = new GitHubClient({ dispatcher: mockAgent });
-      await client.listRepoActivity("octocat", "repo", 20, "abc123");
+      await client.listRepoActivity("octocat", "repo", 20, { direction: "after", value: "abc123" });
+    });
+
+    it("uses the before parameter for a backward cursor", async () => {
+      mockPool
+        .intercept({
+          path: /\/repos\/octocat\/repo\/activity\?.*per_page=20.*before=abc123|\/repos\/octocat\/repo\/activity\?.*before=abc123.*per_page=20/,
+          method: "GET",
+        })
+        .reply(200, []);
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+      await client.listRepoActivity("octocat", "repo", 20, { direction: "before", value: "abc123" });
     });
 
     it("returns null cursor when Link header has malformed URL", async () => {
@@ -398,6 +488,36 @@ describe("GitHubClient", () => {
       });
     });
 
+    it("classifies a secondary limit with Retry-After even when primary quota remains", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(
+          403,
+          { message: "You have exceeded a secondary rate limit." },
+          { headers: { "retry-after": "17", "x-ratelimit-remaining": "4999" } },
+        );
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        code: GITHUB_ERROR_RATE_LIMIT,
+        retryAfter: "17",
+      });
+    });
+
+    it("uses a bounded fallback delay for a secondary limit without retry headers", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(403, { message: "Secondary rate limit exceeded" });
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        code: GITHUB_ERROR_RATE_LIMIT,
+        retryAfter: "60",
+      });
+    });
+
     it("throws forbidden error for 403 without rate limit", async () => {
       mockPool
         .intercept({ path: "/users/octocat", method: "GET" })
@@ -465,6 +585,97 @@ describe("GitHubClient", () => {
         message: "Upstream GitHub API error",
         code: "github_upstream",
       });
+    });
+
+    it("uses a controlled fallback when an error response is not JSON", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(502, "proxy detail canary", { headers: { "content-type": "text/html" } });
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "Upstream GitHub API error",
+        code: "github_upstream",
+      });
+    });
+
+    it("maps transport failures to a stable upstream error", async () => {
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("no-interceptor")).rejects.toMatchObject({
+        message: "GitHub API request failed",
+        code: "github_upstream",
+        statusCode: 502,
+        cause: expect.any(Error),
+      });
+    });
+
+    it("rejects malformed successful JSON without leaking the upstream payload", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(200, "{private-upstream-canary", { headers: { "content-type": "application/json" } });
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API returned an invalid response",
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
+    });
+
+    it("rejects a successful payload that violates the documented schema", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(200, { ...OWNER_RESPONSE, id: "not-an-integer-canary" });
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API returned an invalid response",
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
+    });
+
+    it.each([
+      ["timestamp", { ...OWNER_RESPONSE, created_at: "not-a-date-time-canary" }],
+      ["URL", { ...OWNER_RESPONSE, avatar_url: "not-an-absolute-uri-canary" }],
+    ])("rejects a successful payload with an invalid %s format", async (_field, payload) => {
+      mockPool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, payload);
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API returned an invalid response",
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
+    });
+
+    it("maps an exceeded overall deadline to a stable timeout error", async () => {
+      mockPool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, OWNER_RESPONSE).delay(100);
+
+      const client = new GitHubClient({ dispatcher: mockAgent, timeoutMs: 10 });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API request timed out",
+        code: GITHUB_ERROR_TIMEOUT,
+        statusCode: 504,
+      });
+    });
+
+    it("propagates caller cancellation instead of disguising it as an upstream failure", async () => {
+      mockPool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, OWNER_RESPONSE).delay(100);
+      const controller = new AbortController();
+      const reason = new Error("request lifecycle cancellation canary");
+      const client = new GitHubClient({ dispatcher: mockAgent, timeoutMs: 500 });
+
+      const pending = client.getOwner("octocat", controller.signal);
+      controller.abort(reason);
+
+      await expect(pending).rejects.toBe(reason);
     });
   });
 });

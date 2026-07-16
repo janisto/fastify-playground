@@ -1,17 +1,20 @@
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
-import Fastify from "fastify";
+import Fastify, { LogController } from "fastify";
+import fastifyObservability, {
+  createObservabilityLogger,
+  createRequestIdGenerator,
+  type ObservabilityLoggerOptions,
+} from "fastify-observability";
 import { env } from "./env.js";
-import acceptsSerializerPlugin from "./plugins/accepts-serializer.js";
 import authPlugin from "./plugins/auth.js";
 import cborParserPlugin from "./plugins/cbor-parser.js";
+import contentNegotiationPlugin from "./plugins/content-negotiation.js";
 import corsPlugin from "./plugins/cors.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
 import firebasePlugin from "./plugins/firebase.js";
 import helmetPlugin from "./plugins/helmet.js";
 import lifecyclePlugin from "./plugins/lifecycle.js";
-import loggingPlugin from "./plugins/logging.js";
-import requestidPlugin from "./plugins/requestid.js";
 import schemaDiscoveryPlugin from "./plugins/schema-discovery.js";
 import schemaRegistryPlugin from "./plugins/schema-registry.js";
 import sensiblePlugin from "./plugins/sensible.js";
@@ -27,83 +30,92 @@ import { schemaErrorFormatter } from "./utils/schema-error-formatter.js";
  * Build and configure the Fastify application.
  *
  * Plugins are registered in dependency order:
- * 1. Core: sensible, helmet, cors (no dependencies)
- * 2. Content negotiation: cbor-parser, accepts-serializer, vary-header
- * 3. Infrastructure: firebase, lifecycle, under-pressure, swagger
- * 4. Application: auth, error-handler, requestid, logging
- * 5. Routes: health, root
+ * 1. Observability: canonical logger, request ID, trace context, access record
+ * 2. Core: sensible, helmet, cors (no dependencies)
+ * 3. HTTP lifecycle: Vary, CBOR parsing, content negotiation
+ * 4. Infrastructure: Firebase Auth, lifecycle, Swagger, process pressure
+ * 5. Application: auth, error-handler
+ * 6. Response metadata: schema registry and discovery
+ * 7. Routes: health, schemas, and versioned modules
  */
-export async function buildApp() {
+export interface BuildAppOptions {
+  readonly loggerDestination?: ObservabilityLoggerOptions["destination"];
+  readonly loggerLevel?: ObservabilityLoggerOptions["level"];
+}
+
+export async function buildApp(options: BuildAppOptions = {}) {
+  const logger = createObservabilityLogger({
+    preset: "gcp",
+    level: options.loggerLevel ?? env.LOG_LEVEL,
+    ...(options.loggerDestination === undefined ? {} : { destination: options.loggerDestination }),
+  });
+
   const fastify = Fastify({
     connectionTimeout: 10000,
     requestTimeout: 30000,
-    disableRequestLogging: true,
+    handlerTimeout: 15000,
+    return503OnClosing: false,
+    loggerInstance: logger,
+    requestIdHeader: false,
+    genReqId: createRequestIdGenerator(),
+    logController: new LogController({
+      disableRequestLogging: true,
+      requestIdLogLabel: "request_id",
+    }),
     schemaErrorFormatter,
-    logger: {
-      level: env.LOG_LEVEL,
-      // Cloud Run / Firebase App Hosting optimized configuration:
-      // - Logs to stdout (Pino default)
-      // - JSON format (Pino default)
-      // - No file transport (Pino default)
-      formatters: {
-        level: (label) => {
-          // Cloud Logging severity mapping
-          return { severity: label.toUpperCase() };
-        },
-      },
-    },
   })
     .setValidatorCompiler(TypeBoxValidatorCompiler)
     .withTypeProvider<TypeBoxTypeProvider>();
 
-  // Layer 1: Core plugins (no dependencies)
-  await fastify.register(sensiblePlugin);
-  await fastify.register(helmetPlugin);
-  await fastify.register(corsPlugin);
+  fastify.removeContentTypeParser("text/plain");
 
-  // Layer 2: Content negotiation plugins
-  await fastify.register(cborParserPlugin);
-  await fastify.register(acceptsSerializerPlugin);
-  await fastify.register(varyHeaderPlugin);
+  try {
+    // Layer 1: Observability must precede every application hook and route.
+    await fastify.register(fastifyObservability);
 
-  // Layer 3: Infrastructure plugins
-  await fastify.register(firebasePlugin);
-  await fastify.register(lifecyclePlugin);
-  await fastify.register(underPressurePlugin);
-  await fastify.register(swaggerPlugin);
+    // Layer 2: Core plugins (no dependencies)
+    await fastify.register(sensiblePlugin);
+    await fastify.register(helmetPlugin, { hsts: env.NODE_ENV === "production" });
+    await fastify.register(corsPlugin, { origins: env.CORS_ORIGINS });
 
-  // Layer 4: Application plugins
-  await fastify.register(authPlugin);
-  await fastify.register(errorHandlerPlugin);
-  await fastify.register(requestidPlugin);
-  await fastify.register(loggingPlugin);
+    // Layer 3: HTTP lifecycle and content negotiation plugins
+    await fastify.register(varyHeaderPlugin);
+    await fastify.register(cborParserPlugin);
+    await fastify.register(contentNegotiationPlugin);
 
-  // Layer 5: Response transformation plugins
-  await fastify.register(schemaRegistryPlugin);
-  await fastify.register(schemaDiscoveryPlugin);
+    // Layer 4: Infrastructure plugins
+    await fastify.register(firebasePlugin);
+    await fastify.register(lifecyclePlugin);
+    await fastify.register(swaggerPlugin);
+    await fastify.register(underPressurePlugin);
 
-  // Layer 6: Routes
-  // Infrastructure routes (unversioned)
-  await fastify.register(healthRoutes);
-  await fastify.register(schemasRoutes);
+    // Layer 5: Application plugins
+    await fastify.register(authPlugin);
+    await fastify.register(errorHandlerPlugin);
 
-  // Business routes (versioned)
-  await fastify.register(v1Routes, { prefix: "/v1" });
+    // Layer 6: Response transformation plugins
+    await fastify.register(schemaRegistryPlugin);
+    await fastify.register(schemaDiscoveryPlugin);
+
+    // Layer 7: Routes
+    // Infrastructure routes (unversioned)
+    await fastify.register(healthRoutes);
+    await fastify.register(schemasRoutes);
+
+    // Business routes (versioned)
+    await fastify.register(v1Routes, { prefix: "/v1" });
+  } catch (startupError) {
+    try {
+      await fastify.close();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [startupError, cleanupError],
+        "Application startup failed and cleanup did not complete",
+        { cause: startupError },
+      );
+    }
+    throw startupError;
+  }
 
   return fastify;
 }
-
-// Start server when run directly (development mode with tsx)
-// In production, use: node dist/app.js
-/* v8 ignore start -- @preserve */
-if (import.meta.url === `file://${process.argv[1]}`) {
-  try {
-    const fastify = await buildApp();
-
-    await fastify.listen({ port: env.PORT, host: env.HOST });
-  } catch (error) {
-    process.stderr.write(`Failed to start server: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(1);
-  }
-}
-/* v8 ignore stop -- @preserve */

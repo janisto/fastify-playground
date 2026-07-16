@@ -1,8 +1,6 @@
-import { env } from "../../env.js";
-import { type Cursor, decodeCursor, encodeCursor } from "../../utils/pagination.js";
+import { decodeCursor, encodeCursor, InvalidCursorError } from "../../utils/pagination.js";
 
-import { GitHubClient, type GitHubClientOptions } from "./client.js";
-import { InvalidCursorError } from "./errors.js";
+import { type ActivityCursor, GitHubClient } from "./client.js";
 import type {
   GitHubActivity,
   GitHubLanguage,
@@ -14,7 +12,8 @@ import type {
 
 const DEFAULT_OWNER = "octocat";
 const DEFAULT_REPO = "git-consortium";
-const ACTIVITY_CURSOR_TYPE = "gh-activity";
+const ACTIVITY_AFTER_CURSOR_TYPE = "gh-activity-after";
+const ACTIVITY_BEFORE_CURSOR_TYPE = "gh-activity-before";
 
 export interface PaginationOptions {
   cursor?: string;
@@ -24,79 +23,90 @@ export interface PaginationOptions {
 export interface PaginatedResult<T> {
   items: T[];
   nextCursor?: string;
+  prevCursor?: string;
 }
 
 export class GitHubService {
-  private client: GitHubClient;
+  private readonly client: GitHubClient;
 
-  constructor(client?: GitHubClient) {
-    const options: GitHubClientOptions = {};
-    if (env.GITHUB_TOKEN) {
-      options.token = env.GITHUB_TOKEN;
-    }
-    this.client = client ?? new GitHubClient(options);
+  constructor(client = new GitHubClient()) {
+    this.client = client;
   }
 
-  async getOwner(owner?: string): Promise<GitHubOwner> {
-    return this.client.getOwner(owner ?? DEFAULT_OWNER);
+  async getOwner(owner?: string, signal?: AbortSignal): Promise<GitHubOwner> {
+    return this.client.getOwner(owner ?? DEFAULT_OWNER, signal);
   }
 
-  async listOwnerRepos(owner?: string): Promise<{ repos: GitHubRepo[]; count: number }> {
-    const repos = await this.client.listOwnerRepos(owner ?? DEFAULT_OWNER);
+  async listOwnerRepos(owner?: string, signal?: AbortSignal): Promise<{ repos: GitHubRepo[]; count: number }> {
+    const repos = await this.client.listOwnerRepos(owner ?? DEFAULT_OWNER, 30, signal);
     return { repos, count: repos.length };
   }
 
-  async getRepo(owner?: string, repo?: string): Promise<GitHubRepoDetail> {
-    return this.client.getRepo(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO);
+  async getRepo(owner?: string, repo?: string, signal?: AbortSignal): Promise<GitHubRepoDetail> {
+    return this.client.getRepo(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO, signal);
   }
 
   async listRepoActivity(
     owner?: string,
     repo?: string,
     options?: PaginationOptions,
+    signal?: AbortSignal,
   ): Promise<PaginatedResult<GitHubActivity>> {
-    const cursor = this.validateCursor(options?.cursor, ACTIVITY_CURSOR_TYPE);
+    const cursor = this.validateActivityCursor(options?.cursor);
     const limit = options?.limit ?? 20;
 
     const result = await this.client.listRepoActivity(
       owner ?? DEFAULT_OWNER,
       repo ?? DEFAULT_REPO,
       limit,
-      cursor.value || undefined,
+      cursor,
+      signal,
     );
+
+    const nextCursor = result.nextCursor
+      ? encodeCursor({ type: ACTIVITY_AFTER_CURSOR_TYPE, value: result.nextCursor })
+      : undefined;
+    const prevCursor = result.prevCursor
+      ? encodeCursor({ type: ACTIVITY_BEFORE_CURSOR_TYPE, value: result.prevCursor })
+      : undefined;
 
     return {
       items: result.activities,
-      nextCursor: result.nextCursor
-        ? encodeCursor({ type: ACTIVITY_CURSOR_TYPE, value: result.nextCursor })
-        : undefined,
+      ...(nextCursor ? { nextCursor } : {}),
+      ...(prevCursor ? { prevCursor } : {}),
     };
   }
 
-  async listRepoLanguages(owner?: string, repo?: string): Promise<{ languages: GitHubLanguage[] }> {
-    const languagesMap = await this.client.listRepoLanguages(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO);
+  async listRepoLanguages(
+    owner?: string,
+    repo?: string,
+    signal?: AbortSignal,
+  ): Promise<{ languages: GitHubLanguage[] }> {
+    const languagesMap = await this.client.listRepoLanguages(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO, signal);
     const languages = Object.entries(languagesMap)
       .map(([name, bytes]) => ({ name, bytes }))
       .toSorted((a, b) => b.bytes - a.bytes);
     return { languages };
   }
 
-  async listRepoTags(owner?: string, repo?: string): Promise<{ tags: GitHubTag[]; count: number }> {
-    const tags = await this.client.listRepoTags(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO);
+  async listRepoTags(
+    owner?: string,
+    repo?: string,
+    signal?: AbortSignal,
+  ): Promise<{ tags: GitHubTag[]; count: number }> {
+    const tags = await this.client.listRepoTags(owner ?? DEFAULT_OWNER, repo ?? DEFAULT_REPO, 30, signal);
     return { tags, count: tags.length };
   }
 
-  private validateCursor(encodedCursor: string | undefined, expectedType: string): Cursor {
-    if (!encodedCursor) {
-      return { type: "", value: "" };
-    }
+  private validateActivityCursor(encodedCursor: string | undefined): ActivityCursor | undefined {
+    if (encodedCursor === undefined) return undefined;
+
     const cursor = decodeCursor(encodedCursor);
     if (cursor === null) {
       throw new InvalidCursorError("invalid cursor format");
     }
-    if (cursor.type && cursor.type !== expectedType) {
-      throw new InvalidCursorError(`cursor type mismatch: expected ${expectedType}`);
-    }
-    return cursor;
+    if (cursor.type === ACTIVITY_AFTER_CURSOR_TYPE) return { direction: "after", value: cursor.value };
+    if (cursor.type === ACTIVITY_BEFORE_CURSOR_TYPE) return { direction: "before", value: cursor.value };
+    throw new InvalidCursorError("cursor type mismatch: expected a GitHub activity cursor");
   }
 }

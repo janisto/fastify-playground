@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fastify Plugin"
+  short_description: "Build project-standard Fastify plugins"
+  default_prompt: "Use $fastify-plugin to implement and test the requested Fastify plugin with the repository decorator, dependency, lifecycle, and type conventions."

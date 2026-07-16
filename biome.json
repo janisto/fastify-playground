@@ -1,12 +1,17 @@
 {
   "$schema": "./app/node_modules/@biomejs/biome/configuration_schema.json",
   "root": true,
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
-    "includes": ["**", "!**/package.json", "!**/package-lock.json"]
+    "includes": ["**", "!**/package.json", "!**/pnpm-lock.yaml"]
   },
   "formatter": {
     "enabled": true,
-    "formatWithErrors": true,
+    "formatWithErrors": false,
     "lineWidth": 120,
     "indentStyle": "space",
     "indentWidth": 2,
@@ -20,17 +25,28 @@
     }
   },
   "linter": {
+    "domains": {
+      "project": "recommended",
+      "test": "recommended",
+      "types": "recommended"
+    },
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "complexity": {
-        "noExcessiveCognitiveComplexity": "warn",
-        "noForEach": "off"
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 30
+          }
+        },
+        "noForEach": "off",
+        "useLiteralKeys": "off"
       },
       "correctness": {
         "noUnusedImports": "error",
         "noUnusedVariables": "error",
-        "noUnusedFunctionParameters": "off",
-        "useExhaustiveDependencies": "warn",
+        "noUnusedFunctionParameters": "error",
+        "useExhaustiveDependencies": "error",
         "useImportExtensions": {
           "level": "error",
           "options": {
@@ -42,7 +58,7 @@
         "noGlobalEval": "error"
       },
       "style": {
-        "noNonNullAssertion": "warn",
+        "noNonNullAssertion": "error",
         "useConst": "error",
         "useTemplate": "error",
         "useImportType": "error",
@@ -51,14 +67,23 @@
       },
       "suspicious": {
         "noDebugger": "error",
-        "noExplicitAny": "warn",
-        "noConsole": "warn"
+        "noConsole": "error",
+        "noDeprecatedImports": "error",
+        "noExplicitAny": "error",
+        "noImportCycles": "error",
+        "noShadow": "error"
       },
       "performance": {
-        "noAccumulatingSpread": "warn"
+        "noAccumulatingSpread": "error",
+        "noAwaitInLoops": "error"
       },
       "nursery": {
-        "noFloatingPromises": "error"
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error",
+        "noUnsafePlusOperands": "error",
+        "useAwaitThenable": "error",
+        "useExhaustiveSwitchCases": "error",
+        "useNullishCoalescing": "error"
       }
     }
   },
