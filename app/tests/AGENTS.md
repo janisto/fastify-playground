@@ -24,7 +24,7 @@ Name tests `*.test.ts` and keep fixtures close to the test unless multiple files
 ## Isolation
 
 - Unit tests must not use real network, filesystem, Firebase, or credentials.
-- Use `fastify.inject()` instead of binding a port.
+- Use `fastify.inject()` for HTTP behavior. Bind only to loopback with port `0` in an integration test when transport-level behavior such as listener shutdown cannot be modeled by injection, and always close the listener in `finally`.
 - Use Undici `MockAgent` for external HTTP clients and local Firebase mocks for infrastructure plugins.
 - Direct real-GitHub client integration tests are gated by the API `GITHUB_TOKEN` and skipped when it is absent. The running API must not consume that variable; it is unrelated to the Merge `GITHUB_TOKEN` used by GitHub Actions.
 - Keep tests deterministic: no wall-clock timing assumptions, random ordering, or dependency on execution order.

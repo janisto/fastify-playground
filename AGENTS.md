@@ -7,8 +7,9 @@ Instructions for coding agents working in this repository.
 ## Engineering priorities
 
 - Correctness first, then readability and maintainability, then performance.
-- Inspect the existing code path and tests before changing behavior.
-- Prefer small, explicit changes and existing local abstractions.
+- Inspect the relevant implementation, callers, and existing tests before changing behavior.
+- Prefer the smallest safe change that solves the problem.
+- Reuse existing local patterns and utilities, refactoring them when needed, instead of creating parallel abstractions or adding dependencies.
 - State the failure mode before architectural, security, persistence, or production-impacting changes.
 - Do not declare completion until implementation, validation, and remaining risks are reported.
 - Keep source comments and documentation concise. Do not add progress narration, generated banners, emojis, or speculative TODOs.
@@ -22,7 +23,7 @@ Instructions for coding agents working in this repository.
 - `functions/`: placeholder only; it is not currently a Node.js package.
 - `plans/`: durable implementation and migration logs.
 
-Node.js 24.18.0 and pnpm 11.13.0 are required. The local runtime is pinned in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses.
+Node.js 24 and pnpm 11.13.0 are required. The repository pins Node.js 24.18.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses.
 
 Run package scripts from `app/`, or use the root `Justfile`:
 
@@ -75,7 +76,7 @@ just container-build
 ## Authentication, security, and logging
 
 - Verify Firebase ID tokens with Firebase Admin SDK. Do not add application-managed JWT verification.
-- The Firebase plugin exposes Authentication only. Reuse the default Firebase app when one exists and delete an app during shutdown only when this process initialized it. Do not reintroduce Firestore without an implemented feature and a cancellable lifecycle design.
+- The Firebase plugin exposes Authentication only. Reuse an existing default Firebase app; otherwise initialize a uniquely named app per Fastify instance. Delete only the named app owned by that instance. Do not reintroduce Firestore without an implemented feature and a cancellable lifecycle design.
 - Never commit, log, or include credentials, tokens, authorization headers, cookies, or PII in fixtures.
 - Use Application Default Credentials in production and emulators or `GOOGLE_APPLICATION_CREDENTIALS` locally.
 - Validate `CORS_ORIGINS` at startup as exact HTTP(S) origins. The secure default is empty; never trust localhost implicitly, use wildcard origins with credentials, or turn a denied origin into a 5xx response.
@@ -97,6 +98,7 @@ just container-build
 ## Tests and coverage
 
 - Use `.agents/skills/adversarial-testing` for every test change. State the highest-impact failure mode, test observable behavior and forbidden side effects, and ask which plausible mutation each test catches.
+- Do not optimize for coverage numbers or mock interactions alone.
 - Do not retest Fastify or third-party plugin APIs. Remove tests that only prove registration succeeds, a decorator exists, or a mock returns its configured value.
 - Use Vitest with explicit imports; globals are disabled.
 - Unit tests do not use real network, filesystem, Firebase, or other external services.
@@ -107,12 +109,27 @@ just container-build
 
 ## Biome
 
-Biome 2.5.3 is the formatter and linter. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
+Biome 2.5.4 is the formatter and linter. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
 
 - Do not add suppression comments to avoid fixing actionable diagnostics.
 - `pnpm check:fix` applies safe fixes only. Review unsafe suggestions individually.
 - Keep imports organized and all diagnostics at zero.
 - The entropy-based `noSecrets` rule is intentionally not enabled because it produced false positives on public identifiers and fixtures; secret prevention remains a contributor and platform scanning responsibility.
+
+## Pull requests
+
+- Format titles as `type[optional scope]: description`. Prefer no scope; include one only when it materially improves clarity.
+- Use `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, or `revert` as the type. Example: `feat: add response size field`.
+- Keep each pull request focused. In the body, explain why the change is needed, what changed, how it was validated, and any remaining risk.
+- Keep the title suitable for the final squash or merge commit.
+- This repository does not maintain a `CHANGELOG.md`; do not create one or require changelog entries in pull requests.
+
+## Commits
+
+- Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+- Prefer no scope; include one only when it materially improves clarity. Write a short, imperative description. Example: `fix: preserve request ID`.
+- Mark breaking changes with `!` and explain them in a `BREAKING CHANGE:` footer.
+- Before committing, run `just qa` and `git diff --check`.
 
 ## Completion checklist
 

@@ -4,12 +4,23 @@ declare module "fastify" {
   interface FastifyInstance {
     isShuttingDown: boolean;
   }
+
+  interface FastifyContextConfig {
+    allowDuringShutdown?: boolean;
+  }
 }
 
 /** Tracks application lifecycle state and emits application-owned lifecycle records. */
 export default fp(
   async (fastify) => {
     fastify.decorate("isShuttingDown", false);
+
+    fastify.addHook("onRequest", async (request, reply) => {
+      if (!fastify.isShuttingDown || request.routeOptions.config.allowDuringShutdown === true) return;
+
+      reply.header("Retry-After", "10");
+      throw fastify.httpErrors.serviceUnavailable("Service is shutting down");
+    });
 
     fastify.addHook("onReady", async () => {
       fastify.log.info("Server is ready and initialized");
@@ -28,6 +39,10 @@ export default fp(
     });
     /* v8 ignore stop -- @preserve */
 
+    fastify.addHook("preClose", async () => {
+      fastify.isShuttingDown = true;
+    });
+
     fastify.addHook("onClose", async (instance) => {
       instance.log.info("Server closing, cleaning up resources");
     });
@@ -35,5 +50,6 @@ export default fp(
   {
     name: "lifecycle",
     fastify: "5.x",
+    dependencies: ["sensible"],
   },
 );

@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import lifecycle from "../../src/plugins/lifecycle.js";
+import sensible from "../../src/plugins/sensible.js";
 import { installSignalHandlers, shutdown } from "../../src/server.js";
 
 describe("server shutdown", () => {
@@ -15,6 +16,7 @@ describe("server shutdown", () => {
   async function build() {
     const app = Fastify({ logger: false });
     apps.push(app);
+    app.register(sensible);
     app.register(lifecycle);
     await app.ready();
     return app;
@@ -67,6 +69,7 @@ describe("server shutdown", () => {
   it("installs only termination-signal handlers and removes them on close", async () => {
     const app = Fastify({ logger: false });
     apps.push(app);
+    app.register(sensible);
     app.register(lifecycle);
     const before = {
       sigint: process.listenerCount("SIGINT"),

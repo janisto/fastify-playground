@@ -17,22 +17,19 @@ describe("representation cache variance", () => {
     return app;
   }
 
-  it.each([
-    "GET",
-    "POST",
-    "PUT",
-    "PATCH",
-    "DELETE",
-  ] as const)("marks %s responses as varying by representation and browser origin", async (method) => {
-    const response = await build().inject(
-      method === "GET" || method === "DELETE"
-        ? { method, url: "/resource" }
-        : { method, url: "/resource", payload: {} },
-    );
+  it.each(["GET", "POST", "PUT", "PATCH", "DELETE"] as const)(
+    "marks %s responses as varying by representation and browser origin",
+    async (method) => {
+      const response = await build().inject(
+        method === "GET" || method === "DELETE"
+          ? { method, url: "/resource" }
+          : { method, url: "/resource", payload: {} },
+      );
 
-    expect(response.statusCode).toBe(200);
-    expect(response.headers.vary).toEqual(["Accept", "Origin"]);
-  });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers.vary).toEqual(["Accept", "Origin"]);
+    },
+  );
 
   it.each([
     ["handler failure", "/error", 500],

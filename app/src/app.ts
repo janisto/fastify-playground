@@ -54,6 +54,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     connectionTimeout: 10000,
     requestTimeout: 30000,
     handlerTimeout: 15000,
+    return503OnClosing: false,
     loggerInstance: logger,
     requestIdHeader: false,
     genReqId: createRequestIdGenerator(),
@@ -66,40 +67,53 @@ export async function buildApp(options: BuildAppOptions = {}) {
     .setValidatorCompiler(TypeBoxValidatorCompiler)
     .withTypeProvider<TypeBoxTypeProvider>();
 
-  // Layer 1: Observability must precede every application hook and route.
-  await fastify.register(fastifyObservability);
+  try {
+    // Layer 1: Observability must precede every application hook and route.
+    await fastify.register(fastifyObservability);
 
-  // Layer 2: Core plugins (no dependencies)
-  await fastify.register(sensiblePlugin);
-  await fastify.register(helmetPlugin, { hsts: env.NODE_ENV === "production" });
-  await fastify.register(corsPlugin, { origins: env.CORS_ORIGINS });
+    // Layer 2: Core plugins (no dependencies)
+    await fastify.register(sensiblePlugin);
+    await fastify.register(helmetPlugin, { hsts: env.NODE_ENV === "production" });
+    await fastify.register(corsPlugin, { origins: env.CORS_ORIGINS });
 
-  // Layer 3: HTTP lifecycle and content negotiation plugins
-  await fastify.register(varyHeaderPlugin);
-  await fastify.register(cborParserPlugin);
-  await fastify.register(contentNegotiationPlugin);
+    // Layer 3: HTTP lifecycle and content negotiation plugins
+    await fastify.register(varyHeaderPlugin);
+    await fastify.register(cborParserPlugin);
+    await fastify.register(contentNegotiationPlugin);
 
-  // Layer 4: Infrastructure plugins
-  await fastify.register(firebasePlugin);
-  await fastify.register(lifecyclePlugin);
-  await fastify.register(swaggerPlugin);
-  await fastify.register(underPressurePlugin);
+    // Layer 4: Infrastructure plugins
+    await fastify.register(firebasePlugin);
+    await fastify.register(lifecyclePlugin);
+    await fastify.register(swaggerPlugin);
+    await fastify.register(underPressurePlugin);
 
-  // Layer 5: Application plugins
-  await fastify.register(authPlugin);
-  await fastify.register(errorHandlerPlugin);
+    // Layer 5: Application plugins
+    await fastify.register(authPlugin);
+    await fastify.register(errorHandlerPlugin);
 
-  // Layer 6: Response transformation plugins
-  await fastify.register(schemaRegistryPlugin);
-  await fastify.register(schemaDiscoveryPlugin);
+    // Layer 6: Response transformation plugins
+    await fastify.register(schemaRegistryPlugin);
+    await fastify.register(schemaDiscoveryPlugin);
 
-  // Layer 7: Routes
-  // Infrastructure routes (unversioned)
-  await fastify.register(healthRoutes);
-  await fastify.register(schemasRoutes);
+    // Layer 7: Routes
+    // Infrastructure routes (unversioned)
+    await fastify.register(healthRoutes);
+    await fastify.register(schemasRoutes);
 
-  // Business routes (versioned)
-  await fastify.register(v1Routes, { prefix: "/v1" });
+    // Business routes (versioned)
+    await fastify.register(v1Routes, { prefix: "/v1" });
+  } catch (startupError) {
+    try {
+      await fastify.close();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [startupError, cleanupError],
+        "Application startup failed and cleanup did not complete",
+        { cause: startupError },
+      );
+    }
+    throw startupError;
+  }
 
   return fastify;
 }

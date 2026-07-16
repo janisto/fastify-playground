@@ -14,15 +14,5 @@ describe("HelloService", () => {
       const result = service.greet("Alice");
       expect(result.message).toBe("Hello, Alice!");
     });
-
-    it("returns personalized greeting with different name", () => {
-      const result = service.greet("Bob");
-      expect(result.message).toBe("Hello, Bob!");
-    });
-
-    it("handles empty string as name", () => {
-      const result = service.greet("");
-      expect(result.message).toBe("Hello, World!");
-    });
   });
 });

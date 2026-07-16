@@ -34,6 +34,7 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
     "/health",
     {
       config: {
+        allowDuringShutdown: true,
         pressureHandler: () => undefined,
       },
       schema: {
@@ -57,6 +58,9 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
   fastify.get(
     "/status",
     {
+      config: {
+        allowDuringShutdown: true,
+      },
       schema: {
         operationId: "getReadiness",
         description: "Confirms that the API process is ready and not shutting down or under excessive load",

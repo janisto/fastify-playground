@@ -6,17 +6,18 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: read
-  pull-requests: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  ci:
+  app:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      pull-requests: write
 
     defaults:
       run:
@@ -25,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6.0.9
@@ -67,6 +70,10 @@ jobs:
 
   container:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
 
     defaults:
       run:
@@ -75,6 +82,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Build production image
         run: docker build --tag fastify-playground:ci .
@@ -110,3 +119,24 @@ jobs:
           test "$(docker inspect --format '{{.State.ExitCode}}' "$container_id")" -eq 0
           docker rm "$container_id" >/dev/null
           trap - EXIT
+
+  ci:
+    if: ${{ always() }}
+    needs:
+      - app
+      - container
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions: {}
+
+    steps:
+      - name: Require application and container success
+        env:
+          APP_RESULT: ${{ needs.app.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+        run: |
+          if [[ "$APP_RESULT" != "success" || "$CONTAINER_RESULT" != "success" ]]; then
+            echo "Required job failed: app=$APP_RESULT container=$CONTAINER_RESULT" >&2
+            exit 1
+          fi

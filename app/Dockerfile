@@ -15,13 +15,10 @@ FROM ${NODE_IMAGE} AS builder
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
-# Uses bind mounts for package files and a cache mount for the pnpm store
+# Install dependencies first for layer caching.
 RUN corepack enable && corepack install --global pnpm@11.13.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
-    --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
-    --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile
 
@@ -38,10 +35,8 @@ WORKDIR /app
 
 # Install production dependencies only
 RUN corepack enable && corepack install --global pnpm@11.13.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
-    --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
-    --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --prod --frozen-lockfile
 

@@ -1,5 +1,7 @@
+import { Buffer } from "node:buffer";
 import { Writable } from "node:stream";
 import { decode as cborDecode, encode as cborEncode } from "cbor2";
+import { request } from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFirebaseAppMock, createFirebaseAuthMock } from "../mocks/firebase.js";
 
@@ -56,19 +58,11 @@ describe("App Integration", () => {
     vi.resetModules();
   });
 
-  it("initializes app successfully and registers all routes", async () => {
+  it("enforces the application-wide handler deadline", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
 
-    // Verify app is ready without errors
-    await fastify.ready();
     expect(fastify.initialConfig).toMatchObject({ handlerTimeout: 15_000 });
-
-    // Verify key routes are registered
-    const routes = fastify.printRoutes({ commonPrefix: false });
-    expect(routes).toContain("/ (GET, HEAD)");
-    expect(routes).toContain("health (GET, HEAD)");
-    expect(routes).toContain("api-docs");
 
     await fastify.close();
   });
@@ -93,32 +87,67 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
-  it("rejects readiness during shutdown while leaving liveness available", async () => {
+  it("preserves modeled lifecycle responses while a real listener drains", async () => {
     const { buildApp } = await import("../../src/app.js");
+    const { shutdown } = await import("../../src/server.js");
     const fastify = await buildApp();
-    fastify.isShuttingDown = true;
+    const preCloseEntered = Promise.withResolvers<void>();
+    const releasePreClose = Promise.withResolvers<void>();
+    fastify.addHook("preClose", async () => {
+      preCloseEntered.resolve();
+      await releasePreClose.promise;
+    });
+    const address = await fastify.listen({ host: "127.0.0.1", port: 0 });
+    const closeOperation = shutdown(fastify, "SIGTERM");
+    await preCloseEntered.promise;
 
-    const [status, statusCbor, health] = await Promise.all([
-      fastify.inject({ method: "GET", url: "/status" }),
-      fastify.inject({
-        method: "GET",
-        url: "/status",
-        headers: { accept: "application/cbor, application/json;q=0.5" },
-      }),
-      fastify.inject({ method: "GET", url: "/health" }),
-    ]);
+    try {
+      const [status, health, rejectedWork] = await Promise.all([
+        request(`${address}/status`, {
+          headers: {
+            accept: "application/cbor, application/json;q=0.5",
+            "x-request-id": "shutdown-status-canary",
+          },
+        }),
+        request(`${address}/health`),
+        request(`${address}/v1/hello`, { headers: { accept: "application/cbor" } }),
+      ]);
+      const [statusPayload, healthPayload, rejectedWorkPayload] = await Promise.all([
+        status.body.arrayBuffer().then((body) => cborDecode(Buffer.from(body))),
+        health.body.json(),
+        rejectedWork.body.arrayBuffer().then((body) => cborDecode(Buffer.from(body))),
+      ]);
 
-    expect(status.statusCode).toBe(503);
-    expect(status.headers["retry-after"]).toBe("10");
-    expect(status.headers["content-type"]).toContain("application/problem+json");
-    expect(status.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
-    expect(status.json()).toMatchObject({ status: 503, detail: "Service is shutting down" });
-    expect(statusCbor.statusCode).toBe(503);
-    expect(statusCbor.headers["content-type"]).toBe("application/cbor");
-    expect(cborDecode(statusCbor.rawPayload)).toMatchObject({ status: 503 });
-    expect(health.statusCode).toBe(200);
-    expect(health.json()).toEqual({ status: "healthy" });
-    await fastify.close();
+      expect(status.statusCode).toBe(503);
+      expect(status.headers["retry-after"]).toBe("10");
+      expect(status.headers["content-type"]).toBe("application/cbor");
+      expect(status.headers["link"]).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+      expect(status.headers["connection"]).toBe("close");
+      expect(status.headers["vary"]).toEqual(["Accept", "Origin"]);
+      expect(status.headers["x-request-id"]).toBe("shutdown-status-canary");
+      expect(statusPayload).toEqual({
+        title: "Service Unavailable",
+        status: 503,
+        detail: "Service is shutting down",
+      });
+
+      expect(health.statusCode).toBe(200);
+      expect(health.headers["content-type"]).toContain("application/json");
+      expect(healthPayload).toEqual({ status: "healthy" });
+
+      expect(rejectedWork.statusCode).toBe(503);
+      expect(rejectedWork.headers["retry-after"]).toBe("10");
+      expect(rejectedWork.headers["content-type"]).toBe("application/cbor");
+      expect(rejectedWork.headers["connection"]).toBe("close");
+      expect(rejectedWorkPayload).toEqual({
+        title: "Service Unavailable",
+        status: 503,
+        detail: "Service is shutting down",
+      });
+    } finally {
+      releasePreClose.resolve();
+      await closeOperation;
+    }
   });
 
   it("protects the authenticated identity endpoint and returns only the public identity projection", async () => {
@@ -229,21 +258,6 @@ describe("App Integration", () => {
     for (const secret of ["query-secret-canary", "authorization-secret-canary", "cookie-secret-canary"]) {
       expect(terminalLine).not.toContain(secret);
     }
-  });
-
-  it("handles requests to health endpoint", async () => {
-    const { buildApp } = await import("../../src/app.js");
-    const fastify = await buildApp();
-
-    const response = await fastify.inject({
-      method: "GET",
-      url: "/health",
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toHaveProperty("status", "healthy");
-
-    await fastify.close();
   });
 
   it("have security headers from helmet plugin", async () => {
