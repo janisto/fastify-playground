@@ -5,32 +5,35 @@ description: Create or change fastify-playground Fastify plugins, including deco
 
 # Fastify plugins
 
-Read `AGENTS.md`, `app/src/app.ts`, `app/src/server.ts` when lifecycle is involved, the neighboring plugins, and their unit tests before changing a plugin.
+Read `AGENTS.md`, `app/src/app.ts`, the neighboring plugins, and their tests before changing plugin behavior. Read `app/src/server.ts` only for process lifecycle work.
 
-## Design
+## Workflow
 
-- Put cross-cutting or infrastructure behavior in `app/src/plugins/`; keep feature behavior in modules.
-- Wrap a plugin with `fastify-plugin` only when its decorators or hooks must escape Fastify encapsulation.
-- Give wrapped plugins a stable name, Fastify compatibility range, and accurate `dependencies` list.
-- Extend Fastify module types next to each decorator. Decorate instance or request state before assigning values.
-- Initialize clients and services once at registration. Clean up only resources owned by the plugin in `onClose`.
-- Keep plugin registration order explicit in `app/src/app.ts` and update its layer description when the dependency graph changes.
-- Register Swagger before any plugin that creates a documented route. Keep process signals in `app/src/server.ts`; application plugins do not own process-global handlers.
+1. Decide whether the behavior is cross-cutting infrastructure or feature behavior. Put only the former in `app/src/plugins/`.
+2. Identify the encapsulation boundary, exposed decorators, registration dependencies, owned resources, and hook order before editing.
+3. Reuse an existing plugin or utility when it already owns the concern.
+4. Wrap with `fastify-plugin` only when decorators or hooks must escape encapsulation. Declare a stable name, Fastify range, and real plugin dependencies.
+5. Extend Fastify types beside each decorator and initialize shared clients once at registration.
+6. Register the plugin in the correct `app/src/app.ts` layer and update the layer description if the dependency graph changes.
+7. Apply `$adversarial-testing`, then test application-owned behavior, forbidden side effects, failure paths, and cleanup.
 
-Use `node:` imports, `.js` relative extensions, explicit type imports, and TypeScript 7 erasable syntax. Omit absent optional properties rather than assigning `undefined`.
+## Safety checks
 
-## Safety
-
-Keep request hooks bounded and deterministic. Do not log authorization headers, tokens, bodies, credentials, or PII. Preserve the `fastify-observability` contract: one correlated terminal access record per request and no parallel request-ID, trace, request-context, or access-log plugin. Keep production 5xx details generic.
-
-Validate CORS origins once at startup and compare exact strings per request. Never implicitly trust localhost, combine credentialed CORS with a wildcard, or throw a server error merely because a browser origin is denied.
-
-Register `fastify-observability` once at the root before application hooks and routes. Keep its canonical logger, request-ID generator, disabled Fastify request logging, and `request_id` label wiring together. Domain logs may add distinct context but must not repeat bound correlation fields or duplicate the generic terminal error record.
-
-Do not duplicate an existing Fastify or local plugin. Add a dependency only when it replaces more code or risk than it introduces.
+- Clean up only resources initialized by this process, and propagate meaningful cleanup failures.
+- Keep process signals in `app/src/server.ts`; plugins must not install process-global handlers.
+- Preserve the single root `fastify-observability` registration and its canonical logger, request-ID, trace-context, and terminal-record wiring.
+- Do not add parallel access logging, request context, trace parsing, or request-ID generation.
+- Keep hooks bounded and never log credentials, authorization data, cookies, bodies, or PII.
+- Validate startup configuration once where possible; request hooks should enforce already-decoded policy.
+- Register Swagger before plugins that create documented routes.
 
 ## Verification
 
-Apply the adversarial-testing skill, then add or update `app/tests/unit/plugins/<name>.test.ts`. Cover application-owned decorators, hook behavior, dependency failures, cleanup, and error paths. Do not test registration success or a dependency's documented API. Use `fastify.inject()` and shared Firebase mocks; do not bind a port or contact real services.
+Run the focused plugin test first, then:
 
-Run the focused plugin test, then `just lint`, `just typing`, and `just test`. Run `just container-build` when startup, shutdown, dependencies, or runtime composition changes.
+```bash
+just check
+pnpm --dir app build
+```
+
+Run `just container-build` when dependencies, build output, startup, shutdown, or runtime composition change.

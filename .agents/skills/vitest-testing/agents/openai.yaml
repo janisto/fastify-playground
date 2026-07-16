@@ -1,4 +1,0 @@
-interface:
-  display_name: "Vitest Testing"
-  short_description: "Write focused tests at the right boundary"
-  default_prompt: "Use $vitest-testing to add focused Vitest coverage for the requested behavior and run the relevant repository checks."

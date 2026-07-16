@@ -5,25 +5,24 @@ description: Create or change fastify-playground TypeBox request, response, shar
 
 # TypeBox schemas
 
-Read `AGENTS.md`, the affected route or environment module, neighboring schemas, and schema and route tests before editing a contract.
+Read `AGENTS.md`, the affected route or environment module, neighboring schemas, and their tests before editing a contract.
 
 ## Route schemas
 
-- Use `Type` from `@fastify/type-provider-typebox` inside `FastifyPluginAsyncTypebox` routes.
-- Define params, query, headers, body, and every reachable response in the route schema.
-- Add useful descriptions, formats, defaults, bounds, and examples that runtime validation actually honors.
-- Add `$id` to reusable response schemas and register or reference them so OpenAPI and `/schemas/<Name>.json` can discover them.
-- Reuse `ErrorModelSchema` for RFC 9457 errors.
-- Keep API fields camelCase and map any future persistence representation explicitly at its boundary.
+1. Use `Type` from `@fastify/type-provider-typebox` for Fastify route contracts and `FastifyPluginAsyncTypebox` for typed routes.
+2. Model params, query, headers, body, and every reachable response. Reuse `ErrorModelSchema` for errors.
+3. Encode constraints the runtime enforces: formats, defaults, lengths, numeric bounds, and accepted object fields.
+4. Add `$id` only to reusable response schemas. Register or reference them when OpenAPI components or `/schemas/<Name>.json` must expose them.
+5. Keep JSON fields camelCase and map upstream or persistence representations at their boundary.
 
 ## Environment schemas
 
-Use standalone `typebox` and `typebox/value` before Fastify creation. Decode with `Value.Decode` so defaults, conversion, cleaning, and assertion run. Pass only supported environment variables and remove settings with no consumer.
+Use standalone `typebox` and `typebox/value` before Fastify creation. Decode with `Value.Decode` so defaults, conversion, cleaning, and assertion run. Include only variables consumed by the application.
 
 Read `process.env` with bracket notation under the strict TypeScript index-signature policy. Never include credential values in schema examples or test output.
 
 ## Verification
 
-Test valid values, defaults, coercion, minimum and maximum boundaries, invalid unions or formats, unknown or missing fields, and response serialization. When a public schema changes, use `openapi-contract` to inspect generated components and schema discovery too.
+Apply `$adversarial-testing`. Test meaningful valid values, defaults or coercion, boundary violations, unknown or missing fields, and response serialization. Identify the plausible weakening, removal, or boundary mutation each case catches.
 
-Run the focused tests, then `just lint`, `just typing`, and `just test`.
+For public schemas, also apply `$openapi-contract`. Run focused tests first, then `just check` and `pnpm --dir app build`.

@@ -1,7 +1,8 @@
 # mac files
 .DS_Store
-plans/*
-!plans/modernize.md
+
+# Local planning files
+plans/
 
 # Environment variables
 .env
