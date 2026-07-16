@@ -1,5 +1,11 @@
 # fastify-playground
 
+[![Application CI](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-ci.yml?branch=main&label=application%20CI&logo=githubactions&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-ci.yml)
+[![Code quality](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-lint.yml?branch=main&label=code%20quality&logo=biome&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-lint.yml)
+[![Node.js 24.18.0](https://img.shields.io/badge/Node.js-24.18.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![pnpm 11.13.0](https://img.shields.io/badge/pnpm-11.13.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![MIT license](https://img.shields.io/github/license/janisto/fastify-playground)](LICENSE)
+
 A production-oriented reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates OpenAPI documentation, Firebase Authentication, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
 
 <img src="assets/ts.svg" alt="TypeScript logo" width="200">
