@@ -359,6 +359,54 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
+  it("rejects unsupported text request bodies without breaking JSON or CBOR", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const textResponses = await Promise.all(
+      ["text/plain", "text/plain; charset=utf-8"].map((contentType, index) =>
+        fastify.inject({
+          method: "POST",
+          url: "/v1/hello",
+          headers: {
+            "content-type": contentType,
+            "x-request-id": `unsupported-text-${index}`,
+          },
+          payload: JSON.stringify({ name: "Ada" }),
+        }),
+      ),
+    );
+    const json = await fastify.inject({
+      method: "POST",
+      url: "/v1/hello",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      payload: JSON.stringify({ name: "Ada" }),
+    });
+    const cbor = await fastify.inject({
+      method: "POST",
+      url: "/v1/hello",
+      headers: { accept: "application/cbor", "content-type": "application/cbor" },
+      payload: Buffer.from(cborEncode({ name: "Ada" })),
+    });
+
+    for (const [index, response] of textResponses.entries()) {
+      expect(response.statusCode).toBe(415);
+      expect(response.headers["content-type"]).toContain("application/problem+json");
+      expect(response.headers["x-request-id"]).toBe(`unsupported-text-${index}`);
+      expect(response.headers.vary).toEqual(["Accept", "Origin"]);
+      expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+      expect(response.json()).toMatchObject({ title: "Unsupported Media Type", status: 415 });
+      expect(response.json()).not.toHaveProperty("errors");
+    }
+
+    expect(json.statusCode).toBe(201);
+    expect(json.json()).toEqual({ message: "Hello, Ada!" });
+    expect(cbor.statusCode).toBe(201);
+    expect(cbor.headers["content-type"]).toBe("application/cbor");
+    expect(cborDecode(cbor.rawPayload)).toEqual({ message: "Hello, Ada!" });
+    await fastify.close();
+  });
+
   it("strictly negotiate schema documents", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();

@@ -67,6 +67,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
     .setValidatorCompiler(TypeBoxValidatorCompiler)
     .withTypeProvider<TypeBoxTypeProvider>();
 
+  fastify.removeContentTypeParser("text/plain");
+
   try {
     // Layer 1: Observability must precede every application hook and route.
     await fastify.register(fastifyObservability);

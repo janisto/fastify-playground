@@ -13,3 +13,6 @@ plans/
 logs
 *.log
 pnpm-debug.log*
+
+# Package manager cache
+/.pnpm-store/
