@@ -121,6 +121,7 @@ describe("environment configuration", () => {
   describe("CORS origins", () => {
     it.each([
       ['["http://localhost:3000", "https://app.example.com/"]', ["http://localhost:3000", "https://app.example.com"]],
+      ['["http://app.example:80", "https://app.example:443"]', ["http://app.example", "https://app.example"]],
       [
         "http://localhost:3000, https://app.example.com, http://localhost:3000",
         ["http://localhost:3000", "https://app.example.com"],

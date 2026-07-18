@@ -138,6 +138,7 @@ app/
   tests/
     unit/               # Unit tests (mirror src/ structure)
     integration/        # Full-stack integration tests
+    property/           # Bounded fast-check properties
     mocks/              # Test mocks (firebase.ts)
 functions/              # Firebase Cloud Functions (placeholder)
 ```
@@ -147,6 +148,7 @@ functions/              # Firebase Cloud Functions (placeholder)
 - Node.js 24.18.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
 - pnpm 11.13.0 through Corepack
 - [just](https://github.com/casey/just) for repository workflows
+- [actionlint](https://github.com/rhysd/actionlint) and [zizmor 1.27.0](https://docs.zizmor.sh/) for local workflow checks
 - Firebase project with Authentication, or the Authentication emulator, only when exercising `/v1/auth/me`
 
 ## Quick Start
@@ -190,21 +192,25 @@ just test             # Run unit and integration tests
 just cov              # Run the full suite with coverage
 just qa               # Apply safe fixes, then type-check and test
 just check            # Run all non-mutating quality gates
+just workflow-check   # Check action versions, workflow syntax, and workflow security
+just fuzz             # Run the property suite with FUZZ_RUNS (default 1000)
+just audit            # Audit production dependencies
 just install          # Install exactly from the lockfile
+just fresh            # Reinstall from a clean node_modules and dist
 just update           # Update dependencies within declared ranges
 ```
 
 Direct package scripts run from `app/`:
 
 ```bash
-pnpm qa            # Auto-fix lint/format, type check, and run tests
-pnpm dev           # Start dev server with hot reload
-pnpm test          # Run all tests
-pnpm test:coverage # Run tests with coverage report
-pnpm check         # Run format, lint, and import checks
-pnpm check:fix     # Auto-fix all issues
-pnpm typecheck     # Type check source and tests
-pnpm start         # Start the compiled server
+corepack pnpm qa            # Auto-fix lint/format, type check, and run tests
+corepack pnpm dev           # Start dev server with hot reload
+corepack pnpm test          # Run all tests
+corepack pnpm test:coverage # Run tests with coverage report
+corepack pnpm check         # Run format, lint, and import checks
+corepack pnpm check:fix     # Auto-fix all issues
+corepack pnpm typecheck     # Type check source and tests
+corepack pnpm start         # Start the compiled server
 ```
 
 ## Container
@@ -327,6 +333,29 @@ GitHub's [unauthenticated primary rate limit](https://docs.github.com/en/rest/us
 - **Coverage scope**: Full unit and integration suite across all `src/**/*.ts` files
 - **Unit tests**: `tests/unit/` with mocked external dependencies
 - **Integration tests**: `tests/integration/`; direct real-GitHub client tests require the API `GITHUB_TOKEN` and otherwise skip
+- **Property tests**: `tests/property/`; routine runs use 100 successful cases per property
+
+Run a longer property-only campaign with `just fuzz`. Set `FUZZ_RUNS` to change the successful-case budget. Reproduce
+an exact fast-check failure with:
+
+```bash
+FUZZ_RUNS=1000 FUZZ_SEED=<seed> FUZZ_PATH=<path> just fuzz
+```
+
+Keep the generated seed and path in failure reports. Promote stable minimized failures to named regression tests; do
+not commit random corpora.
+
+## Troubleshooting
+
+| Symptom | Repository-owned cause | Smallest corrective action |
+|---|---|---|
+| Startup rejects `CORS_ORIGINS` | An entry is not an exact HTTP(S) origin, contains credentials/path/query/fragment, or the JSON array contains a non-string | Use exact origins such as `https://app.example`; explicit default ports normalize to the origin default |
+| A request returns 401 without contacting Firebase | The authorization value is not exactly case-insensitive `Bearer`, one ASCII space, and one non-whitespace token | Send `Authorization: Bearer <token>` with no extra fields or alternate whitespace |
+| A response is 406 | `Accept` excludes every representation the route can produce | Request `application/json`, or explicitly request `application/cbor` on routes that produce it |
+| A request body is 415 | `Content-Type` is not owned by the route; arbitrary `+cbor` and `application/problem+cbor` are unsupported | Send the route's declared `application/json` or exact `application/cbor` media type |
+| A GitHub proxy route returns 502 or 504 | GitHub returned invalid/upstream data, transport failed, or the 10-second upstream deadline elapsed | Retry after checking GitHub availability and the redacted terminal record; do not add a broad server token |
+| `/health` is healthy while `/status` is 503 | Liveness intentionally bypasses process pressure; readiness reports shutdown or excessive load | Keep probing `/health` for process liveness and use `/status` for traffic readiness |
+| Requests emit duplicate or uncorrelated terminal records | Fastify was wired outside the canonical `fastify-observability` constructor and root-plugin setup | Restore the package-created logger/genReqId wiring and register the observability plugin once before routes |
 
 ## Code Style Requirements
 
@@ -343,6 +372,7 @@ GitHub Actions workflows in `.github/workflows/`:
 | `labeler.yml` | Automatic PR labeling |
 | `labeler-manual.yml` | Manual labeling for historical PRs |
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
+| `workflow-security.yml` | Exact-tag policy and read-only zizmor workflow security scanning |
 
 Dependabot is configured in `.github/dependabot.yml` for automated dependency updates. The auto-merge workflow intentionally maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication; contributors do not need to configure that secret. Workflow actions intentionally use explicit release tags such as `actions/checkout@v7.0.0`, rather than full commit SHAs, so Dependabot can propose readable version updates.
 

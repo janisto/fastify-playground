@@ -43,6 +43,7 @@
         "useLiteralKeys": "off"
       },
       "correctness": {
+        "noUndeclaredDependencies": "error",
         "noUnusedImports": "error",
         "noUnusedVariables": "error",
         "noUnusedFunctionParameters": "error",

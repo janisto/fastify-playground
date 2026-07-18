@@ -14,6 +14,26 @@ Instructions for coding agents working in this repository.
 - Do not declare completion until implementation, validation, and remaining risks are reported.
 - Keep source comments and documentation concise. Do not add progress narration, generated banners, emojis, or speculative TODOs.
 
+## Pull requests
+
+- Format titles as `type[optional scope]: description`. Prefer no scope; include one only when it materially improves clarity.
+- Use `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, or `revert` as the type. Example: `feat: add response size field`.
+- Keep each pull request focused. In the body, explain why the change is needed, what changed, how it was validated, and any remaining risk.
+- Keep the title suitable for the final squash or merge commit.
+- This repository does not maintain a `CHANGELOG.md`; do not create one or require changelog entries in pull requests.
+
+## Commits
+
+- Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+- Prefer no scope; include one only when it materially improves clarity. Write a short, imperative description. Example: `fix: preserve request ID`.
+- Mark breaking changes with `!` and explain them in a `BREAKING CHANGE:` footer.
+- Before committing, run `just qa` and `git diff --check`.
+
+## Mandatory skills
+
+- Use `.agents/skills/adversarial-testing/SKILL.md` for every task that plans, creates, modifies, reviews, debugs, or evaluates tests. Apply it alongside any more specific framework or infrastructure testing skill.
+- Use `.agents/skills/readme-maintenance/SKILL.md` for every README audit or change. Also use it to assess README impact whenever public behavior, configuration, setup, commands, architecture, deployment, CI, or supported versions change. A README edit is required only when the audit finds a stale or missing reader-facing claim.
+
 ## Repository layout
 
 - `app/`: the active Fastify application.
@@ -23,7 +43,7 @@ Instructions for coding agents working in this repository.
 - `functions/`: placeholder only; it is not currently a Node.js package.
 - `plans/`: durable implementation and migration logs.
 
-Node.js 24 and pnpm 11.13.0 are required. The repository pins Node.js 24.18.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses.
+Node.js 24 and pnpm 11.13.0 through Corepack are required. The repository pins Node.js 24.18.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, one-day release quarantine, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
 
 Run package scripts from `app/`, or use the root `Justfile`:
 
@@ -32,6 +52,8 @@ just install
 just qa
 just check
 just cov
+just fuzz
+just workflow-check
 just container-build
 ```
 
@@ -97,10 +119,12 @@ just container-build
 
 ## Tests and coverage
 
-- Use `.agents/skills/adversarial-testing` for every test change. State the highest-impact failure mode, test observable behavior and forbidden side effects, and ask which plausible mutation each test catches.
+- Use `.agents/skills/adversarial-testing/SKILL.md` for every test change. State the highest-impact failure mode, test observable behavior and forbidden side effects, and ask which plausible mutation each test catches.
 - Do not optimize for coverage numbers or mock interactions alone.
 - Do not retest Fastify or third-party plugin APIs. Remove tests that only prove registration succeeds, a decorator exists, or a mock returns its configured value.
 - Use Vitest with explicit imports; globals are disabled.
+- Use fast-check through `@fast-check/vitest` for bounded properties under `app/tests/property/`. Routine tests use 100
+  successful cases; use `just fuzz` for a longer campaign and preserve the reported seed/path for exact replay.
 - Unit tests do not use real network, filesystem, Firebase, or other external services.
 - Direct GitHub client integration tests are opt-in through the API `GITHUB_TOKEN` and skipped otherwise. Tests must prove the running application's GitHub path does not consume it.
 - Cover success, validation, error, and boundary behavior for every change.
@@ -113,31 +137,17 @@ Biome 2.5.4 is the formatter and linter. The root configuration enables recommen
 
 - Do not add suppression comments to avoid fixing actionable diagnostics.
 - `pnpm check:fix` applies safe fixes only. Review unsafe suggestions individually.
+- `correctness.noUndeclaredDependencies` is an error; declare every imported package directly.
 - Keep imports organized and all diagnostics at zero.
 - The entropy-based `noSecrets` rule is intentionally not enabled because it produced false positives on public identifiers and fixtures; secret prevention remains a contributor and platform scanning responsibility.
 
-## Pull requests
-
-- Format titles as `type[optional scope]: description`. Prefer no scope; include one only when it materially improves clarity.
-- Use `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, or `revert` as the type. Example: `feat: add response size field`.
-- Keep each pull request focused. In the body, explain why the change is needed, what changed, how it was validated, and any remaining risk.
-- Keep the title suitable for the final squash or merge commit.
-- This repository does not maintain a `CHANGELOG.md`; do not create one or require changelog entries in pull requests.
-
-## Commits
-
-- Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
-- Prefer no scope; include one only when it materially improves clarity. Write a short, imperative description. Example: `fix: preserve request ID`.
-- Mark breaking changes with `!` and explain them in a `BREAKING CHANGE:` footer.
-- Before committing, run `just qa` and `git diff --check`.
-
-## Completion checklist
+## Application validation
 
 For changes affecting the application, run the narrowest relevant test first, then:
 
 ```bash
 just check
-pnpm --dir app build
+corepack pnpm --dir app build
 ```
 
 Run `just container-build` when package installation, build output, runtime startup, or Docker configuration changes. Update `README.md`, this file, test guidance, and the relevant plan log when commands or contracts change.

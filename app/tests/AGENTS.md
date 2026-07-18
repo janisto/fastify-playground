@@ -6,6 +6,7 @@ Rules for tests under `app/tests/`. The root `AGENTS.md` also applies.
 
 - `unit/`: isolated tests mirroring `app/src/`.
 - `integration/`: application-level or real-service contract tests.
+- `property/`: bounded fast-check properties for repository-owned invariants.
 - `mocks/`: reusable external-service substitutes.
 - `helpers/`: shared test utilities.
 
@@ -28,6 +29,8 @@ Name tests `*.test.ts` and keep fixtures close to the test unless multiple files
 - Use Undici `MockAgent` for external HTTP clients and local Firebase mocks for infrastructure plugins.
 - Direct real-GitHub client integration tests are gated by the API `GITHUB_TOKEN` and skipped when it is absent. The running API must not consume that variable; it is unrelated to the Merge `GITHUB_TOKEN` used by GitHub Actions.
 - Keep tests deterministic: no wall-clock timing assumptions, random ordering, or dependency on execution order.
+- Property tests must bound collection, string, byte, and run counts. Do not use network, filesystem, credentials, or
+  wall-clock state in generated cases, and close each generated Fastify instance in `finally` or hooks.
 
 ## Assertions and typing
 
@@ -40,6 +43,20 @@ Name tests `*.test.ts` and keep fixtures close to the test unless multiple files
 - Omit absent optional properties in typed fixtures instead of assigning `undefined`.
 - Use bracket notation for values typed through index signatures.
 - Avoid non-null assertions and broad casts. Narrow `unknown` values at the boundary.
+- Import `fc` and `test` from `@fast-check/vitest` only in property files. Import assertions and hooks explicitly from
+  `vitest` as usual.
+
+## Property replay and regressions
+
+Routine tests run each property with fast-check's bounded default of 100 successful cases. Use `just fuzz` for a
+longer property-only campaign. Replay a failure exactly with:
+
+```bash
+FUZZ_RUNS=1000 FUZZ_SEED=<seed> FUZZ_PATH=<path> just fuzz
+```
+
+`FUZZ_PATH` is valid only with `FUZZ_SEED`. Promote a minimized failure to a named example test when it captures a
+stable contract, and retain the property to search adjacent input space. Do not commit generated random corpora.
 
 ## Coverage
 

@@ -79,8 +79,7 @@ function normalizeOrigin(candidate: unknown): string {
     url.password !== "" ||
     url.pathname !== "/" ||
     url.search !== "" ||
-    url.hash !== "" ||
-    (origin !== url.origin && origin !== `${url.origin}/`)
+    url.hash !== ""
   ) {
     throw new Error(`CORS origin must be an exact HTTP(S) origin: ${origin}`);
   }

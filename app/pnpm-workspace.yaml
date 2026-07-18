@@ -1,8 +1,14 @@
 autoInstallPeers: false
+nodeVersion: 24.18.0
+engineStrict: true
+strictDepBuilds: true
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustLockfile: false
+blockExoticSubdeps: true
+
 allowBuilds:
   '@firebase/util': true
   esbuild: true
   protobufjs: false
-minimumReleaseAgeExclude:
-  - '@fastify/swagger@9.8.1'
-  - fastify-observability@0.2.1
