@@ -5,10 +5,13 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/app"
+    versioning-strategy: "increase-if-necessary"
     schedule:
       interval: "quarterly"
       time: "08:00"
       timezone: "Europe/Helsinki"
+    cooldown:
+      default-days: 1
     commit-message:
       prefix: "chore(deps)"
     labels:
@@ -33,10 +36,13 @@ updates:
   # Silently skipped if no package.json exists; activates automatically when added
   - package-ecosystem: "npm"
     directory: "/functions"
+    versioning-strategy: "increase-if-necessary"
     schedule:
       interval: "quarterly"
       time: "08:30"
       timezone: "Europe/Helsinki"
+    cooldown:
+      default-days: 1
     commit-message:
       prefix: "chore(deps)"
     labels:
@@ -60,6 +66,8 @@ updates:
       interval: "quarterly"
       time: "09:00"
       timezone: "Europe/Helsinki"
+    cooldown:
+      default-days: 1
     commit-message:
       prefix: "chore(deps)"
     labels:

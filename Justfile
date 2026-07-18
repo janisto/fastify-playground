@@ -6,6 +6,7 @@ set positional-arguments
 
 PORT := env("PORT", "3000")
 CONTAINER_PORT := env("CONTAINER_PORT", "8080")
+FUZZ_RUNS := env("FUZZ_RUNS", "1000")
 
 # Container runtime: prefer podman, fallback to docker
 CONTAINER_RUNTIME := if `command -v podman 2>/dev/null || true` != "" { "podman" } else { "docker" }
@@ -15,38 +16,51 @@ CONTAINER_RUNTIME := if `command -v podman 2>/dev/null || true` != "" { "podman"
 
 # Run all tests
 [group('test')]
+[working-directory('app')]
 test *args:
-    pnpm --dir app test {{ args }}
+    corepack pnpm test {{ args }}
 
 # Run unit tests only
 [group('test')]
+[working-directory('app')]
 test-unit *args:
-    pnpm --dir app exec vitest run tests/unit {{ args }}
+    corepack pnpm exec vitest run tests/unit {{ args }}
 
 # Run integration tests only
 [group('test')]
+[working-directory('app')]
 test-integration *args:
-    pnpm --dir app exec vitest run tests/integration {{ args }}
+    corepack pnpm exec vitest run tests/integration {{ args }}
+
+# Run property tests with a longer configurable campaign
+[group('test')]
+[working-directory('app')]
+fuzz *args:
+    FUZZ_RUNS={{ FUZZ_RUNS }} corepack pnpm exec vitest run tests/property {{ args }}
 
 # Run tests and measure coverage
 [group('test')]
+[working-directory('app')]
 @cov:
-    pnpm --dir app test:coverage
+    corepack pnpm test:coverage
 
 # Run linters and auto-fix issues
 [group('qa')]
+[working-directory('app')]
 fix:
-    pnpm --dir app check:fix
+    corepack pnpm check:fix
 
 # Run linters and formatting checks
 [group('qa')]
+[working-directory('app')]
 lint:
-    pnpm --dir app check
+    corepack pnpm check
 
 # Check types
 [group('qa')]
+[working-directory('app')]
 typing:
-    pnpm --dir app typecheck
+    corepack pnpm typecheck
 
 # Quality assurance: fix, type check, and test
 [group('qa')]
@@ -54,12 +68,25 @@ qa: fix typing test
 
 # Perform all non-mutating checks
 [group('qa')]
-check: lint typing test cov
+check: workflow-check lint typing test cov
+
+# Check GitHub Actions syntax and security
+[group('qa')]
+workflow-check:
+    actionlint
+    zizmor --offline .
+
+# Audit production dependencies against registry advisories
+[group('qa')]
+[working-directory('app')]
+audit:
+    corepack pnpm audit --prod
 
 # Run development server
 [group('run')]
+[working-directory('app')]
 serve:
-    pnpm --dir app dev
+    corepack pnpm dev
 
 # Send HTTP request to development server
 [group('run')]
@@ -108,13 +135,15 @@ container-down name="fastify-playground":
 
 # Update dependencies within the versions allowed by package.json
 [group('lifecycle')]
+[working-directory('app')]
 update:
-    pnpm --dir app update
+    corepack pnpm update
 
 # Install dependencies exactly as locked
 [group('lifecycle')]
+[working-directory('app')]
 install:
-    pnpm --dir app install --frozen-lockfile
+    corepack pnpm install --frozen-lockfile
 
 # Remove generated files and installed dependencies
 [group('lifecycle')]

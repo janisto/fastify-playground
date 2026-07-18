@@ -121,6 +121,7 @@ describe("environment configuration", () => {
   describe("CORS origins", () => {
     it.each([
       ['["http://localhost:3000", "https://app.example.com/"]', ["http://localhost:3000", "https://app.example.com"]],
+      ['["http://app.example:80", "https://app.example:443"]', ["http://app.example", "https://app.example"]],
       [
         "http://localhost:3000, https://app.example.com, http://localhost:3000",
         ["http://localhost:3000", "https://app.example.com"],
@@ -139,7 +140,11 @@ describe("environment configuration", () => {
       ["non-string entry", '["https://app.example.com", 42]'],
       ["wildcard", "*"],
       ["non-HTTP scheme", "file:///tmp/example"],
+      ["missing authority slashes", "https:app.example"],
       ["path", "https://app.example.com/path"],
+      ["dot-segment path", "https://app.example.com/."],
+      ["encoded dot-segment path", "https://app.example.com/%2e"],
+      ["normalized parent path", "https://app.example.com/segment/.."],
       ["query", "https://app.example.com?tenant=1"],
       ["credentials", "https://user:pass@app.example.com"],
     ])("rejects a %s", async (_case, raw) => {

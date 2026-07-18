@@ -174,6 +174,20 @@ describe("schemaErrorFormatter", () => {
 
       expect(result.formattedErrors).toHaveLength(2);
     });
+
+    it("does not conflate location-message pairs containing colons", () => {
+      const errors: FastifySchemaValidationError[] = [
+        createError("detail:must match", "/field"),
+        createError("must match", "/field:detail"),
+      ];
+
+      const result = schemaErrorFormatter(errors, "body");
+
+      expect(result.formattedErrors).toEqual([
+        { message: "detail:must match", location: "body.field" },
+        { message: "must match", location: "body.field:detail" },
+      ]);
+    });
   });
 
   describe("multiple errors", () => {

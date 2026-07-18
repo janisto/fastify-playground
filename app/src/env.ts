@@ -74,13 +74,13 @@ function normalizeOrigin(candidate: unknown): string {
   }
 
   if (
+    !/^https?:\/\/[^/?#\\\s]+\/?$/i.test(origin) ||
     (url.protocol !== "http:" && url.protocol !== "https:") ||
     url.username !== "" ||
     url.password !== "" ||
     url.pathname !== "/" ||
     url.search !== "" ||
-    url.hash !== "" ||
-    (origin !== url.origin && origin !== `${url.origin}/`)
+    url.hash !== ""
   ) {
     throw new Error(`CORS origin must be an exact HTTP(S) origin: ${origin}`);
   }

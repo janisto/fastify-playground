@@ -43,7 +43,7 @@ function formatErrors(errors: FastifySchemaValidationError[], dataVar: string): 
   for (const error of errors) {
     const message = buildMessage(error);
     const location = buildLocation(error.instancePath || "", dataVar);
-    const key = `${location}:${message}`;
+    const key = JSON.stringify([location, message]);
 
     if (!uniqueErrors.has(key)) {
       uniqueErrors.set(key, { message, location });

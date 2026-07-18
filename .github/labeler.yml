@@ -1,28 +1,48 @@
 # Auto-label PRs based on changed file paths
 # Docs: https://github.com/actions/labeler
 
-# App changes in src folder
+# Application code
 app:
   - changed-files:
       - any-glob-to-any-file: 'app/src/**'
 
-# Test changes in tests folder
 tests:
   - changed-files:
       - any-glob-to-any-file: 'app/tests/**'
 
-# Functions changes in functions folder
 functions:
   - changed-files:
       - any-glob-to-any-file: 'functions/**'
 
-# Documentation changes in README.md
 documentation:
   - changed-files:
       - any-glob-to-any-file:
           - 'README.md'
+          - 'AGENTS.md'
+          - '.agents/**/*.md'
+          - '.github/**/*.md'
 
-# Branch-name based labels
+tooling:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.node-version'
+          - 'Justfile'
+          - 'biome.json'
+          - 'app/biome.json'
+          - 'app/Dockerfile'
+          - 'app/.dockerignore'
+          - 'app/package.json'
+          - 'app/pnpm-lock.yaml'
+          - 'app/pnpm-workspace.yaml'
+          - 'app/tsconfig*.json'
+          - 'app/vitest.config.*'
+
+github-actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/dependabot.yml'
+
 feature:
   - head-branch: ['^feature', 'feature']
 
