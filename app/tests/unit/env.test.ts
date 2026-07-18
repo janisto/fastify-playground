@@ -141,6 +141,8 @@ describe("environment configuration", () => {
       ["wildcard", "*"],
       ["non-HTTP scheme", "file:///tmp/example"],
       ["path", "https://app.example.com/path"],
+      ["dot-segment path", "https://app.example.com/."],
+      ["normalized parent path", "https://app.example.com/segment/.."],
       ["query", "https://app.example.com?tenant=1"],
       ["credentials", "https://user:pass@app.example.com"],
     ])("rejects a %s", async (_case, raw) => {

@@ -74,6 +74,7 @@ function normalizeOrigin(candidate: unknown): string {
   }
 
   if (
+    !/^https?:\/\/[^/?#\\\s]+\/?$/i.test(origin) ||
     (url.protocol !== "http:" && url.protocol !== "https:") ||
     url.username !== "" ||
     url.password !== "" ||
