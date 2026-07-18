@@ -147,7 +147,7 @@ For changes affecting the application, run the narrowest relevant test first, th
 
 ```bash
 just check
-corepack pnpm --dir app build
+(cd app && corepack pnpm build)
 ```
 
 Run `just container-build` when package installation, build output, runtime startup, or Docker configuration changes. Update `README.md`, this file, test guidance, and the relevant plan log when commands or contracts change.

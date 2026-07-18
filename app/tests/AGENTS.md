@@ -76,6 +76,6 @@ For blocks, use matching `/* v8 ignore start -- @preserve */` and `/* v8 ignore 
 Run the narrowest relevant file while iterating, then the complete gates:
 
 ```bash
-pnpm --dir app exec vitest run tests/unit/path/to/file.test.ts
+(cd app && corepack pnpm exec vitest run tests/unit/path/to/file.test.ts)
 just check
 ```

@@ -28,7 +28,8 @@ test.prop([fc.array(origin, { minLength: 1, maxLength: 12 }), fc.boolean()], pro
 
 const invalidCorsValue = fc.oneof(
   hostname.map((host) => `https://${host}/path`),
-  fc.tuple(hostname, fc.constantFrom("/.", "/segment/..")).map(([host, path]) => `https://${host}${path}`),
+  fc.tuple(hostname, fc.constantFrom("/.", "/%2e", "/segment/..")).map(([host, path]) => `https://${host}${path}`),
+  hostname.map((host) => `https:${host}`),
   hostname.map((host) => `https://${host}?tenant=1`),
   hostname.map((host) => `https://${host}#fragment`),
   hostname.map((host) => `https://user:pass@${host}`),
