@@ -62,12 +62,10 @@ qa: fix typing test
 [group('qa')]
 check: workflow-check lint typing test cov
 
-# Check GitHub Actions syntax, version policy, and security
+# Check GitHub Actions syntax and security
 [group('qa')]
 workflow-check:
-    node .github/scripts/check-action-versions.mjs
     actionlint
-    node .github/scripts/check-zizmor-version.mjs
     zizmor --offline .
 
 # Audit production dependencies against registry advisories

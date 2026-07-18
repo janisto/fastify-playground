@@ -192,7 +192,7 @@ just test             # Run unit and integration tests
 just cov              # Run the full suite with coverage
 just qa               # Apply safe fixes, then type-check and test
 just check            # Run all non-mutating quality gates
-just workflow-check   # Check action versions, workflow syntax, and workflow security
+just workflow-check   # Check workflow syntax and security
 just fuzz             # Run the property suite with FUZZ_RUNS (default 1000)
 just audit            # Audit production dependencies
 just install          # Install exactly from the lockfile
@@ -372,7 +372,7 @@ GitHub Actions workflows in `.github/workflows/`:
 | `labeler.yml` | Automatic PR labeling |
 | `labeler-manual.yml` | Manual labeling for historical PRs |
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
-| `workflow-security.yml` | Exact-tag policy and read-only zizmor workflow security scanning |
+| `workflow-security.yml` | Read-only zizmor workflow security scanning |
 
 Dependabot is configured in `.github/dependabot.yml` for automated dependency updates. The auto-merge workflow intentionally maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication; contributors do not need to configure that secret. Workflow actions intentionally use explicit release tags such as `actions/checkout@v7.0.0`, rather than full commit SHAs, so Dependabot can propose readable version updates.
 
