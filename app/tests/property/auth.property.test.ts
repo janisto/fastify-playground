@@ -54,7 +54,7 @@ const bearerScheme = fc
     ...[..."Bearer"].map((character) => fc.boolean().map((upper) => (upper ? character.toUpperCase() : character))),
   )
   .map((characters) => characters.join(""));
-const token = fc.stringMatching(/^[A-Za-z0-9._~-]{1,64}$/);
+const token = fc.stringMatching(/^[!-~]{1,64}$/);
 
 test.prop([bearerScheme, token], propertyParameters)(
   "verifies only the token from an exact Bearer header",

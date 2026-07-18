@@ -14,8 +14,9 @@ const prefixByContext: Readonly<Record<string, string>> = {
 };
 const errorInput = fc.record({
   message: fc.option(fc.string({ maxLength: 48 }), { nil: undefined }),
-  path: fc.array(fc.stringMatching(/^[A-Za-z0-9_-]{1,16}$/), { maxLength: 4 }),
+  path: fc.array(fc.stringMatching(/^[A-Za-z0-9_.:-]{1,16}$/), { maxLength: 4 }),
 });
+const keyFragment = fc.stringMatching(/^[A-Za-z0-9_-]{1,16}$/);
 
 function toValidationError(input: { message: string | undefined; path: string[] }): FastifySchemaValidationError {
   const error: FastifySchemaValidationError = {
@@ -46,5 +47,21 @@ test.prop([context, fc.array(errorInput, { maxLength: 24 })], propertyParameters
     }
 
     expect(schemaErrorFormatter(errors, dataVar).formattedErrors).toEqual([...expected.values()]);
+  },
+);
+
+test.prop([context, keyFragment, keyFragment, keyFragment], propertyParameters)(
+  "keeps distinct location-message pairs whose delimiter forms collide",
+  (dataVar, locationFragment, messagePrefix, messageSuffix) => {
+    const prefix = prefixByContext[dataVar] ?? dataVar;
+    const errors = [
+      toValidationError({ message: `${messagePrefix}:${messageSuffix}`, path: [locationFragment] }),
+      toValidationError({ message: messageSuffix, path: [`${locationFragment}:${messagePrefix}`] }),
+    ];
+
+    expect(schemaErrorFormatter(errors, dataVar).formattedErrors).toEqual([
+      { location: `${prefix}.${locationFragment}`, message: `${messagePrefix}:${messageSuffix}` },
+      { location: `${prefix}.${locationFragment}:${messagePrefix}`, message: messageSuffix },
+    ]);
   },
 );
