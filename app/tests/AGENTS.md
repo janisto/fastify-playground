@@ -38,7 +38,7 @@ Name tests `*.test.ts` and keep fixtures close to the test unless multiple files
 - Assert public behavior and contracts rather than private implementation details.
 - Use behavioral names describing the condition and outcome. Avoid `should`, registration-only tests, existence assertions when an exact value is knowable, and tests of third-party APIs.
 - Cover success, error, validation, content negotiation, and boundary cases.
-- For observability tests, inspect the raw JSON line before parsing when field uniqueness matters. Assert one terminal record, canonical snake_case correlation fields, final status, and absence of request secrets.
+- For observability tests, inspect the raw JSON line before parsing when field uniqueness matters. Assert one terminal record, Trace Context Level 1 correlation fields, final status, and absence of request secrets. Preserve the app policy: native error, concrete path, peer IP, and User-Agent capture are disabled.
 - Use `.at()` or another guarded lookup when accessing arrays; unchecked index access is enabled.
 - Omit absent optional properties in typed fixtures instead of assigning `undefined`.
 - Use bracket notation for values typed through index signatures.

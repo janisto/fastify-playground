@@ -197,7 +197,7 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
-  it("emit one safe, correlated terminal record for an application error", async () => {
+  it("emits one correlated terminal record without request or error details", async () => {
     const stream = new JsonLineStream();
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp({ loggerDestination: stream, loggerLevel: "info" });
@@ -206,16 +206,21 @@ describe("App Integration", () => {
     const requestId = "observability-integration";
 
     fastify.get("/observability-error-test", async () => {
-      throw new Error("terminal-error-canary");
+      throw Object.assign(new Error("terminal-error-canary", { cause: new Error("error-cause-secret-canary") }), {
+        authorization: "Bearer error-property-secret-canary",
+      });
     });
 
     const response = await fastify.inject({
       method: "GET",
+      remoteAddress: "192.0.2.1",
       url: "/observability-error-test?token=query-secret-canary",
       headers: {
         authorization: "Bearer authorization-secret-canary",
         cookie: "session=cookie-secret-canary",
-        traceparent: `00-${traceId}-${parentId}-01`,
+        traceparent: `00-${traceId}-${parentId}-03`,
+        "user-agent": "user-agent-secret-canary",
+        "x-forwarded-for": "203.0.113.99",
         "x-request-id": requestId,
       },
     });
@@ -242,20 +247,41 @@ describe("App Integration", () => {
       correlation_id: traceId,
       trace_id: traceId,
       parent_id: parentId,
-      trace_flags: "01",
+      trace_flags: "03",
       trace_sampled: true,
       method: "GET",
-      path: "/observability-error-test",
       path_template: "/observability-error-test",
       status: 500,
       "logging.googleapis.com/trace": traceId,
       "logging.googleapis.com/trace_sampled": true,
-      err: { message: "terminal-error-canary" },
+      httpRequest: {
+        requestMethod: "GET",
+        status: 500,
+      },
     });
+    expect(terminal).not.toHaveProperty("path");
+    expect(terminal).not.toHaveProperty("peer_ip");
+    expect(terminal).not.toHaveProperty("user_agent");
+    expect(terminal).not.toHaveProperty("terminal_reason");
+    expect(terminal).not.toHaveProperty("trace_id_random");
+    expect(terminal).not.toHaveProperty("err");
+    expect(terminal).not.toHaveProperty("httpRequest.requestUrl");
+    expect(terminal).not.toHaveProperty("httpRequest.remoteIp");
+    expect(terminal).not.toHaveProperty("httpRequest.userAgent");
     expect(terminal["logging.googleapis.com/spanId"]).toBeUndefined();
     expect(terminalLine.match(/"request_id":/g)).toHaveLength(1);
     expect(stream.records.filter((record) => record.message === "Server error")).toHaveLength(0);
-    for (const secret of ["query-secret-canary", "authorization-secret-canary", "cookie-secret-canary"]) {
+    for (const secret of [
+      "query-secret-canary",
+      "authorization-secret-canary",
+      "cookie-secret-canary",
+      "user-agent-secret-canary",
+      "terminal-error-canary",
+      "error-cause-secret-canary",
+      "error-property-secret-canary",
+      "192.0.2.1",
+      "203.0.113.99",
+    ]) {
       expect(terminalLine).not.toContain(secret);
     }
   });

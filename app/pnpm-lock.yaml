@@ -36,8 +36,8 @@ importers:
         specifier: ^5.10.0
         version: 5.10.0
       fastify-observability:
-        specifier: ^1.0.1
-        version: 1.0.1(fastify@5.10.0)
+        specifier: ^2.0.0
+        version: 2.0.0(fastify@5.10.0)
       fastify-plugin:
         specifier: ^6.0.0
         version: 6.0.0
@@ -1072,8 +1072,8 @@ packages:
     resolution: {integrity: sha512-IEMIf7298kXuZSRFoGfMYrl7is8LpavODgbNz1cwIudv7KwVFnuU+UsMporfq6PD6aXSlawZlARiA3UywCTfMw==}
     hasBin: true
 
-  fastify-observability@1.0.1:
-    resolution: {integrity: sha512-OO/xdOmomNe6VdOwuI4K6vYYCJD2aF9vAihq7cahMYtM5+f1hSJe2OnbgOi3XGwVoWf7iqm8yUTcJnpbT3n+FA==}
+  fastify-observability@2.0.0:
+    resolution: {integrity: sha512-cqaBypaIsJumtZD5ZTMRh1YAqoN6NIb9aYUFIu33tjjQu4/iEpZ2f3SogktW7Y0IEROht1/QxevZWZ0ZlodG/w==}
     engines: {node: '>=24'}
     peerDependencies:
       fastify: ^5.10.0
@@ -2924,7 +2924,7 @@ snapshots:
       xml-naming: 0.3.0
     optional: true
 
-  fastify-observability@1.0.1(fastify@5.10.0):
+  fastify-observability@2.0.0(fastify@5.10.0):
     dependencies:
       fastify: 5.10.0
       fastify-plugin: 6.0.0

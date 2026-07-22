@@ -114,9 +114,11 @@ Malformed, noncanonical, empty, oversized, invalid UTF-8, wrong-resource, and st
 
 ### Observability
 
-[fastify-observability](https://www.npmjs.com/package/fastify-observability) owns the application Pino logger, request-ID generation, W3C trace parsing, request correlation, and access logging. It emits one terminal `request completed` record for successful, handled-error, unhandled-error, timeout, and observable abort paths. Query strings, request bodies, cookies, authorization, and arbitrary headers are not selected for access records.
+[fastify-observability](https://www.npmjs.com/package/fastify-observability) v2 owns the application Pino logger, request-ID generation, W3C trace parsing, request correlation, and access logging. The app explicitly pins Trace Context Level 1, the W3C Recommendation, rather than opting into the draft Level 2 grammar. It emits one terminal `request completed` record for successful and handled-error responses, unhandled errors, and abnormal outcomes identified as `timeout`, `client_disconnect`, `body_error`, or `response_dropped`.
 
-The GCP preset maps log levels to Cloud Logging severity and emits the validated bare trace ID in `logging.googleapis.com/trace`. It does not prepend a project resource, copy the incoming parent ID into a fake current-span field, initialize a cloud SDK, or create spans. Without a valid `traceparent`, `correlation_id` falls back to the request ID.
+Native terminal error capture is disabled, so terminal records retain correlation, route, status, timing, and abnormal-outcome metadata without serializing arbitrary error messages, stacks, causes, or properties. Application code can emit controlled domain diagnostic codes when needed. Concrete request paths, direct peer IPs, and User-Agent values also remain disabled; low-cardinality `path_template` and `operation_id` fields are retained. Query strings, request bodies, cookies, authorization, and arbitrary headers are not selected for access records.
+
+The GCP preset maps log levels to Cloud Logging severity and emits the validated bare trace ID in `logging.googleapis.com/trace`. It does not prepend a project resource, copy the incoming parent ID into a fake current-span field, initialize a cloud SDK, create spans, or project Level 2's draft random flag. Without a valid `traceparent`, `correlation_id` falls back to the request ID.
 
 Application code logs through `fastify.log`, `request.log`, or `reply.log`. Request-scoped logs inherit `request_id`, `correlation_id`, and validated trace fields. The immutable context is also available as `request.observability`.
 
@@ -172,7 +174,7 @@ The root `Justfile` loads `.env` for its recipes. Direct runtime commands such a
 |----------|------------|
 | Runtime | Node.js 24.18.0 (ES2024) |
 | Framework | Fastify 5.x with TypeScript 7 |
-| Observability | fastify-observability with Pino 10 |
+| Observability | fastify-observability 2 with Pino 10 |
 | Package manager | pnpm 11.13.0 |
 | Authentication | Firebase Admin SDK |
 | Schema Validation | TypeBox with @fastify/type-provider-typebox |
@@ -353,7 +355,7 @@ not commit random corpora.
 | A request returns 401 without contacting Firebase | The authorization value is not exactly case-insensitive `Bearer`, one ASCII space, and one non-whitespace token | Send `Authorization: Bearer <token>` with no extra fields or alternate whitespace |
 | A response is 406 | `Accept` excludes every representation the route can produce | Request `application/json`, or explicitly request `application/cbor` on routes that produce it |
 | A request body is 415 | `Content-Type` is not owned by the route; arbitrary `+cbor` and `application/problem+cbor` are unsupported | Send the route's declared `application/json` or exact `application/cbor` media type |
-| A GitHub proxy route returns 502 or 504 | GitHub returned invalid/upstream data, transport failed, or the 10-second upstream deadline elapsed | Retry after checking GitHub availability and the redacted terminal record; do not add a broad server token |
+| A GitHub proxy route returns 502 or 504 | GitHub returned invalid/upstream data, transport failed, or the 10-second upstream deadline elapsed | Retry after checking GitHub availability, the correlated terminal record, and controlled domain diagnostics; do not add a broad server token |
 | `/health` is healthy while `/status` is 503 | Liveness intentionally bypasses process pressure; readiness reports shutdown or excessive load | Keep probing `/health` for process liveness and use `/status` for traffic readiness |
 | Requests emit duplicate or uncorrelated terminal records | Fastify was wired outside the canonical `fastify-observability` constructor and root-plugin setup | Restore the package-created logger/genReqId wiring and register the observability plugin once before routes |
 

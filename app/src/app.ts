@@ -4,6 +4,7 @@ import Fastify, { LogController } from "fastify";
 import fastifyObservability, {
   createObservabilityLogger,
   createRequestIdGenerator,
+  type FastifyObservabilityOptions,
   type ObservabilityLoggerOptions,
 } from "fastify-observability";
 import { env } from "./env.js";
@@ -25,6 +26,14 @@ import healthRoutes from "./routes/health.js";
 import schemasRoutes from "./routes/schemas.js";
 import v1Routes from "./routes/v1.js";
 import { schemaErrorFormatter } from "./utils/schema-error-formatter.js";
+
+const OBSERVABILITY_OPTIONS = {
+  captureError: false,
+  capturePath: false,
+  capturePeerIp: false,
+  captureUserAgent: false,
+  traceContextLevel: 1,
+} as const satisfies FastifyObservabilityOptions;
 
 /**
  * Build and configure the Fastify application.
@@ -71,7 +80,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   try {
     // Layer 1: Observability must precede every application hook and route.
-    await fastify.register(fastifyObservability);
+    await fastify.register(fastifyObservability, OBSERVABILITY_OPTIONS);
 
     // Layer 2: Core plugins (no dependencies)
     await fastify.register(sensiblePlugin);
