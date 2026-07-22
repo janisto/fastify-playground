@@ -3,6 +3,9 @@ nodeVersion: 24.18.0
 engineStrict: true
 strictDepBuilds: true
 minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  # First-party release adopted intentionally before the one-day quarantine elapsed.
+  - fastify-observability@2.0.0
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
