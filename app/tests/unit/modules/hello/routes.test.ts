@@ -46,7 +46,18 @@ describe("hello routes", () => {
         payload: { name: "Alice" },
       });
 
-      expect(response.statusCode).toBe(201);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ message: "Hello, Alice!" });
+    });
+
+    it("strips unknown input properties instead of exposing them to the handler", async () => {
+      const response = await fastify.inject({
+        method: "POST",
+        url: "/",
+        payload: { name: "Alice", admin: true },
+      });
+
+      expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({ message: "Hello, Alice!" });
     });
 

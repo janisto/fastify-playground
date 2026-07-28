@@ -9,7 +9,7 @@ function buildServer() {
 }
 
 describe("Schema discovery plugin", () => {
-  it("adds a describedBy Link without changing the response instance", async () => {
+  it("adds a describedby Link without changing the response instance", async () => {
     const fastify = buildServer();
     fastify.register(schemaDiscovery);
     const ResponseSchema = Type.Object({ message: Type.String() }, { $id: "TestResponse" });
@@ -18,7 +18,7 @@ describe("Schema discovery plugin", () => {
     const response = await fastify.inject({ method: "GET", url: "/test" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers.link).toBe('</schemas/TestResponse.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/TestResponse.json>; rel="describedby"');
     expect(response.json()).toEqual({ message: "hello" });
     await fastify.close();
   });
@@ -63,7 +63,7 @@ describe("Schema discovery plugin", () => {
 
     expect(response.statusCode).toBe(204);
     expect(response.body).toBe("");
-    expect(response.headers.link).toBe('</schemas/EmptyResponse.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/EmptyResponse.json>; rel="describedby"');
     await fastify.close();
   });
 });

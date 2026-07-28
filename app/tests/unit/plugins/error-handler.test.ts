@@ -45,7 +45,7 @@ describe("Error Handler Plugin", () => {
     expect(response.statusCode).toBe(500);
     expect(response.headers["content-type"]).toContain("application/problem+json");
     expect(response.headers.vary).toEqual(["Accept", "Origin"]);
-    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
 
     const body = response.json();
     expect(body.$schema).toBeUndefined();
@@ -189,7 +189,7 @@ describe("Error Handler Plugin", () => {
     expect(response.statusCode).toBe(404);
     expect(response.headers["content-type"]).toContain("application/problem+json");
     expect(response.headers.vary).toEqual(["Accept", "Origin"]);
-    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
 
     const body = response.json();
     expect(body.$schema).toBeUndefined();
@@ -342,7 +342,7 @@ describe("Error Handler Plugin", () => {
       },
     });
 
-    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
     expect(response.json().$schema).toBeUndefined();
 
     await fastify.close();

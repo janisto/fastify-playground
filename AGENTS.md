@@ -29,6 +29,12 @@ Instructions for coding agents working in this repository.
 - Mark breaking changes with `!` and explain them in a `BREAKING CHANGE:` footer.
 - Before committing, run `just qa` and `git diff --check`.
 
+## GitHub automation
+
+- Reference GitHub Actions by explicit full release tags such as
+  `owner/action@v1.2.3`, not full commit SHAs or floating major-version tags.
+  Dependabot updates those release tags.
+
 ## Mandatory skills
 
 - Use `.agents/skills/adversarial-testing/SKILL.md` for every task that plans, creates, modifies, reviews, debugs, or evaluates tests. Apply it alongside any more specific framework or infrastructure testing skill.
@@ -43,7 +49,7 @@ Instructions for coding agents working in this repository.
 - `functions/`: placeholder only; it is not currently a Node.js package.
 - `plans/`: durable implementation and migration logs.
 
-Node.js 24 and pnpm 11.13.0 through Corepack are required. The repository pins Node.js 24.18.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, one-day release quarantine, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
+Node.js 24 and pnpm 11.17.0 through Corepack are required. The repository pins Node.js 24.18.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, strict peer dependencies, one-day release quarantine, no trust downgrades, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
 
 Run package scripts from `app/`, or use the root `Justfile`:
 
@@ -93,7 +99,7 @@ just container-build
 - Errors use RFC 9457 `application/problem+json` by default or the same fields encoded as `application/cbor` when explicitly preferred. Do not use the unregistered `application/problem+cbor`; RFC 9290 concise CBOR problems are a different model and are not implemented.
 - Negotiated responses include `Vary: Accept, Origin`.
 - Pagination uses canonical unpadded Base64URL cursors, a 2,048-character maximum, and RFC 8288 `Link` headers. Previous links must return the preceding page without repeating the current page; link to the first page by omitting `cursor`.
-- Shared response schemas have `$id` values. Response instances receive an RFC 8288 `Link` with `rel="describedBy"`; do not inject the JSON Schema `$schema` keyword into API data. Standalone `/schemas/*.json` documents declare Draft 2020-12 and rewrite component references into local `$defs`.
+- Shared response schemas have `$id` values. Response instances receive an RFC 8288 `Link` with `rel="describedby"`; do not inject the JSON Schema `$schema` keyword into API data. Standalone `/schemas/*.json` documents declare Draft 2020-12 and rewrite component references into local `$defs`.
 
 ## Authentication, security, and logging
 
@@ -112,7 +118,6 @@ just container-build
 - Treat upstream response bodies and transport errors as untrusted. Preserve internal error chaining without serializing it into terminal logs, and expose controlled public details for upstream failures.
 - Use **API `GITHUB_TOKEN`** for the optional application/test environment variable. Public GitHub proxy routes are deliberately unauthenticated upstream; the API `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly, and the running application must never read or attach it to caller-selected owner or repository paths.
 - Use **Merge `GITHUB_TOKEN`** for GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`. Keep `.github/workflows/dependabot-auto-merge.yml` unchanged: its metadata input and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` mapping intentionally authenticate Dependabot labeling, approval, and squash auto-merge without a personal access token or manually configured secret.
-- Reference GitHub Actions by explicit release tags, not full commit SHAs. Keep `actions/checkout@v7.0.0` and the equivalent exact-version style for other actions; Dependabot updates those release tags.
 - Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
@@ -133,7 +138,7 @@ just container-build
 
 ## Biome
 
-Biome 2.5.4 is the formatter and linter. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
+Biome 2.5.5 is the formatter and linter. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
 
 - Do not add suppression comments to avoid fixing actionable diagnostics.
 - `pnpm check:fix` applies safe fixes only. Review unsafe suggestions individually.

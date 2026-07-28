@@ -66,7 +66,7 @@ describe("items routes", () => {
     });
 
     it("paginates with cursor", async () => {
-      const cursor = encodeCursor({ type: "item", value: "item-005" });
+      const cursor = encodeCursor({ type: "item", value: "20:*:item-005" });
       const response = await fastify.inject({
         method: "GET",
         url: `/?cursor=${cursor}`,
@@ -85,7 +85,33 @@ describe("items routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.headers.link).toBe('</v1/items?cursor=aXRlbTppdGVtLTAwNQ&limit=5>; rel="next"');
+      const cursor = encodeCursor({ type: "item", value: "5:*:item-005" });
+      expect(response.headers.link).toBe(`</v1/items?cursor=${cursor}&limit=5>; rel="next"`);
+    });
+
+    it("rejects a cursor after the client changes the page size", async () => {
+      const firstPage = await fastify.inject({ method: "GET", url: "/?limit=5" });
+      const link = firstPage.headers.link;
+      const nextUrl = /<([^>]+)>; rel="next"/.exec(Array.isArray(link) ? link.join(", ") : (link ?? ""))?.[1];
+      if (!nextUrl) throw new Error("expected a next-page link");
+
+      const response = await fastify.inject({
+        method: "GET",
+        url: `/?${new URL(nextUrl, "http://example.test").searchParams.toString().replace("limit=5", "limit=10")}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().detail).toContain("cursor does not match the requested category or limit");
+    });
+
+    it.each([
+      [1, 1],
+      [100, 30],
+    ])("accepts the inclusive limit boundary %i", async (limit, expectedItems) => {
+      const response = await fastify.inject({ method: "GET", url: `/?limit=${limit}` });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().items).toHaveLength(expectedItems);
     });
 
     it("rejects invalid cursor with 400 error", async () => {

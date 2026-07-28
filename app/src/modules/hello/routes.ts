@@ -36,15 +36,15 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     "/",
     {
       schema: {
-        operationId: "createGreeting",
-        description: "Create a personalized greeting",
-        summary: "Create greeting",
+        operationId: "personalizeGreeting",
+        description: "Returns a personalized greeting without creating a resource",
+        summary: "Personalize greeting",
         tags: ["Hello"],
         consumes: API_MEDIA_TYPES,
         produces: API_MEDIA_TYPES,
         body: HelloInputSchema,
         response: {
-          201: HelloResponseSchema,
+          200: HelloResponseSchema,
           400: ErrorModelSchema,
           406: ErrorModelSchema,
           415: ErrorModelSchema,
@@ -54,10 +54,7 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         },
       },
     },
-    async (request, reply) => {
-      const result = service.greet(request.body.name);
-      return reply.code(201).send(result);
-    },
+    async (request) => service.greet(request.body.name),
   );
 };
 

@@ -24,7 +24,7 @@ function getSchemaName(request: FastifyRequest, statusCode: number): string | un
 /**
  * Schema Discovery Plugin
  *
- * Adds a `Link` header with `rel="describedBy"` pointing to the response schema.
+ * Adds a `Link` header with `rel="describedby"` pointing to the response schema.
  *
  * Only applies to successful responses (< 400 status code).
  * Error responses are handled by the error handler plugin.

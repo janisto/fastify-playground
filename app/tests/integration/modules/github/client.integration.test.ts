@@ -48,17 +48,17 @@ describe.skipIf(!GITHUB_TOKEN)("GitHubClient integration", () => {
 
   it("lists owner repositories", async () => {
     const client = new GitHubClient(clientOptions);
-    const repos = await client.listOwnerRepos("octocat");
+    const result = await client.listOwnerRepos("octocat");
 
-    expect(repos.length).toBeGreaterThan(0);
-    expect(repos[0]).toMatchObject({ fullName: expect.stringContaining("octocat/") });
+    expect(result.items.length).toBeGreaterThan(0);
+    expect(result.items[0]).toMatchObject({ fullName: expect.stringContaining("octocat/") });
   });
 
   it("lists repository tags", async () => {
     const client = new GitHubClient(clientOptions);
-    const tags = await client.listRepoTags("octocat", "git-consortium");
+    const result = await client.listRepoTags("octocat", "git-consortium");
 
-    expect(tags).toEqual(expect.any(Array));
+    expect(result.items).toEqual(expect.any(Array));
   });
 
   it("lists repository activity", async () => {

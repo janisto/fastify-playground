@@ -3,7 +3,7 @@
 [![Application CI](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-ci.yml?branch=main&label=application%20CI&logo=githubactions&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-ci.yml)
 [![Code quality](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-lint.yml?branch=main&label=code%20quality&logo=biome&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-lint.yml)
 [![Node.js 24.18.0](https://img.shields.io/badge/Node.js-24.18.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![pnpm 11.13.0](https://img.shields.io/badge/pnpm-11.13.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![pnpm 11.17.0](https://img.shields.io/badge/pnpm-11.17.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![MIT license](https://img.shields.io/github/license/janisto/fastify-playground)](LICENSE)
 
 A production-oriented reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates OpenAPI documentation, Firebase Authentication, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
@@ -25,24 +25,11 @@ A production-oriented reference REST API built with Fastify, TypeScript, and Nod
 - Graceful SIGTERM/SIGINT shutdown owned by the executable server boundary; fatal Node.js errors are not treated as recoverable application events
 - Health check endpoints (`/health` for process liveness and `/status` for shutdown/load readiness)
 
-## API Design Principles
+## API conventions
 
-### URI Design
-
-- Lowercase letters with hyphens for multi-word segments: `/api/user-profiles`
-- Plural nouns for collections: `/items`, `/users`
-- Path parameters for resource identifiers: `/items/{id}`
-- Query parameters for filtering, sorting, and pagination: `/items?category=electronics&limit=20`
-
-### HTTP Methods
-
-| Method | Purpose | Idempotent | Success Status |
-|--------|---------|------------|----------------|
-| GET | Retrieve resource(s) | Yes | 200 OK |
-| POST | Create resource | No | 201 Created |
-| PUT | Replace resource | Yes | 200 OK / 204 No Content |
-| PATCH | Partial update | No | 200 OK |
-| DELETE | Remove resource | Yes | 204 No Content |
+Application routes live under `/v1`; process probes, schemas, and documentation remain unversioned. JSON fields use
+camelCase. Retrieval routes use GET. `POST /v1/hello` computes and returns a personalized representation with 200 OK;
+it does not claim resource-creation semantics.
 
 ### Error Responses (RFC 9457)
 
@@ -50,16 +37,17 @@ Application-owned errors, including `/status` failures, use [RFC 9457 Problem De
 
 ```json
 {
-  "title": "Validation Error",
+  "title": "Unprocessable Entity",
   "status": 422,
-  "detail": "One or more fields failed validation",
+  "type": "about:blank",
+  "detail": "validation failed",
   "errors": [
-    { "location": "body.name", "message": "is required" }
+    { "location": "body", "message": "must have required property 'name'" }
   ]
 }
 ```
 
-Responses include `Link: </schemas/ErrorModel.json>; rel="describedBy"` for schema discovery. Error bodies use
+Responses include `Link: </schemas/ErrorModel.json>; rel="describedby"` for schema discovery. Error bodies use
 `application/problem+json` by default, or the same fields encoded as registered `application/cbor` when the client
 explicitly prefers CBOR.
 
@@ -85,6 +73,8 @@ JSON and CBOR request bodies are selected independently with `Content-Type`. Mod
 `application/json` and `application/cbor`, with media-type parameters ignored. Unowned structured suffixes such as
 `application/vnd.example+cbor` and the unregistered `application/problem+cbor` are rejected with 415. RFC 9290's
 registered `application/concise-problem-details+cbor` uses a different compact data model and is not implemented.
+Fastify's application-wide validator intentionally removes unknown object properties before handlers run; tests lock in
+that policy so input fields cannot silently reach business logic.
 
 Negotiated responses include `Vary: Accept, Origin`. Successful modeled responses and Problem Details use an RFC 8288
 `Link` header for schema discovery. Response instances do not contain the JSON Schema `$schema` keyword; standalone
@@ -95,15 +85,18 @@ schema documents include the Draft 2020-12 dialect and local `$defs` for referen
 Collections use cursor-based pagination with [RFC 8288 Link](https://datatracker.ietf.org/doc/html/rfc8288) headers:
 
 ```
-GET /items?limit=20&cursor=aXRlbToxMjM
+GET /v1/items?limit=5
 
-Link: </items?limit=20&cursor=aXRlbToxNTY>; rel="next"
+Link: </v1/items?cursor=aXRlbTo1Oio6aXRlbS0wMDU&limit=5>; rel="next"
 ```
 
 - `cursor` - Canonical, unpadded Base64URL cursor with a 2,048-character limit (do not decode on client)
 - `limit` - Items per page (1-100, default 20)
 
-Malformed, noncanonical, empty, oversized, invalid UTF-8, wrong-resource, and stale cursors return a client error. A previous-page link returns the exact preceding page; the second page links back to the first page without an empty `cursor` parameter.
+Malformed, noncanonical, empty, oversized, invalid UTF-8, wrong-resource, stale, or scope-mismatched cursors return a
+client error. Cursors bind the collection, filter, and page size, so clients must follow Link targets without changing
+those values. A previous-page link returns the exact preceding page; the second page links back to the first page
+without an empty `cursor` parameter.
 
 ### Request Identification
 
@@ -148,9 +141,9 @@ functions/              # Firebase Cloud Functions (placeholder)
 ## Requirements
 
 - Node.js 24.18.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
-- pnpm 11.13.0 through Corepack
+- pnpm 11.17.0 through Corepack
 - [just](https://github.com/casey/just) for repository workflows
-- [actionlint](https://github.com/rhysd/actionlint) and [zizmor 1.27.0](https://docs.zizmor.sh/) for local workflow checks
+- [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.28.0](https://docs.zizmor.sh/) for local workflow checks
 - Firebase project with Authentication, or the Authentication emulator, only when exercising `/v1/auth/me`
 
 ## Quick Start
@@ -175,7 +168,7 @@ The root `Justfile` loads `.env` for its recipes. Direct runtime commands such a
 | Runtime | Node.js 24.18.0 (ES2024) |
 | Framework | Fastify 5.x with TypeScript 7 |
 | Observability | fastify-observability 2 with Pino 10 |
-| Package manager | pnpm 11.13.0 |
+| Package manager | pnpm 11.17.0 |
 | Authentication | Firebase Admin SDK |
 | Schema Validation | TypeBox with @fastify/type-provider-typebox |
 | Testing | Vitest with V8 coverage (90% minimum) |
@@ -193,10 +186,10 @@ just typing           # Type-check source and tests
 just test             # Run unit and integration tests
 just cov              # Run the full suite with coverage
 just qa               # Apply safe fixes, then type-check and test
-just check            # Run all non-mutating quality gates
+just check            # Run workflow, code, type, test, coverage, and production-audit gates
 just workflow-check   # Check workflow syntax and security
 just fuzz             # Run the property suite with FUZZ_RUNS (default 1000)
-just audit            # Audit production dependencies
+just audit            # Report production advisories; fail on unignored high/critical findings
 just install          # Install exactly from the lockfile
 just fresh            # Reinstall from a clean node_modules and dist
 just update           # Update dependencies within declared ranges
@@ -214,6 +207,10 @@ corepack pnpm check:fix     # Auto-fix all issues
 corepack pnpm typecheck     # Type check source and tests
 corepack pnpm start         # Start the compiled server
 ```
+
+The audit gate deliberately reports lower-severity advisories instead of hiding them. The workspace contains one
+narrow GHSA exception for an unexercised Firebase Admin Firestore toolchain whose parent range cannot accept the fixed
+`brace-expansion` major; remove it as soon as the parent dependency resolves the advisory.
 
 ## Container
 
@@ -258,15 +255,15 @@ Trace correlation requires only a valid incoming W3C `traceparent`; no Google Cl
 | GET | `/status` | Readiness probe (`{ status: "ready" }`); returns 503 while shutting down or under excessive process load |
 | GET | `/v1/auth/me` | Minimal identity from a verified Firebase ID token |
 | GET | `/v1/hello` | Greeting endpoint |
-| POST | `/v1/hello` | Personalized greeting (201 Created) |
+| POST | `/v1/hello` | Personalized greeting (200 OK; no resource is created) |
 | GET | `/v1/items` | Items with cursor-based pagination and category filtering |
 | GET | `/v1/github/owners/:owner` | GitHub user profile |
-| GET | `/v1/github/owners/:owner/repos` | List user repositories |
+| GET | `/v1/github/owners/:owner/repos` | User repositories (paginated) |
 | GET | `/v1/github/repos/:owner/:repo` | Repository details |
 | GET | `/v1/github/repos/:owner/:repo/activity` | Repository activity (paginated) |
 | GET | `/v1/github/repos/:owner/:repo/languages` | Repository languages |
-| GET | `/v1/github/repos/:owner/:repo/tags` | Repository tags |
-| GET | `/schemas/:schemaId` | Schema discovery |
+| GET | `/v1/github/repos/:owner/:repo/tags` | Repository tags (paginated) |
+| GET | `/schemas/:schemaName.json` | Standalone JSON Schema discovery |
 | GET | `/api-docs` | Swagger UI |
 | GET | `/api-docs/json` | OpenAPI 3.1.0 spec (JSON) |
 
@@ -320,11 +317,20 @@ curl \
   http://localhost:3000/v1/auth/me
 ```
 
-The response contains only `{ "userId": "..." }`; claims such as email addresses are not reflected. Missing, malformed, invalid, or expired credentials return a controlled 401 Problem Details response, while Firebase configuration or provider failures return 503. The example uses Firebase's default `checkRevoked: false`; enable revocation checks only when immediate session invalidation is part of the product contract and the extra lookup is acceptable.
+The response contains only `{ "userId": "..." }`; claims such as email addresses are not reflected. Missing, malformed,
+invalid, or expired credentials return a controlled 401 Problem Details response with the required Bearer
+`WWW-Authenticate` challenge, while Firebase configuration or provider failures return 503. The example uses
+Firebase's default `checkRevoked: false`; enable revocation checks only when immediate session invalidation is part of
+the product contract and the extra lookup is acceptable.
 
 ## GitHub Proxy Boundary
 
-The `/v1/github` examples proxy public GitHub REST data without a server credential. This is intentional: attaching a broad deployment token to caller-selected owner and repository paths could expose private resources available to that token. Each upstream request has a 10-second overall deadline beneath the application's 15-second handler deadline, propagates request cancellation, validates the successful GitHub payload, and maps upstream failures to controlled Problem Details.
+The `/v1/github` examples proxy public GitHub REST data without a server credential. This is intentional: attaching a
+broad deployment token to caller-selected owner and repository paths could expose private resources available to that
+token. Each upstream request has a 10-second overall deadline beneath the application's 15-second handler deadline,
+propagates request cancellation, follows at most three same-origin redirects, asserts the raw successful GitHub
+payload before decoding it, and maps upstream failures to controlled Problem Details. Repository, tag, and activity
+routes translate GitHub pagination into the API's opaque cursor and Link contract.
 
 GitHub's [unauthenticated primary rate limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) is 60 requests per hour per source IP. The example has no cache or distributed inbound rate limiter. A production public proxy that needs more capacity should define a different authorization boundary and add cache and distributed abuse controls rather than putting a private-capable token behind these caller-selected routes.
 
@@ -334,7 +340,7 @@ GitHub's [unauthenticated primary rate limit](https://docs.github.com/en/rest/us
 - **Coverage threshold**: 90% (lines, functions, branches, statements)
 - **Coverage scope**: Full unit and integration suite across all `src/**/*.ts` files
 - **Unit tests**: `tests/unit/` with mocked external dependencies
-- **Integration tests**: `tests/integration/`; direct real-GitHub client tests require the API `GITHUB_TOKEN` and otherwise skip
+- **Integration tests**: `tests/integration/`; local transport/startup tests run normally, while direct real-GitHub client tests require the API `GITHUB_TOKEN` and otherwise skip
 - **Property tests**: `tests/property/`; routine runs use 100 successful cases per property
 
 Run a longer property-only campaign with `just fuzz`. Set `FUZZ_RUNS` to change the successful-case budget. Reproduce
@@ -369,14 +375,18 @@ GitHub Actions workflows in `.github/workflows/`:
 
 | Workflow | Description |
 |----------|-------------|
-| `app-ci.yml` | Pinned-runtime build, tests, coverage, production image build, probe smoke, and graceful-shutdown smoke |
+| `app-ci.yml` | Pinned-runtime build, production audit, tests, isolated coverage reporting, digest-pinned image build, runtime assertions, probes, and graceful-shutdown smoke |
 | `app-lint.yml` | Code quality (Biome) |
 | `labeler.yml` | Automatic PR labeling |
 | `labeler-manual.yml` | Manual labeling for historical PRs |
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
 | `workflow-security.yml` | Read-only zizmor workflow security scanning |
 
-Dependabot is configured in `.github/dependabot.yml` for automated dependency updates. The auto-merge workflow intentionally maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication; contributors do not need to configure that secret. Workflow actions intentionally use explicit release tags such as `actions/checkout@v7.0.0`, rather than full commit SHAs, so Dependabot can propose readable version updates.
+Dependabot checks application, container, and GitHub Actions dependencies quarterly. The auto-merge workflow intentionally
+maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication;
+contributors do not need to configure that secret. Workflow actions intentionally use explicit full release tags such
+as `actions/checkout@v7.0.1`, rather than full commit SHAs or floating major tags, so Dependabot can propose readable
+version updates.
 
 ## Contributing
 

@@ -25,6 +25,11 @@ const INVALID_IDENTITY_CODES = new Set([
   "auth/user-disabled",
   "auth/user-not-found",
 ]);
+const BEARER_CHALLENGE = 'Bearer realm="fastify-playground"';
+
+function setBearerChallenge(reply: FastifyReply, error?: "invalid_request" | "invalid_token"): void {
+  reply.header("WWW-Authenticate", error ? `${BEARER_CHALLENGE}, error="${error}"` : BEARER_CHALLENGE);
+}
 
 class AuthenticationServiceError extends Error {
   public override readonly name = "AuthenticationServiceError";
@@ -82,16 +87,18 @@ export default fp<AuthPluginOptions>(
     fastify.decorateRequest("user", null);
 
     // Authentication preHandler
-    const authenticate = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
+    const authenticate = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       const authHeader = request.headers.authorization;
 
       if (!authHeader) {
+        setBearerChallenge(reply);
         throw fastify.httpErrors.unauthorized("Missing authorization header");
       }
 
       const authorization = /^Bearer ([^\s]+)$/i.exec(authHeader);
       const token = authorization?.[1];
       if (!token) {
+        setBearerChallenge(reply, "invalid_request");
         throw fastify.httpErrors.unauthorized("Invalid authorization header format. Expected: Bearer <token>");
       }
 
@@ -103,10 +110,12 @@ export default fp<AuthPluginOptions>(
         const firebaseErrorCode = firebaseError.code ?? "unknown";
         if (firebaseError.code === "auth/id-token-revoked") {
           request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token has been revoked");
+          setBearerChallenge(reply, "invalid_token");
           throw fastify.httpErrors.unauthorized("Token has been revoked. Please sign in again.");
         }
         if (INVALID_IDENTITY_CODES.has(firebaseErrorCode)) {
           request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token verification failed");
+          setBearerChallenge(reply, "invalid_token");
           throw fastify.httpErrors.unauthorized("Invalid or expired token");
         }
         throw new AuthenticationServiceError({ cause: error });

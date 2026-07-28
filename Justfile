@@ -66,9 +66,9 @@ typing:
 [group('qa')]
 qa: fix typing test
 
-# Perform all non-mutating checks
+# Perform all non-mutating checks, including the production dependency audit
 [group('qa')]
-check: workflow-check lint typing test cov
+check: workflow-check lint typing test cov audit
 
 # Check GitHub Actions syntax and security
 [group('qa')]
@@ -80,7 +80,7 @@ workflow-check:
 [group('qa')]
 [working-directory('app')]
 audit:
-    corepack pnpm audit --prod
+    corepack pnpm audit --prod --audit-level high
 
 # Run development server
 [group('run')]

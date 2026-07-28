@@ -93,7 +93,7 @@ body:
     attributes:
       label: pnpm version
       description: Paste the output of `corepack pnpm --version`.
-      placeholder: "Example: 11.13.0"
+      placeholder: "Example: 11.17.0"
     validations:
       required: true
 

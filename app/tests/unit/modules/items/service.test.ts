@@ -11,7 +11,7 @@ describe("ItemsService", () => {
 
       expect(result.items).toHaveLength(20);
       expect(result.total).toBe(30);
-      expect(result.nextCursor).toBe(encodeCursor({ type: "item", value: "item-020" }));
+      expect(result.nextCursor).toBe(encodeCursor({ type: "item", value: "20:*:item-020" }));
       expect(result.prevCursor).toBeUndefined();
     });
 
@@ -47,7 +47,7 @@ describe("ItemsService", () => {
     });
 
     it("links the second page back to the first page sentinel", () => {
-      const cursor = encodeCursor({ type: "item", value: "item-005" });
+      const cursor = encodeCursor({ type: "item", value: "5:*:item-005" });
       const result = service.list({ cursor, limit: 5 });
 
       expect(result.items).toHaveLength(5);
@@ -56,7 +56,7 @@ describe("ItemsService", () => {
     });
 
     it("returns the last partial page without a next boundary", () => {
-      const cursor = encodeCursor({ type: "item", value: "item-025" });
+      const cursor = encodeCursor({ type: "item", value: "10:*:item-025" });
       const result = service.list({ cursor, limit: 10 });
 
       expect(result.items).toHaveLength(5);
@@ -64,11 +64,11 @@ describe("ItemsService", () => {
     });
 
     it("returns to the exact preceding page without repeating the current page", () => {
-      const thirdPageCursor = encodeCursor({ type: "item", value: "item-010" });
+      const thirdPageCursor = encodeCursor({ type: "item", value: "5:*:item-010" });
       const thirdPage = service.list({ cursor: thirdPageCursor, limit: 5 });
 
       expect(thirdPage.items.map(({ id }) => id)).toEqual(["item-011", "item-012", "item-013", "item-014", "item-015"]);
-      expect(thirdPage.prevCursor).toBe(encodeCursor({ type: "item", value: "item-005" }));
+      expect(thirdPage.prevCursor).toBe(encodeCursor({ type: "item", value: "5:*:item-005" }));
       if (typeof thirdPage.prevCursor !== "string") throw new Error("expected an opaque previous-page cursor");
 
       const previousPage = service.list({ cursor: thirdPage.prevCursor, limit: 5 });
@@ -101,17 +101,28 @@ describe("ItemsService", () => {
     });
 
     it("accepts a canonical item cursor", () => {
-      const validCursor = encodeCursor({ type: "item", value: "item-005" });
+      const validCursor = encodeCursor({ type: "item", value: "20:*:item-005" });
       const cursor = service.validateCursor(validCursor);
 
       expect(cursor.type).toBe("item");
       expect(cursor.value).toBe("item-005");
     });
+
+    it("rejects a cursor when the client changes its limit or category scope", () => {
+      const cursor = encodeCursor({ type: "item", value: "5:tools:item-003" });
+
+      expect(() => service.validateCursor(cursor, 10, "tools")).toThrow(
+        "cursor does not match the requested category or limit",
+      );
+      expect(() => service.validateCursor(cursor, 5, "electronics")).toThrow(
+        "cursor does not match the requested category or limit",
+      );
+    });
   });
 
   describe("list with invalid cursor", () => {
     it("rejects a well-formed cursor that references unknown state", () => {
-      const cursor = encodeCursor({ type: "item", value: "non-existent" });
+      const cursor = encodeCursor({ type: "item", value: "20:*:non-existent" });
 
       expect(() => service.list({ cursor })).toThrow("cursor references unknown item");
     });

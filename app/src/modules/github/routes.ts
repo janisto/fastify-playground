@@ -69,13 +69,16 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "listGitHubOwnerRepositories",
-        description: "Returns a list of public repositories for a GitHub user.",
+        description:
+          "Returns a paginated list of public repositories for a GitHub user. Follow the cursor in the Link header.",
         summary: "List user repositories",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
         params: OwnerParamsSchema,
+        querystring: PaginationQuerySchema,
         response: {
           200: GitHubOwnerReposResponseSchema,
+          400: ErrorModelSchema,
           403: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
@@ -87,8 +90,18 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         },
       },
     },
-    async (request) => {
-      return service.listOwnerRepos(request.params.owner, request.signal);
+    async (request, reply) => {
+      const { owner } = request.params;
+      const { cursor, limit = 20 } = request.query;
+      const result = await service.listOwnerRepos(owner, { limit, ...(cursor ? { cursor } : {}) }, request.signal);
+      const linkHeader = buildLinkHeader(
+        `/v1/github/owners/${encodeURIComponent(owner)}/repos`,
+        new URLSearchParams({ limit: String(limit) }),
+        result.nextCursor,
+        result.prevCursor,
+      );
+      if (linkHeader) reply.header("Link", linkHeader);
+      return { repos: result.items, count: result.items.length };
     },
   );
 
@@ -213,13 +226,15 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "listGitHubRepositoryTags",
-        description: "Returns a list of tags for a repository.",
+        description: "Returns a paginated list of tags for a repository. Follow the cursor in the Link header.",
         summary: "List repository tags",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
         params: RepoParamsSchema,
+        querystring: PaginationQuerySchema,
         response: {
           200: GitHubTagsResponseSchema,
+          400: ErrorModelSchema,
           403: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
@@ -231,8 +246,18 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         },
       },
     },
-    async (request) => {
-      return service.listRepoTags(request.params.owner, request.params.repo, request.signal);
+    async (request, reply) => {
+      const { owner, repo } = request.params;
+      const { cursor, limit = 20 } = request.query;
+      const result = await service.listRepoTags(owner, repo, { limit, ...(cursor ? { cursor } : {}) }, request.signal);
+      const linkHeader = buildLinkHeader(
+        `/v1/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags`,
+        new URLSearchParams({ limit: String(limit) }),
+        result.nextCursor,
+        result.prevCursor,
+      );
+      if (linkHeader) reply.header("Link", linkHeader);
+      return { tags: result.items, count: result.items.length };
     },
   );
 };
