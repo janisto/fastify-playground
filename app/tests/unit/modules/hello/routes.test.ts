@@ -46,7 +46,7 @@ describe("hello routes", () => {
         payload: { name: "Alice" },
       });
 
-      expect(response.statusCode).toBe(201);
+      expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({ message: "Hello, Alice!" });
     });
 

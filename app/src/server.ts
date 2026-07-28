@@ -49,7 +49,7 @@ export function installSignalHandlers(app: ServerLifecycle): () => void {
   return remove;
 }
 
-/* v8 ignore start -- executable boundary is covered by the production container smoke test -- @preserve */
+/* v8 ignore start -- executable boundary is covered by container smoke and occupied-port integration tests -- @preserve */
 async function startServer(): Promise<void> {
   const app = await buildApp();
   const removeSignalHandlers = installSignalHandlers(app);

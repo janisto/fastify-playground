@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { addSchemaLinkHeader } from "../../../src/utils/link-header.js";
 
 describe("addSchemaLinkHeader", () => {
-  it("adds Link header with describedBy relation", async () => {
+  it("adds Link header with describedby relation", async () => {
     const fastify = Fastify();
 
     fastify.get("/test", async (_request, reply) => {
@@ -17,7 +17,7 @@ describe("addSchemaLinkHeader", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers.link).toBe('</schemas/TestSchema.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/TestSchema.json>; rel="describedby"');
 
     await fastify.close();
   });
@@ -39,7 +39,7 @@ describe("addSchemaLinkHeader", () => {
     expect(response.statusCode).toBe(200);
     const linkHeaders = response.headers.link;
     expect(linkHeaders).toContain('</other>; rel="other"');
-    expect(linkHeaders).toContain('</schemas/TestSchema.json>; rel="describedBy"');
+    expect(linkHeaders).toContain('</schemas/TestSchema.json>; rel="describedby"');
 
     await fastify.close();
   });
@@ -62,7 +62,7 @@ describe("addSchemaLinkHeader", () => {
     const linkHeaders = response.headers.link;
     expect(linkHeaders).toContain('</first>; rel="first"');
     expect(linkHeaders).toContain('</second>; rel="second"');
-    expect(linkHeaders).toContain('</schemas/TestSchema.json>; rel="describedBy"');
+    expect(linkHeaders).toContain('</schemas/TestSchema.json>; rel="describedby"');
 
     await fastify.close();
   });
@@ -81,7 +81,7 @@ describe("addSchemaLinkHeader", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
 
     await fastify.close();
   });

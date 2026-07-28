@@ -84,7 +84,7 @@ describe("GitHub routes", () => {
   it("GET /owners/:owner/repos returns repository list", async () => {
     const spy = vi.spyOn(githubService.GitHubService.prototype, "listOwnerRepos");
     spy.mockResolvedValueOnce({
-      repos: [
+      items: [
         {
           id: 1,
           name: "Hello-World",
@@ -103,7 +103,7 @@ describe("GitHub routes", () => {
           pushedAt: "2024-01-01T00:00:00Z",
         },
       ],
-      count: 1,
+      nextCursor: "repos-page-2",
     });
 
     const fastify = Fastify();
@@ -121,6 +121,8 @@ describe("GitHub routes", () => {
       repos: [{ name: "Hello-World" }],
       count: 1,
     });
+    expect(response.headers.link).toBe('</v1/github/owners/octocat/repos?cursor=repos-page-2&limit=20>; rel="next"');
+    expect(spy).toHaveBeenCalledWith("octocat", { limit: 20 }, expect.any(AbortSignal));
 
     await fastify.close();
   });
@@ -267,11 +269,11 @@ describe("GitHub routes", () => {
   it("GET /repos/:owner/:repo/tags returns tag list", async () => {
     const spy = vi.spyOn(githubService.GitHubService.prototype, "listRepoTags");
     spy.mockResolvedValueOnce({
-      tags: [
+      items: [
         { name: "v1.0.0", commit: { sha: "abc123" } },
         { name: "v0.9.0", commit: { sha: "def456" } },
       ],
-      count: 2,
+      nextCursor: "tags-page-2",
     });
 
     const fastify = Fastify();
@@ -289,6 +291,10 @@ describe("GitHub routes", () => {
       tags: [{ name: "v1.0.0" }, { name: "v0.9.0" }],
       count: 2,
     });
+    expect(response.headers.link).toBe(
+      '</v1/github/repos/octocat/Hello-World/tags?cursor=tags-page-2&limit=20>; rel="next"',
+    );
+    expect(spy).toHaveBeenCalledWith("octocat", "Hello-World", { limit: 20 }, expect.any(AbortSignal));
 
     await fastify.close();
   });

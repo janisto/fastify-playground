@@ -25,8 +25,10 @@ import {
 } from "./upstream-schemas.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const MAX_REDIRECTS = 3;
 const GITHUB_API_VERSION = "2026-03-10";
 const SECONDARY_RATE_LIMIT_PATTERN = /secondary rate limit|abuse detection/i;
+const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 
 export interface GitHubClientOptions {
   baseUrl?: string;
@@ -43,6 +45,12 @@ export interface ActivityPage {
   activities: GitHubActivity[];
   nextCursor: string | null;
   prevCursor: string | null;
+}
+
+export interface NumberedPage<T> {
+  items: T[];
+  nextPage: number | null;
+  prevPage: number | null;
 }
 
 export interface ActivityCursor {
@@ -76,6 +84,7 @@ function hasUndiciErrorCode(error: unknown): boolean {
 }
 
 export class GitHubClient {
+  private readonly baseOrigin: string;
   private readonly baseUrl: string;
   private readonly dispatcher: Dispatcher | undefined;
   private readonly timeoutMs: number;
@@ -87,7 +96,9 @@ export class GitHubClient {
       throw new RangeError("GitHub request timeout must be a positive safe integer");
     }
 
-    this.baseUrl = options?.baseUrl ?? "https://api.github.com";
+    const baseUrl = new URL(options?.baseUrl ?? "https://api.github.com");
+    this.baseOrigin = baseUrl.origin;
+    this.baseUrl = baseUrl.href.replace(/\/$/, "");
     this.dispatcher = options?.dispatcher;
     this.timeoutMs = timeoutMs;
     this.token = options?.token;
@@ -104,8 +115,9 @@ export class GitHubClient {
     return this.toGitHubOwner(await this.readValidatedBody(body, RawGitHubOwnerSchema, signal, timeoutSignal));
   }
 
-  async listOwnerRepos(owner: string, perPage = 30, signal?: AbortSignal): Promise<GitHubRepo[]> {
-    const url = `${this.baseUrl}/users/${encodeURIComponent(owner)}/repos?per_page=${perPage}`;
+  async listOwnerRepos(owner: string, perPage = 30, page = 1, signal?: AbortSignal): Promise<NumberedPage<GitHubRepo>> {
+    const query = new URLSearchParams({ per_page: String(perPage), page: String(page) });
+    const url = `${this.baseUrl}/users/${encodeURIComponent(owner)}/repos?${query}`;
     const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
 
     if (statusCode !== 200) {
@@ -113,7 +125,12 @@ export class GitHubClient {
     }
 
     const data = await this.readValidatedBody(body, RawGitHubOwnerReposSchema, signal, timeoutSignal);
-    return data.map((repo) => this.toGitHubRepo(repo));
+    const linkHeader = getHeader(headers, "link") ?? null;
+    return {
+      items: data.map((repo) => this.toGitHubRepo(repo)),
+      nextPage: this.parseLinkPage(linkHeader, "next"),
+      prevPage: this.parseLinkPage(linkHeader, "prev"),
+    };
   }
 
   async getRepo(owner: string, repo: string, signal?: AbortSignal): Promise<GitHubRepoDetail> {
@@ -169,8 +186,15 @@ export class GitHubClient {
     return this.readValidatedBody(body, RawGitHubLanguagesSchema, signal, timeoutSignal);
   }
 
-  async listRepoTags(owner: string, repo: string, perPage = 30, signal?: AbortSignal): Promise<GitHubTag[]> {
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags?per_page=${perPage}`;
+  async listRepoTags(
+    owner: string,
+    repo: string,
+    perPage = 30,
+    page = 1,
+    signal?: AbortSignal,
+  ): Promise<NumberedPage<GitHubTag>> {
+    const query = new URLSearchParams({ per_page: String(perPage), page: String(page) });
+    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags?${query}`;
     const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
 
     if (statusCode !== 200) {
@@ -178,7 +202,12 @@ export class GitHubClient {
     }
 
     const data = await this.readValidatedBody(body, RawGitHubTagsSchema, signal, timeoutSignal);
-    return data.map((tag) => ({ name: tag.name, commit: { sha: tag.commit.sha } }));
+    const linkHeader = getHeader(headers, "link") ?? null;
+    return {
+      items: data.map((tag) => ({ name: tag.name, commit: { sha: tag.commit.sha } })),
+      nextPage: this.parseLinkPage(linkHeader, "next"),
+      prevPage: this.parseLinkPage(linkHeader, "prev"),
+    };
   }
 
   private buildHeaders(): Record<string, string> {
@@ -207,13 +236,64 @@ export class GitHubClient {
   private async request(url: string, callerSignal?: AbortSignal): Promise<RequestResult> {
     const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
     const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
+    const response = await this.requestWithRedirects(
+      new URL(url),
+      signal,
+      callerSignal,
+      timeoutSignal,
+      new Set<string>(),
+      0,
+    );
+    return { ...response, timeoutSignal };
+  }
 
+  private async requestWithRedirects(
+    currentUrl: URL,
+    signal: AbortSignal,
+    callerSignal: AbortSignal | undefined,
+    timeoutSignal: AbortSignal,
+    visited: Set<string>,
+    redirectCount: number,
+  ): Promise<Dispatcher.ResponseData> {
+    if (visited.has(currentUrl.href)) {
+      throw this.invalidResponse("GitHub API returned a redirect loop");
+    }
+    visited.add(currentUrl.href);
+
+    let response: Dispatcher.ResponseData;
     try {
-      const response = await undiciRequest(url, this.buildRequestOptions(signal));
-      return { ...response, timeoutSignal };
+      response = await undiciRequest(currentUrl, this.buildRequestOptions(signal));
     } catch (error) {
       this.throwRequestFailure(error, callerSignal, timeoutSignal);
     }
+
+    if (!REDIRECT_STATUS_CODES.has(response.statusCode)) return response;
+
+    try {
+      await response.body.dump();
+    } catch (error) {
+      this.throwRequestFailure(error, callerSignal, timeoutSignal);
+    }
+
+    if (redirectCount >= MAX_REDIRECTS) {
+      throw this.invalidResponse(`GitHub API exceeded ${MAX_REDIRECTS} redirects`);
+    }
+
+    const location = getHeader(response.headers, "location");
+    if (!location) {
+      throw this.invalidResponse("GitHub API redirect omitted Location");
+    }
+
+    let redirectUrl: URL;
+    try {
+      redirectUrl = new URL(location, currentUrl);
+    } catch {
+      throw this.invalidResponse("GitHub API returned an invalid redirect URL");
+    }
+    if (redirectUrl.origin !== this.baseOrigin) {
+      throw this.invalidResponse("GitHub API attempted a cross-origin redirect");
+    }
+    return this.requestWithRedirects(redirectUrl, signal, callerSignal, timeoutSignal, visited, redirectCount + 1);
   }
 
   private async readValidatedBody<const Schema extends TSchema>(
@@ -233,6 +313,7 @@ export class GitHubClient {
     }
 
     try {
+      Value.Assert(schema, value);
       return Value.Decode(schema, value);
     } catch {
       throw this.invalidResponse("GitHub API response did not match its documented schema");
@@ -345,6 +426,26 @@ export class GitHubClient {
         const linkUrl = new URL(trimmed.slice(start + 1, end));
         const cursor = linkUrl.searchParams.get(parameter);
         if (cursor) return cursor;
+      } catch {}
+    }
+    return null;
+  }
+
+  private parseLinkPage(header: string | null, relation: "next" | "prev"): number | null {
+    if (!header) return null;
+
+    for (const part of header.split(",")) {
+      const trimmed = part.trim();
+      if (!trimmed.includes(`rel="${relation}"`)) continue;
+
+      const start = trimmed.indexOf("<");
+      const end = trimmed.indexOf(">");
+      if (start < 0 || end < 0 || end <= start) continue;
+
+      try {
+        const linkUrl = new URL(trimmed.slice(start + 1, end));
+        const page = Number(linkUrl.searchParams.get("page"));
+        if (Number.isSafeInteger(page) && page >= 1) return page;
       } catch {}
     }
     return null;

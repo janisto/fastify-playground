@@ -1,4 +1,5 @@
-import { MockAgent } from "undici";
+import { Buffer } from "node:buffer";
+import { Dispatcher, errors, MockAgent } from "undici";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GitHubClient } from "../../../../src/modules/github/client.js";
@@ -26,6 +27,44 @@ const OWNER_RESPONSE = {
   created_at: "2011-01-25T18:44:36Z",
   updated_at: "2024-01-01T00:00:00Z",
 } as const;
+
+class PartialBodyTimeoutDispatcher extends Dispatcher {
+  responseStarted = false;
+
+  override dispatch(_options: Dispatcher.DispatchOptions, handler: Dispatcher.DispatchHandler): boolean {
+    let aborted = false;
+    let paused = false;
+    let reason: Error | null = null;
+    const controller: Dispatcher.DispatchController = {
+      get aborted() {
+        return aborted;
+      },
+      get paused() {
+        return paused;
+      },
+      get reason() {
+        return reason;
+      },
+      abort(error) {
+        aborted = true;
+        reason = error;
+      },
+      pause() {
+        paused = true;
+      },
+      resume() {
+        paused = false;
+      },
+    };
+
+    handler.onRequestStart?.(controller, null);
+    handler.onResponseStart?.(controller, 200, { "content-type": "application/json" }, "OK");
+    handler.onResponseData?.(controller, Buffer.from('{"login":'));
+    this.responseStarted = true;
+    queueMicrotask(() => handler.onResponseError?.(controller, new errors.BodyTimeoutError()));
+    return true;
+  }
+}
 
 describe("GitHubClient", () => {
   let mockAgent: MockAgent;
@@ -60,6 +99,49 @@ describe("GitHubClient", () => {
 
       expect(owner.login).toBe("octocat");
       expect(owner.avatarUrl).toBe("https://avatars.githubusercontent.com/u/1");
+    });
+
+    it("follows a bounded same-origin redirect for a renamed GitHub resource", async () => {
+      mockPool
+        .intercept({ path: "/users/renamed-octocat", method: "GET" })
+        .reply(301, "", { headers: { location: "/users/octocat" } });
+      mockPool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, OWNER_RESPONSE);
+
+      const owner = await new GitHubClient({ dispatcher: mockAgent }).getOwner("renamed-octocat");
+
+      expect(owner.login).toBe("octocat");
+      expect(mockAgent.assertNoPendingInterceptors()).toBeUndefined();
+    });
+
+    it("rejects a cross-origin redirect before forwarding a credential", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(302, "", { headers: { location: "https://attacker.invalid/users/octocat" } });
+
+      const client = new GitHubClient({ token: "private-token-canary", dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API returned an invalid response",
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
+    });
+
+    it("rejects a same-origin redirect loop", async () => {
+      mockPool
+        .intercept({ path: "/users/loop-a", method: "GET" })
+        .reply(302, "", { headers: { location: "/users/loop-b" } });
+      mockPool
+        .intercept({ path: "/users/loop-b", method: "GET" })
+        .reply(302, "", { headers: { location: "/users/loop-a" } });
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("loop-a")).rejects.toMatchObject({
+        message: "GitHub API returned an invalid response",
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
     });
 
     it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])("rejects an invalid timeout %s", (timeoutMs) => {
@@ -144,11 +226,26 @@ describe("GitHubClient", () => {
       ]);
 
       const client = new GitHubClient({ dispatcher: mockAgent });
-      const repos = await client.listOwnerRepos("octocat");
+      const result = await client.listOwnerRepos("octocat");
 
-      expect(repos).toHaveLength(1);
-      expect(repos.at(0)?.name).toBe("Hello-World");
-      expect(repos.at(0)?.fullName).toBe("octocat/Hello-World");
+      expect(result.items).toHaveLength(1);
+      expect(result.items.at(0)?.name).toBe("Hello-World");
+      expect(result.items.at(0)?.fullName).toBe("octocat/Hello-World");
+    });
+
+    it("returns GitHub's next and previous page boundaries", async () => {
+      mockPool.intercept({ path: /\/users\/octocat\/repos/, method: "GET" }).reply(200, [], {
+        headers: {
+          link: [
+            '<https://api.github.com/users/octocat/repos?per_page=5&page=3>; rel="next"',
+            '<https://api.github.com/users/octocat/repos?per_page=5&page=1>; rel="prev"',
+          ].join(", "),
+        },
+      });
+
+      const result = await new GitHubClient({ dispatcher: mockAgent }).listOwnerRepos("octocat", 5, 2);
+
+      expect(result).toEqual({ items: [], nextPage: 3, prevPage: 1 });
     });
 
     it("throws error when user not found", async () => {
@@ -184,9 +281,9 @@ describe("GitHubClient", () => {
       ]);
 
       const client = new GitHubClient({ dispatcher: mockAgent });
-      const repos = await client.listOwnerRepos("octocat");
+      const result = await client.listOwnerRepos("octocat");
 
-      expect(repos.at(0)).toMatchObject({ createdAt: null, updatedAt: null, pushedAt: null });
+      expect(result.items.at(0)).toMatchObject({ createdAt: null, updatedAt: null, pushedAt: null });
     });
   });
 
@@ -455,10 +552,10 @@ describe("GitHubClient", () => {
       ]);
 
       const client = new GitHubClient({ dispatcher: mockAgent });
-      const tags = await client.listRepoTags("octocat", "Hello-World");
+      const result = await client.listRepoTags("octocat", "Hello-World");
 
-      expect(tags).toHaveLength(2);
-      expect(tags[0]).toEqual({ name: "v1.0.0", commit: { sha: "abc123" } });
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0]).toEqual({ name: "v1.0.0", commit: { sha: "abc123" } });
     });
 
     it("throws error when repo not found", async () => {
@@ -639,6 +736,20 @@ describe("GitHubClient", () => {
       });
     });
 
+    it("rejects numeric strings instead of coercing malformed upstream data", async () => {
+      mockPool
+        .intercept({ path: "/users/octocat", method: "GET" })
+        .reply(200, { ...OWNER_RESPONSE, id: "1", public_repos: "8" });
+
+      const client = new GitHubClient({ dispatcher: mockAgent });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API returned an invalid response",
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
+    });
+
     it.each([
       ["timestamp", { ...OWNER_RESPONSE, created_at: "not-a-date-time-canary" }],
       ["URL", { ...OWNER_RESPONSE, avatar_url: "not-an-absolute-uri-canary" }],
@@ -664,6 +775,18 @@ describe("GitHubClient", () => {
         code: GITHUB_ERROR_TIMEOUT,
         statusCode: 504,
       });
+    });
+
+    it("maps a body timeout after response headers to a stable timeout error", async () => {
+      const dispatcher = new PartialBodyTimeoutDispatcher();
+      const client = new GitHubClient({ dispatcher });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API request timed out",
+        code: GITHUB_ERROR_TIMEOUT,
+        statusCode: 504,
+      });
+      expect(dispatcher.responseStarted).toBe(true);
     });
 
     it("propagates caller cancellation instead of disguising it as an upstream failure", async () => {

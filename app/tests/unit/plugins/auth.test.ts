@@ -59,6 +59,7 @@ describe("Firebase authentication", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json().message).toBe("Missing authorization header");
+    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground"');
     expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
   });
 
@@ -78,6 +79,7 @@ describe("Firebase authentication", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json().message).toBe("Invalid authorization header format. Expected: Bearer <token>");
+    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground", error="invalid_request"');
     expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
   });
 
@@ -93,6 +95,7 @@ describe("Firebase authentication", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json().message).toBe("Invalid or expired token");
+    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground", error="invalid_token"');
     expect(response.payload).not.toContain("provider detail canary");
   });
 
@@ -140,6 +143,7 @@ describe("Firebase authentication", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json().message).toBe("Token has been revoked. Please sign in again.");
+    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground", error="invalid_token"');
     expect(response.payload).not.toContain("provider revocation canary");
   });
 });

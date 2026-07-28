@@ -78,7 +78,7 @@ describe("App Integration", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("application/json");
-    expect(response.headers.link).toBe('</schemas/ReadinessResponse.json>; rel="describedBy"');
+    expect(response.headers.link).toBe('</schemas/ReadinessResponse.json>; rel="describedby"');
     expect(response.headers.vary).toEqual(["Accept", "Origin"]);
     expect(response.json()).toEqual({ status: "ready" });
     expect(unsupported.statusCode).toBe(406);
@@ -121,7 +121,7 @@ describe("App Integration", () => {
       expect(status.statusCode).toBe(503);
       expect(status.headers["retry-after"]).toBe("10");
       expect(status.headers["content-type"]).toBe("application/cbor");
-      expect(status.headers["link"]).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+      expect(status.headers["link"]).toBe('</schemas/ErrorModel.json>; rel="describedby"');
       expect(status.headers["connection"]).toBe("close");
       expect(status.headers["vary"]).toEqual(["Accept", "Origin"]);
       expect(status.headers["x-request-id"]).toBe("shutdown-status-canary");
@@ -344,7 +344,7 @@ describe("App Integration", () => {
     expect(json.statusCode).toBe(200);
     expect(json.headers["content-type"]).toContain("application/json");
     expect(json.json()).toEqual({ message: "Hello, World!" });
-    expect(json.headers.link).toBe('</schemas/HelloResponse.json>; rel="describedBy"');
+    expect(json.headers.link).toBe('</schemas/HelloResponse.json>; rel="describedby"');
 
     expect(cbor.statusCode).toBe(200);
     expect(cbor.headers["content-type"]).toBe("application/cbor");
@@ -380,7 +380,7 @@ describe("App Integration", () => {
 
     expect(validation.statusCode).toBe(422);
     expect(validation.headers["content-type"]).toBe("application/cbor");
-    expect(validation.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+    expect(validation.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
     expect(cborDecode(validation.rawPayload)).toMatchObject({ status: 422, detail: "validation failed" });
     await fastify.close();
   });
@@ -420,14 +420,14 @@ describe("App Integration", () => {
       expect(response.headers["content-type"]).toContain("application/problem+json");
       expect(response.headers["x-request-id"]).toBe(`unsupported-text-${index}`);
       expect(response.headers.vary).toEqual(["Accept", "Origin"]);
-      expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedBy"');
+      expect(response.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
       expect(response.json()).toMatchObject({ title: "Unsupported Media Type", status: 415 });
       expect(response.json()).not.toHaveProperty("errors");
     }
 
-    expect(json.statusCode).toBe(201);
+    expect(json.statusCode).toBe(200);
     expect(json.json()).toEqual({ message: "Hello, Ada!" });
-    expect(cbor.statusCode).toBe(201);
+    expect(cbor.statusCode).toBe(200);
     expect(cbor.headers["content-type"]).toBe("application/cbor");
     expect(cborDecode(cbor.rawPayload)).toEqual({ message: "Hello, Ada!" });
     await fastify.close();
@@ -501,11 +501,13 @@ describe("App Integration", () => {
     expect(getHello.responses["200"].headers).toHaveProperty("X-Request-ID");
     expect(getHello.responses["200"].headers).toHaveProperty("Link");
     expect(Object.keys(postHello.requestBody.content)).toEqual(["application/json", "application/cbor"]);
+    expect(postHello.operationId).toBe("createGreeting");
     expect(Object.keys(readiness.responses["200"].content)).toEqual(["application/json"]);
     expect(Object.keys(readiness.responses["503"].content)).toEqual(["application/problem+json", "application/cbor"]);
     expect(readiness.responses["503"].headers).toHaveProperty("Retry-After");
     expect(authenticatedUser.security).toEqual([{ bearerAuth: [] }]);
     expect(Object.keys(authenticatedUser.responses["200"].content)).toEqual(["application/json", "application/cbor"]);
+    expect(authenticatedUser.responses["401"].headers).toHaveProperty("WWW-Authenticate");
     expect(document.servers).toEqual([{ url: "/", description: "Current server" }]);
 
     const operationIds: string[] = [];

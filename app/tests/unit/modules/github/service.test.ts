@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GitHubClient } from "../../../../src/modules/github/client.js";
 import { GitHubService } from "../../../../src/modules/github/service.js";
-import { InvalidCursorError } from "../../../../src/utils/pagination.js";
+import { encodeCursor, InvalidCursorError } from "../../../../src/utils/pagination.js";
 
 describe("GitHubService", () => {
   const mockClient = {
@@ -40,18 +40,54 @@ describe("GitHubService", () => {
   });
 
   describe("listOwnerRepos", () => {
-    it("applies default owner and returns repos with count", async () => {
-      mockClient.listOwnerRepos.mockResolvedValueOnce([
-        { id: 1, name: "repo1" },
-        { id: 2, name: "repo2" },
-      ]);
+    it("applies the default owner and page size", async () => {
+      mockClient.listOwnerRepos.mockResolvedValueOnce({
+        items: [
+          { id: 1, name: "repo1" },
+          { id: 2, name: "repo2" },
+        ],
+        nextPage: null,
+        prevPage: null,
+      });
 
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       const result = await service.listOwnerRepos();
 
-      expect(mockClient.listOwnerRepos).toHaveBeenCalledWith("octocat", 30, undefined);
-      expect(result.repos).toHaveLength(2);
-      expect(result.count).toBe(2);
+      expect(mockClient.listOwnerRepos).toHaveBeenCalledWith("octocat", 20, 1, undefined);
+      expect(result.items).toHaveLength(2);
+    });
+
+    it("translates GitHub page links into scope-bound opaque cursors", async () => {
+      mockClient.listOwnerRepos.mockResolvedValueOnce({ items: [], nextPage: 2, prevPage: null });
+      const service = new GitHubService(mockClient as unknown as GitHubClient);
+
+      const result = await service.listOwnerRepos("octocat", { limit: 5 });
+
+      expect(result.nextCursor).toBe(encodeCursor({ type: "gh-owner-repos", value: "5:octocat:2" }));
+    });
+
+    it("rejects a repository cursor reused with a different owner or limit", async () => {
+      const cursor = encodeCursor({ type: "gh-owner-repos", value: "5:octocat:2" });
+      const service = new GitHubService(mockClient as unknown as GitHubClient);
+
+      await expect(service.listOwnerRepos("octocat", { cursor, limit: 10 })).rejects.toThrow(
+        "cursor does not match the requested collection or limit",
+      );
+      await expect(service.listOwnerRepos("hubot", { cursor, limit: 5 })).rejects.toThrow(
+        "cursor does not match the requested collection or limit",
+      );
+      expect(mockClient.listOwnerRepos).not.toHaveBeenCalled();
+    });
+
+    it("links a second repository page back to the cursorless first page", async () => {
+      mockClient.listOwnerRepos.mockResolvedValueOnce({ items: [], nextPage: 3, prevPage: 1 });
+      const cursor = encodeCursor({ type: "gh-owner-repos", value: "5:octocat:2" });
+      const service = new GitHubService(mockClient as unknown as GitHubClient);
+
+      const result = await service.listOwnerRepos("octocat", { cursor, limit: 5 });
+
+      expect(result.prevCursor).toBeNull();
+      expect(mockClient.listOwnerRepos).toHaveBeenCalledWith("octocat", 5, 2, undefined);
     });
   });
 
@@ -104,17 +140,21 @@ describe("GitHubService", () => {
   });
 
   describe("listRepoTags", () => {
-    it("returns tags with count", async () => {
-      mockClient.listRepoTags.mockResolvedValueOnce([
-        { name: "v1.0.0", commit: { sha: "abc123" } },
-        { name: "v0.9.0", commit: { sha: "def456" } },
-      ]);
+    it("returns a page of tags", async () => {
+      mockClient.listRepoTags.mockResolvedValueOnce({
+        items: [
+          { name: "v1.0.0", commit: { sha: "abc123" } },
+          { name: "v0.9.0", commit: { sha: "def456" } },
+        ],
+        nextPage: null,
+        prevPage: null,
+      });
 
       const service = new GitHubService(mockClient as unknown as GitHubClient);
       const result = await service.listRepoTags();
 
-      expect(result.tags).toHaveLength(2);
-      expect(result.count).toBe(2);
+      expect(result.items).toHaveLength(2);
+      expect(mockClient.listRepoTags).toHaveBeenCalledWith("octocat", "git-consortium", 20, 1, undefined);
     });
   });
 
@@ -137,7 +177,10 @@ describe("GitHubService", () => {
     });
 
     it("decodes a forward cursor for GitHub's after parameter", async () => {
-      const validCursor = Buffer.from("gh-activity-after:cursor123").toString("base64url");
+      const validCursor = encodeCursor({
+        type: "gh-activity-after",
+        value: "20:octocat%2Frepo:2:cursor123",
+      });
 
       mockClient.listRepoActivity.mockResolvedValueOnce({
         activities: [],
@@ -157,7 +200,10 @@ describe("GitHubService", () => {
     });
 
     it("decodes a backward cursor for GitHub's before parameter", async () => {
-      const validCursor = Buffer.from("gh-activity-before:cursor456").toString("base64url");
+      const validCursor = encodeCursor({
+        type: "gh-activity-before",
+        value: "20:octocat%2Frepo:2:cursor456",
+      });
       mockClient.listRepoActivity.mockResolvedValueOnce({ activities: [], nextCursor: null, prevCursor: null });
 
       const service = new GitHubService(mockClient as unknown as GitHubClient);
@@ -172,7 +218,27 @@ describe("GitHubService", () => {
       );
     });
 
-    it("returns paginated activities with cursor", async () => {
+    it("rejects an activity cursor reused with a different repository or limit", async () => {
+      const cursor = encodeCursor({
+        type: "gh-activity-after",
+        value: "20:octocat%2Frepo:2:cursor123",
+      });
+      const service = new GitHubService(mockClient as unknown as GitHubClient);
+
+      await expect(service.listRepoActivity("octocat", "repo", { cursor, limit: 10 })).rejects.toThrow(
+        "cursor does not match the requested collection or limit",
+      );
+      await expect(service.listRepoActivity("octocat", "other", { cursor, limit: 20 })).rejects.toThrow(
+        "cursor does not match the requested collection or limit",
+      );
+      expect(mockClient.listRepoActivity).not.toHaveBeenCalled();
+    });
+
+    it("keeps cursor-bearing links when navigating beyond the second activity page", async () => {
+      const currentCursor = encodeCursor({
+        type: "gh-activity-after",
+        value: "20:octocat%2Frepo:3:current-page",
+      });
       mockClient.listRepoActivity.mockResolvedValueOnce({
         activities: [
           {
@@ -189,11 +255,35 @@ describe("GitHubService", () => {
       });
 
       const service = new GitHubService(mockClient as unknown as GitHubClient);
-      const result = await service.listRepoActivity("octocat", "repo");
+      const result = await service.listRepoActivity("octocat", "repo", { cursor: currentCursor });
 
       expect(result.items).toHaveLength(1);
-      expect(result.nextCursor).toBe("Z2gtYWN0aXZpdHktYWZ0ZXI6Y3Vyc29yMTIz");
-      expect(result.prevCursor).toBe("Z2gtYWN0aXZpdHktYmVmb3JlOmN1cnNvcjQ1Ng");
+      expect(result.nextCursor).toBe(
+        encodeCursor({ type: "gh-activity-after", value: "20:octocat%2Frepo:4:cursor123" }),
+      );
+      expect(result.prevCursor).toBe(
+        encodeCursor({ type: "gh-activity-before", value: "20:octocat%2Frepo:2:cursor456" }),
+      );
+    });
+
+    it("links the second activity page back to the cursorless first page", async () => {
+      const currentCursor = encodeCursor({
+        type: "gh-activity-after",
+        value: "20:octocat%2Frepo:2:current-page",
+      });
+      mockClient.listRepoActivity.mockResolvedValueOnce({
+        activities: [],
+        nextCursor: "next-page",
+        prevCursor: "first-page",
+      });
+      const service = new GitHubService(mockClient as unknown as GitHubClient);
+
+      const result = await service.listRepoActivity("octocat", "repo", { cursor: currentCursor });
+
+      expect(result.prevCursor).toBeNull();
+      expect(result.nextCursor).toBe(
+        encodeCursor({ type: "gh-activity-after", value: "20:octocat%2Frepo:3:next-page" }),
+      );
     });
 
     it("returns undefined nextCursor when no more pages", async () => {

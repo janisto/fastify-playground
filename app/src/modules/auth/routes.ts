@@ -1,8 +1,17 @@
-import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
+import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 
 import { ErrorModelSchema } from "../../schemas/index.js";
 import { API_MEDIA_TYPES } from "../../utils/content-negotiation.js";
 import { AuthenticatedUserSchema } from "./schemas.js";
+
+const UnauthorizedErrorSchema = {
+  ...ErrorModelSchema,
+  headers: {
+    "WWW-Authenticate": Type.String({
+      description: "RFC 6750 Bearer authentication challenge",
+    }),
+  },
+};
 
 const authRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.addSchema(AuthenticatedUserSchema);
@@ -20,7 +29,7 @@ const authRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         produces: API_MEDIA_TYPES,
         response: {
           200: AuthenticatedUserSchema,
-          401: ErrorModelSchema,
+          401: UnauthorizedErrorSchema,
           406: ErrorModelSchema,
           500: ErrorModelSchema,
           503: ErrorModelSchema,

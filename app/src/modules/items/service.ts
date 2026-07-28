@@ -284,7 +284,7 @@ export interface ItemsListResult {
 }
 
 export class ItemsService {
-  validateCursor(encodedCursor: string | undefined): Cursor {
+  validateCursor(encodedCursor: string | undefined, expectedLimit = 20, expectedCategory?: Category): Cursor {
     const cursor = decodeCursor(encodedCursor);
     if (cursor === null) {
       throw new InvalidCursorError("invalid cursor format");
@@ -292,17 +292,31 @@ export class ItemsService {
     if (cursor.type && cursor.type !== CURSOR_TYPE) {
       throw new InvalidCursorError("cursor type mismatch");
     }
-    return cursor;
+    if (!cursor.value) return cursor;
+
+    const [limitValue, categoryValue, itemId, ...extra] = cursor.value.split(":");
+    const limit = Number(limitValue);
+    const category = categoryValue === "*" ? undefined : categoryValue;
+    if (
+      extra.length > 0 ||
+      !itemId ||
+      !Number.isSafeInteger(limit) ||
+      limit !== expectedLimit ||
+      category !== expectedCategory
+    ) {
+      throw new InvalidCursorError("cursor does not match the requested category or limit");
+    }
+    return { type: cursor.type, value: itemId };
   }
 
   list(options: { cursor?: string; limit?: number; category?: Category }): ItemsListResult {
     const { cursor: encodedCursor, limit = 20, category } = options;
 
-    const cursor = this.validateCursor(encodedCursor);
+    const cursor = this.validateCursor(encodedCursor, limit, category);
     const filtered = category ? MOCK_ITEMS.filter((item) => item.category === category) : MOCK_ITEMS;
     const startIndex = this.findStartIndex(filtered, cursor);
     const pageItems = filtered.slice(startIndex, startIndex + limit);
-    const { nextCursor, prevCursor } = this.buildPaginationCursors(filtered, pageItems, startIndex, limit);
+    const { nextCursor, prevCursor } = this.buildPaginationCursors(filtered, pageItems, startIndex, limit, category);
 
     return {
       items: pageItems,
@@ -328,6 +342,7 @@ export class ItemsService {
     pageItems: Item[],
     startIndex: number,
     limit: number,
+    category: Category | undefined,
   ): { nextCursor: string | undefined; prevCursor: string | null | undefined } {
     const hasNext = startIndex + limit < items.length;
     const hasPrev = startIndex > 0;
@@ -335,11 +350,12 @@ export class ItemsService {
     const lastPageItem = pageItems.at(-1);
     const previousPageCursorIndex = startIndex - limit - 1;
     const previousPageCursorItem = previousPageCursorIndex >= 0 ? items.at(previousPageCursorIndex) : undefined;
+    const scope = `${limit}:${category ?? "*"}`;
     const nextCursor =
-      hasNext && lastPageItem ? encodeCursor({ type: CURSOR_TYPE, value: lastPageItem.id }) : undefined;
+      hasNext && lastPageItem ? encodeCursor({ type: CURSOR_TYPE, value: `${scope}:${lastPageItem.id}` }) : undefined;
     const prevCursor = hasPrev
       ? previousPageCursorItem
-        ? encodeCursor({ type: CURSOR_TYPE, value: previousPageCursorItem.id })
+        ? encodeCursor({ type: CURSOR_TYPE, value: `${scope}:${previousPageCursorItem.id}` })
         : null
       : undefined;
 

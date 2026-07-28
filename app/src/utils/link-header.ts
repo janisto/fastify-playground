@@ -1,7 +1,7 @@
 import type { FastifyReply } from "fastify";
 
 /**
- * Adds a Link header with `rel="describedBy"` pointing to a schema endpoint.
+ * Adds a Link header with `rel="describedby"` pointing to a schema endpoint.
  *
  * If a Link header already exists, the new link is appended to the existing value(s).
  * This follows RFC 8288 (Web Linking) for schema discovery.
@@ -11,10 +11,10 @@ import type { FastifyReply } from "fastify";
  *
  * @example
  * addSchemaLinkHeader(reply, "ErrorModel");
- * // Sets: Link: </schemas/ErrorModel.json>; rel="describedBy"
+ * // Sets: Link: </schemas/ErrorModel.json>; rel="describedby"
  */
 export function addSchemaLinkHeader(reply: FastifyReply, schemaName: string): void {
-  const schemaLink = `</schemas/${schemaName}.json>; rel="describedBy"`;
+  const schemaLink = `</schemas/${schemaName}.json>; rel="describedby"`;
   const existingLink = reply.getHeader("Link");
   if (existingLink) {
     const links = Array.isArray(existingLink) ? existingLink : [String(existingLink)];

@@ -1,4 +1,5 @@
 autoInstallPeers: false
+strictPeerDependencies: true
 nodeVersion: 24.18.0
 engineStrict: true
 strictDepBuilds: true
@@ -9,7 +10,21 @@ minimumReleaseAgeExclude:
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
+trustPolicy: no-downgrade
 blockExoticSubdeps: true
+
+# @fastify/swagger-ui 6.1.0 still declares @fastify/static 9, whose entire
+# release line is affected by GHSA-83w8-p2f5-377r and GHSA-8pvw-jcv7-9cmj.
+# Static 10 remains compatible with Fastify 5; keep this override only until
+# swagger-ui widens its range.
+overrides:
+  '@fastify/static': 10.1.2
+
+auditConfig:
+  ignoreGhsas:
+    # Reached only through Firebase Admin's unused Firestore toolchain. Its
+    # minimatch dependency cannot accept the patched brace-expansion major.
+    - GHSA-mh99-v99m-4gvg
 
 allowBuilds:
   '@firebase/util': true
