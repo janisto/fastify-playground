@@ -28,6 +28,11 @@ export interface PaginatedResult<T> {
   prevCursor?: string | null;
 }
 
+interface ActivityPageState {
+  page: number;
+  upstreamCursor: ActivityCursor;
+}
+
 export class GitHubService {
   private readonly client: GitHubClient;
 
@@ -75,21 +80,31 @@ export class GitHubService {
     const resolvedOwner = owner ?? DEFAULT_OWNER;
     const resolvedRepo = repo ?? DEFAULT_REPO;
     const scope = `${resolvedOwner}/${resolvedRepo}`;
-    const cursor = this.validateActivityCursor(options?.cursor, scope, limit);
+    const pageState = this.validateActivityCursor(options?.cursor, scope, limit);
+    const currentPage = pageState?.page ?? 1;
 
-    const result = await this.client.listRepoActivity(resolvedOwner, resolvedRepo, limit, cursor, signal);
+    const result = await this.client.listRepoActivity(
+      resolvedOwner,
+      resolvedRepo,
+      limit,
+      pageState?.upstreamCursor,
+      signal,
+    );
 
     const nextCursor = result.nextCursor
-      ? this.encodeActivityCursor(ACTIVITY_AFTER_CURSOR_TYPE, scope, limit, result.nextCursor)
+      ? this.encodeActivityCursor(ACTIVITY_AFTER_CURSOR_TYPE, scope, limit, currentPage + 1, result.nextCursor)
       : undefined;
-    const prevCursor = result.prevCursor
-      ? this.encodeActivityCursor(ACTIVITY_BEFORE_CURSOR_TYPE, scope, limit, result.prevCursor)
-      : undefined;
+    const prevCursor =
+      result.prevCursor && currentPage > 1
+        ? currentPage === 2
+          ? null
+          : this.encodeActivityCursor(ACTIVITY_BEFORE_CURSOR_TYPE, scope, limit, currentPage - 1, result.prevCursor)
+        : undefined;
 
     return {
       items: result.activities,
       ...(nextCursor ? { nextCursor } : {}),
-      ...(prevCursor ? { prevCursor } : {}),
+      ...(prevCursor !== undefined ? { prevCursor } : {}),
     };
   }
 
@@ -134,7 +149,7 @@ export class GitHubService {
     encodedCursor: string | undefined,
     expectedScope: string,
     expectedLimit: number,
-  ): ActivityCursor | undefined {
+  ): ActivityPageState | undefined {
     if (encodedCursor === undefined) return undefined;
 
     const cursor = decodeCursor(encodedCursor);
@@ -145,8 +160,9 @@ export class GitHubService {
       throw new InvalidCursorError("cursor type mismatch: expected a GitHub activity cursor");
     }
 
-    const [limitValue, scopeValue, upstreamValue, ...extra] = cursor.value.split(":");
+    const [limitValue, scopeValue, pageValue, upstreamValue, ...extra] = cursor.value.split(":");
     const limit = Number(limitValue);
+    const page = Number(pageValue);
     let scope: string;
     let upstreamCursor: string;
     try {
@@ -160,19 +176,26 @@ export class GitHubService {
       !upstreamCursor ||
       !Number.isSafeInteger(limit) ||
       limit !== expectedLimit ||
-      scope !== expectedScope
+      scope !== expectedScope ||
+      !Number.isSafeInteger(page) ||
+      page < 2
     ) {
       throw new InvalidCursorError("cursor does not match the requested collection or limit");
     }
 
-    if (cursor.type === ACTIVITY_AFTER_CURSOR_TYPE) return { direction: "after", value: upstreamCursor };
-    return { direction: "before", value: upstreamCursor };
+    return {
+      page,
+      upstreamCursor: {
+        direction: cursor.type === ACTIVITY_AFTER_CURSOR_TYPE ? "after" : "before",
+        value: upstreamCursor,
+      },
+    };
   }
 
-  private encodeActivityCursor(type: string, scope: string, limit: number, value: string): string {
+  private encodeActivityCursor(type: string, scope: string, limit: number, page: number, value: string): string {
     return encodeCursor({
       type,
-      value: `${limit}:${encodeURIComponent(scope)}:${encodeURIComponent(value)}`,
+      value: `${limit}:${encodeURIComponent(scope)}:${page}:${encodeURIComponent(value)}`,
     });
   }
 

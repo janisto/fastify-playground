@@ -9,9 +9,11 @@ describe("under-pressure", () => {
 
   afterEach(async () => {
     await Promise.all(apps.splice(0).map((app) => app.close()));
+    vi.useRealTimers();
   });
 
   it("rejects application work under pressure while preserving process liveness", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const app = Fastify();
     apps.push(app);
     const handler = vi.fn(async () => ({ ok: true }));
@@ -25,7 +27,8 @@ describe("under-pressure", () => {
     await app.register(health);
     app.get("/work", handler);
     await app.ready();
-    await vi.waitFor(() => expect(app.isUnderPressure()).toBe(true), { interval: 10, timeout: 500 });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(app.isUnderPressure()).toBe(true);
 
     const overloaded = await app.inject({ method: "GET", url: "/work" });
     const liveness = await app.inject({ method: "GET", url: "/health" });
