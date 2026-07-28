@@ -382,7 +382,7 @@ GitHub Actions workflows in `.github/workflows/`:
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
 | `workflow-security.yml` | Read-only zizmor workflow security scanning |
 
-Dependabot checks application, container, and GitHub Actions dependencies quarterly. The auto-merge workflow intentionally
+Dependabot checks application and GitHub Actions dependencies quarterly. The auto-merge workflow intentionally
 maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication;
 contributors do not need to configure that secret. Workflow actions intentionally use explicit full release tags such
 as `actions/checkout@v7.0.1`, rather than full commit SHAs or floating major tags, so Dependabot can propose readable
