@@ -73,9 +73,6 @@ JSON and CBOR request bodies are selected independently with `Content-Type`. Mod
 `application/json` and `application/cbor`, with media-type parameters ignored. Unowned structured suffixes such as
 `application/vnd.example+cbor` and the unregistered `application/problem+cbor` are rejected with 415. RFC 9290's
 registered `application/concise-problem-details+cbor` uses a different compact data model and is not implemented.
-Fastify's application-wide validator intentionally removes unknown object properties before handlers run; tests lock in
-that policy so input fields cannot silently reach business logic.
-
 Negotiated responses include `Vary: Accept, Origin`. Successful modeled responses and Problem Details use an RFC 8288
 `Link` header for schema discovery. Response instances do not contain the JSON Schema `$schema` keyword; standalone
 schema documents include the Draft 2020-12 dialect and local `$defs` for referenced components.
