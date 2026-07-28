@@ -36,7 +36,7 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     "/",
     {
       schema: {
-        operationId: "personalizeGreeting",
+        operationId: "createGreeting",
         description: "Returns a personalized greeting without creating a resource",
         summary: "Personalize greeting",
         tags: ["Hello"],

@@ -501,6 +501,7 @@ describe("App Integration", () => {
     expect(getHello.responses["200"].headers).toHaveProperty("X-Request-ID");
     expect(getHello.responses["200"].headers).toHaveProperty("Link");
     expect(Object.keys(postHello.requestBody.content)).toEqual(["application/json", "application/cbor"]);
+    expect(postHello.operationId).toBe("createGreeting");
     expect(Object.keys(readiness.responses["200"].content)).toEqual(["application/json"]);
     expect(Object.keys(readiness.responses["503"].content)).toEqual(["application/problem+json", "application/cbor"]);
     expect(readiness.responses["503"].headers).toHaveProperty("Retry-After");

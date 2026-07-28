@@ -1,4 +1,5 @@
-import { MockAgent } from "undici";
+import { Buffer } from "node:buffer";
+import { Dispatcher, errors, MockAgent } from "undici";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GitHubClient } from "../../../../src/modules/github/client.js";
@@ -26,6 +27,44 @@ const OWNER_RESPONSE = {
   created_at: "2011-01-25T18:44:36Z",
   updated_at: "2024-01-01T00:00:00Z",
 } as const;
+
+class PartialBodyTimeoutDispatcher extends Dispatcher {
+  responseStarted = false;
+
+  override dispatch(_options: Dispatcher.DispatchOptions, handler: Dispatcher.DispatchHandler): boolean {
+    let aborted = false;
+    let paused = false;
+    let reason: Error | null = null;
+    const controller: Dispatcher.DispatchController = {
+      get aborted() {
+        return aborted;
+      },
+      get paused() {
+        return paused;
+      },
+      get reason() {
+        return reason;
+      },
+      abort(error) {
+        aborted = true;
+        reason = error;
+      },
+      pause() {
+        paused = true;
+      },
+      resume() {
+        paused = false;
+      },
+    };
+
+    handler.onRequestStart?.(controller, null);
+    handler.onResponseStart?.(controller, 200, { "content-type": "application/json" }, "OK");
+    handler.onResponseData?.(controller, Buffer.from('{"login":'));
+    this.responseStarted = true;
+    queueMicrotask(() => handler.onResponseError?.(controller, new errors.BodyTimeoutError()));
+    return true;
+  }
+}
 
 describe("GitHubClient", () => {
   let mockAgent: MockAgent;
@@ -736,6 +775,18 @@ describe("GitHubClient", () => {
         code: GITHUB_ERROR_TIMEOUT,
         statusCode: 504,
       });
+    });
+
+    it("maps a body timeout after response headers to a stable timeout error", async () => {
+      const dispatcher = new PartialBodyTimeoutDispatcher();
+      const client = new GitHubClient({ dispatcher });
+
+      await expect(client.getOwner("octocat")).rejects.toMatchObject({
+        message: "GitHub API request timed out",
+        code: GITHUB_ERROR_TIMEOUT,
+        statusCode: 504,
+      });
+      expect(dispatcher.responseStarted).toBe(true);
     });
 
     it("propagates caller cancellation instead of disguising it as an upstream failure", async () => {
