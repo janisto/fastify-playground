@@ -66,7 +66,7 @@ describe("items routes", () => {
     });
 
     it("paginates with cursor", async () => {
-      const cursor = encodeCursor({ type: "item", value: "20:*:item-005" });
+      const cursor = encodeCursor({ type: "listItems", value: "1:next:20:*:item-005" });
       const response = await fastify.inject({
         method: "GET",
         url: `/?cursor=${cursor}`,
@@ -85,7 +85,7 @@ describe("items routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const cursor = encodeCursor({ type: "item", value: "5:*:item-005" });
+      const cursor = encodeCursor({ type: "listItems", value: "1:next:5:*:item-005" });
       expect(response.headers.link).toBe(`</v1/items?cursor=${cursor}&limit=5>; rel="next"`);
     });
 
@@ -101,7 +101,7 @@ describe("items routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().detail).toContain("cursor does not match the requested category or limit");
+      expect(response.json()).toMatchObject({ code: "invalid_request", detail: "Request is malformed" });
     });
 
     it.each([
@@ -123,7 +123,7 @@ describe("items routes", () => {
       expect(response.statusCode).toBe(400);
       const body = response.json();
       expect(body.status).toBe(400);
-      expect(body.detail).toContain("invalid cursor format");
+      expect(body).toMatchObject({ code: "invalid_request", detail: "Request is malformed" });
     });
 
     it("does not misclassify an unexpected service failure as a client cursor error", async () => {
@@ -146,7 +146,7 @@ describe("items routes", () => {
       expect(response.statusCode).toBe(422);
       const body = response.json();
       expect(body.status).toBe(422);
-      expect(body.detail).toBe("validation failed");
+      expect(body.detail).toBe("Request validation failed");
     });
 
     it("rejects limit less than minimum with 422 error", async () => {
@@ -158,7 +158,7 @@ describe("items routes", () => {
       expect(response.statusCode).toBe(422);
       const body = response.json();
       expect(body.status).toBe(422);
-      expect(body.detail).toBe("validation failed");
+      expect(body.detail).toBe("Request validation failed");
     });
 
     it("rejects invalid category with 422 error", async () => {
@@ -170,7 +170,7 @@ describe("items routes", () => {
       expect(response.statusCode).toBe(422);
       const body = response.json();
       expect(body.status).toBe(422);
-      expect(body.detail).toBe("validation failed");
+      expect(body.detail).toBe("Request validation failed");
     });
   });
 });

@@ -162,12 +162,7 @@ export function negotiateApiMediaType(acceptHeader: string, allowCbor = true): s
 
 export function negotiateProblemMediaType(acceptHeader: string): string {
   const explicitProblemJsonQuality = mediaTypeQuality(acceptHeader, PROBLEM_JSON_MEDIA_TYPE, true);
-  const jsonQuality =
-    explicitProblemJsonQuality ??
-    Math.max(
-      mediaTypeQuality(acceptHeader, PROBLEM_JSON_MEDIA_TYPE) ?? 0,
-      mediaTypeQuality(acceptHeader, JSON_MEDIA_TYPE) ?? 0,
-    );
+  const jsonQuality = explicitProblemJsonQuality ?? mediaTypeQuality(acceptHeader, PROBLEM_JSON_MEDIA_TYPE) ?? 0;
   const cborQuality = mediaTypeQuality(acceptHeader, CBOR_MEDIA_TYPE, true) ?? 0;
 
   return cborQuality > jsonQuality ? CBOR_MEDIA_TYPE : PROBLEM_JSON_MEDIA_TYPE;

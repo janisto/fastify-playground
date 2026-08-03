@@ -1,9 +1,9 @@
+import { Buffer } from "node:buffer";
 import type { StaticDecode, TSchema } from "typebox";
 import Value from "typebox/value";
 import { type Dispatcher, request as undiciRequest } from "undici";
-
+import { parseStrictJson } from "../../utils/strict-json.js";
 import {
-  GITHUB_ERROR_FORBIDDEN,
   GITHUB_ERROR_NOT_FOUND,
   GITHUB_ERROR_RATE_LIMIT,
   GITHUB_ERROR_TIMEOUT,
@@ -26,16 +26,20 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 3;
+const MAX_RESPONSE_BYTES = 4_194_304;
+const SAFE_INTEGER_MAXIMUM = 9_007_199_254_740_991;
 const GITHUB_API_VERSION = "2026-03-10";
-const SECONDARY_RATE_LIMIT_PATTERN = /secondary rate limit|abuse detection/i;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
+const CANONICAL_DECIMAL = /^(?:0|[1-9][0-9]*)$/;
+const HTTP_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export interface GitHubClientOptions {
   baseUrl?: string;
-  /** Explicit credential for trusted direct client use, such as opt-in integration tests. */
+  /** Explicit credential for isolated opt-in direct-client smoke tests only. */
   token?: string;
   dispatcher?: Dispatcher;
   timeoutMs?: number;
+  now?: () => number;
 }
 
 type ResponseHeaders = Record<string, string | string[] | undefined>;
@@ -58,9 +62,101 @@ export interface ActivityCursor {
   value: string;
 }
 
-function getHeader(headers: ResponseHeaders, name: string): string | undefined {
+interface NumberedLinkContext {
+  readonly currentPage: number;
+  readonly expectedPath: string;
+  readonly fixedQuery: Readonly<Record<string, string>>;
+  readonly limit: number;
+  readonly numericSuffix: "/repos" | "/tags";
+}
+
+interface ActivityLinkContext {
+  readonly currentCursor?: ActivityCursor;
+  readonly expectedPath: string;
+  readonly limit: number;
+}
+
+function headerValues(headers: ResponseHeaders, name: string): string[] {
   const value = headers[name];
-  return Array.isArray(value) ? value.at(0) : value;
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function oneHeader(headers: ResponseHeaders, name: string): string | undefined {
+  const values = headerValues(headers, name);
+  return values.length === 1 ? values[0] : undefined;
+}
+
+function canonicalSafeInteger(value: string): number | null {
+  if (!CANONICAL_DECIMAL.test(value)) return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 && number <= SAFE_INTEGER_MAXIMUM ? number : null;
+}
+
+function splitMediaType(value: string): string[] | null {
+  const parts: string[] = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (escaped) {
+      escaped = false;
+    } else if (quoted && character === "\\") {
+      escaped = true;
+    } else if (character === '"') {
+      quoted = !quoted;
+    } else if (!quoted && character === ",") {
+      return null;
+    } else if (!quoted && character === ";") {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  if (quoted || escaped) return null;
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function validQuotedString(value: string): boolean {
+  if (value.length < 2 || value[0] !== '"' || value.at(-1) !== '"') return false;
+  for (let index = 1; index < value.length - 1; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0x5c) {
+      index += 1;
+      if (index >= value.length - 1) return false;
+      const escaped = value.charCodeAt(index);
+      if (escaped !== 0x09 && (escaped < 0x20 || escaped === 0x7f)) return false;
+    } else if (code !== 0x09 && (code < 0x20 || code === 0x22 || code === 0x7f)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validJsonMediaType(value: string): boolean {
+  const parts = splitMediaType(value);
+  if (!parts || parts.length === 0) return false;
+  const mediaType = parts[0]?.trim().toLowerCase() ?? "";
+  const slash = mediaType.indexOf("/");
+  if (slash <= 0 || mediaType.indexOf("/", slash + 1) >= 0) return false;
+  const type = mediaType.slice(0, slash);
+  const subtype = mediaType.slice(slash + 1);
+  if (!HTTP_TOKEN.test(type) || !HTTP_TOKEN.test(subtype)) return false;
+  if (mediaType !== "application/json" && !(type === "application" && subtype.endsWith("+json"))) return false;
+
+  const names = new Set<string>();
+  for (const rawParameter of parts.slice(1)) {
+    const parameter = rawParameter.trim();
+    const equals = parameter.indexOf("=");
+    if (equals <= 0) return false;
+    const name = parameter.slice(0, equals).trim().toLowerCase();
+    const parameterValue = parameter.slice(equals + 1).trim();
+    if (!HTTP_TOKEN.test(name) || names.has(name)) return false;
+    if (!HTTP_TOKEN.test(parameterValue) && !validQuotedString(parameterValue)) return false;
+    names.add(name);
+  }
+  return true;
 }
 
 function hasErrorCode(error: unknown, ...codes: string[]): boolean {
@@ -83,10 +179,59 @@ function hasUndiciErrorCode(error: unknown): boolean {
   );
 }
 
+function scalarCompare(left: string, right: string): number {
+  const leftScalars = Array.from(left, (value) => value.codePointAt(0) ?? 0);
+  const rightScalars = Array.from(right, (value) => value.codePointAt(0) ?? 0);
+  const length = Math.min(leftScalars.length, rightScalars.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (leftScalars.at(index) ?? 0) - (rightScalars.at(index) ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return leftScalars.length - rightScalars.length;
+}
+
+function splitLinkHeader(value: string): string[] {
+  const result: string[] = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+  let angle = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value.at(index);
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === "<") angle = true;
+    else if (character === ">") angle = false;
+    else if (character === "," && !angle) {
+      result.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  result.push(value.slice(start).trim());
+  return result.filter(Boolean);
+}
+
+function queryEntries(url: URL): [string, string][] {
+  return [...url.searchParams.entries()].toSorted(([leftName, leftValue], [rightName, rightValue]) => {
+    const nameOrder = scalarCompare(leftName, rightName);
+    return nameOrder === 0 ? scalarCompare(leftValue, rightValue) : nameOrder;
+  });
+}
+
+function sameQuery(left: URL, right: URL): boolean {
+  return JSON.stringify(queryEntries(left)) === JSON.stringify(queryEntries(right));
+}
+
 export class GitHubClient {
   private readonly baseOrigin: string;
   private readonly baseUrl: string;
   private readonly dispatcher: Dispatcher | undefined;
+  private readonly now: () => number;
   private readonly timeoutMs: number;
   private readonly token: string | undefined;
 
@@ -95,55 +240,46 @@ export class GitHubClient {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
       throw new RangeError("GitHub request timeout must be a positive safe integer");
     }
-
     const baseUrl = new URL(options?.baseUrl ?? "https://api.github.com");
     this.baseOrigin = baseUrl.origin;
     this.baseUrl = baseUrl.href.replace(/\/$/, "");
     this.dispatcher = options?.dispatcher;
     this.timeoutMs = timeoutMs;
     this.token = options?.token;
+    this.now = options?.now ?? Date.now;
   }
 
   async getOwner(owner: string, signal?: AbortSignal): Promise<GitHubOwner> {
-    const url = `${this.baseUrl}/users/${encodeURIComponent(owner)}`;
-    const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
-
-    if (statusCode !== 200) {
-      throw this.mapError(statusCode, headers, await this.readErrorMessage(body, signal, timeoutSignal));
-    }
-
-    return this.toGitHubOwner(await this.readValidatedBody(body, RawGitHubOwnerSchema, signal, timeoutSignal));
+    const url = new URL(`${this.baseUrl}/users/${encodeURIComponent(owner)}`);
+    const { data } = await this.getJson(url, RawGitHubOwnerSchema, signal);
+    return this.toGitHubOwner(data);
   }
 
-  async listOwnerRepos(owner: string, perPage = 30, page = 1, signal?: AbortSignal): Promise<NumberedPage<GitHubRepo>> {
-    const query = new URLSearchParams({ per_page: String(perPage), page: String(page) });
-    const url = `${this.baseUrl}/users/${encodeURIComponent(owner)}/repos?${query}`;
-    const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
-
-    if (statusCode !== 200) {
-      throw this.mapError(statusCode, headers, await this.readErrorMessage(body, signal, timeoutSignal));
-    }
-
-    const data = await this.readValidatedBody(body, RawGitHubOwnerReposSchema, signal, timeoutSignal);
-    const linkHeader = getHeader(headers, "link") ?? null;
-    return {
-      items: data.map((repo) => this.toGitHubRepo(repo)),
-      nextPage: this.parseLinkPage(linkHeader, "next"),
-      prevPage: this.parseLinkPage(linkHeader, "prev"),
-    };
+  async listOwnerRepos(owner: string, limit = 20, page = 1, signal?: AbortSignal): Promise<NumberedPage<GitHubRepo>> {
+    const url = new URL(`${this.baseUrl}/users/${encodeURIComponent(owner)}/repos`);
+    url.searchParams.set("type", "owner");
+    url.searchParams.set("sort", "full_name");
+    url.searchParams.set("direction", "asc");
+    url.searchParams.set("per_page", String(limit));
+    if (page !== 1) url.searchParams.set("page", String(page));
+    const { data, headers } = await this.getJson(url, RawGitHubOwnerReposSchema, signal);
+    if (data.length > limit) throw this.invalidResponse("GitHub repository page exceeded the requested limit");
+    const links = this.numberedLinks(headers, {
+      currentPage: page,
+      expectedPath: url.pathname,
+      fixedQuery: { type: "owner", sort: "full_name", direction: "asc" },
+      limit,
+      numericSuffix: "/repos",
+    });
+    if (data.length === 0 && links.nextPage !== null) throw this.invalidResponse("empty page advertised next");
+    return { items: data.map((repo) => this.toGitHubRepo(repo)), ...links };
   }
 
   async getRepo(owner: string, repo: string, signal?: AbortSignal): Promise<GitHubRepoDetail> {
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-    const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
-
-    if (statusCode !== 200) {
-      throw this.mapError(statusCode, headers, await this.readErrorMessage(body, signal, timeoutSignal));
-    }
-
-    return this.toGitHubRepoDetail(
-      await this.readValidatedBody(body, RawGitHubRepoDetailSchema, signal, timeoutSignal),
-    );
+    if (/^\.+$/.test(repo)) throw this.invalidResponse("dot-only repository reached URL construction");
+    const url = new URL(`${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
+    const { data } = await this.getJson(url, RawGitHubRepoDetailSchema, signal);
+    return this.toGitHubRepoDetail(data);
   }
 
   async listRepoActivity(
@@ -153,73 +289,63 @@ export class GitHubClient {
     cursor?: ActivityCursor,
     signal?: AbortSignal,
   ): Promise<ActivityPage> {
-    const query = new URLSearchParams({ per_page: String(limit) });
-    if (cursor) query.set(cursor.direction, cursor.value);
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/activity?${query}`;
-
-    const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
-
-    if (statusCode !== 200) {
-      throw this.mapError(statusCode, headers, await this.readErrorMessage(body, signal, timeoutSignal));
-    }
-
-    const data = await this.readValidatedBody(body, RawGitHubActivityListSchema, signal, timeoutSignal);
-    const linkHeader = getHeader(headers, "link") ?? null;
-    const nextCursor = this.parseLinkCursor(linkHeader, "next", "after");
-    const prevCursor = this.parseLinkCursor(linkHeader, "prev", "before");
-
-    return {
-      activities: data.map((activity) => this.toGitHubActivity(activity)),
-      nextCursor,
-      prevCursor,
-    };
+    if (/^\.+$/.test(repo)) throw this.invalidResponse("dot-only repository reached URL construction");
+    const url = new URL(`${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/activity`);
+    url.searchParams.set("direction", "desc");
+    url.searchParams.set("per_page", String(limit));
+    if (cursor) url.searchParams.set(cursor.direction, cursor.value);
+    const { data, headers } = await this.getJson(url, RawGitHubActivityListSchema, signal);
+    if (data.length > limit) throw this.invalidResponse("GitHub activity page exceeded the requested limit");
+    const links = this.activityLinks(headers, {
+      expectedPath: url.pathname,
+      limit,
+      ...(cursor ? { currentCursor: cursor } : {}),
+    });
+    if (data.length === 0 && links.nextCursor !== null) throw this.invalidResponse("empty page advertised next");
+    return { activities: data.map((activity) => this.toGitHubActivity(activity)), ...links };
   }
 
   async listRepoLanguages(owner: string, repo: string, signal?: AbortSignal): Promise<Record<string, number>> {
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/languages`;
-    const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
-
-    if (statusCode !== 200) {
-      throw this.mapError(statusCode, headers, await this.readErrorMessage(body, signal, timeoutSignal));
-    }
-
-    return this.readValidatedBody(body, RawGitHubLanguagesSchema, signal, timeoutSignal);
+    if (/^\.+$/.test(repo)) throw this.invalidResponse("dot-only repository reached URL construction");
+    const url = new URL(`${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/languages`);
+    return (await this.getJson(url, RawGitHubLanguagesSchema, signal)).data;
   }
 
   async listRepoTags(
     owner: string,
     repo: string,
-    perPage = 30,
+    limit = 20,
     page = 1,
     signal?: AbortSignal,
   ): Promise<NumberedPage<GitHubTag>> {
-    const query = new URLSearchParams({ per_page: String(perPage), page: String(page) });
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags?${query}`;
-    const { statusCode, headers, body, timeoutSignal } = await this.request(url, signal);
-
-    if (statusCode !== 200) {
-      throw this.mapError(statusCode, headers, await this.readErrorMessage(body, signal, timeoutSignal));
-    }
-
-    const data = await this.readValidatedBody(body, RawGitHubTagsSchema, signal, timeoutSignal);
-    const linkHeader = getHeader(headers, "link") ?? null;
+    if (/^\.+$/.test(repo)) throw this.invalidResponse("dot-only repository reached URL construction");
+    const url = new URL(`${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags`);
+    url.searchParams.set("per_page", String(limit));
+    if (page !== 1) url.searchParams.set("page", String(page));
+    const { data, headers } = await this.getJson(url, RawGitHubTagsSchema, signal);
+    if (data.length > limit) throw this.invalidResponse("GitHub tag page exceeded the requested limit");
+    const links = this.numberedLinks(headers, {
+      currentPage: page,
+      expectedPath: url.pathname,
+      fixedQuery: {},
+      limit,
+      numericSuffix: "/tags",
+    });
+    if (data.length === 0 && links.nextPage !== null) throw this.invalidResponse("empty page advertised next");
     return {
       items: data.map((tag) => ({ name: tag.name, commit: { sha: tag.commit.sha } })),
-      nextPage: this.parseLinkPage(linkHeader, "next"),
-      prevPage: this.parseLinkPage(linkHeader, "prev"),
+      ...links,
     };
   }
 
   private buildHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
+    return {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": GITHUB_API_VERSION,
       "User-Agent": "fastify-playground",
+      "Accept-Encoding": "identity",
+      ...(this.token === undefined ? {} : { Authorization: `Bearer ${this.token}` }),
     };
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
-    }
-    return headers;
   }
 
   private buildRequestOptions(signal: AbortSignal) {
@@ -229,25 +355,46 @@ export class GitHubClient {
       headersTimeout: this.timeoutMs,
       bodyTimeout: this.timeoutMs,
       signal,
+      maxRedirections: 0,
       ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
     };
   }
 
-  private async request(url: string, callerSignal?: AbortSignal): Promise<RequestResult> {
+  private async getJson<const Schema extends TSchema>(
+    url: URL,
+    schema: Schema,
+    callerSignal?: AbortSignal,
+  ): Promise<{ data: StaticDecode<Schema>; headers: ResponseHeaders }> {
+    const { statusCode, headers, body, timeoutSignal } = await this.request(url, callerSignal);
+    this.validateContentEncoding(headers);
+    if (statusCode !== 200) {
+      await this.discardBody(body, callerSignal, timeoutSignal);
+      throw this.mapError(statusCode, headers);
+    }
+    this.validateContentType(headers);
+    const bytes = await this.readBoundedBody(body, headers, callerSignal, timeoutSignal);
+    let value: unknown;
+    try {
+      value = parseStrictJson(bytes);
+      Value.Assert(schema, value);
+      return { data: Value.Decode(schema, value), headers };
+    } catch (error) {
+      if (callerSignal?.aborted || timeoutSignal.aborted || hasUndiciErrorCode(error)) {
+        this.throwRequestFailure(error, callerSignal, timeoutSignal);
+      }
+      throw this.invalidResponse("GitHub success body was invalid");
+    }
+  }
+
+  private async request(url: URL, callerSignal?: AbortSignal): Promise<RequestResult> {
     const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
     const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
-    const response = await this.requestWithRedirects(
-      new URL(url),
-      signal,
-      callerSignal,
-      timeoutSignal,
-      new Set<string>(),
-      0,
-    );
+    const response = await this.requestWithRedirects(url, url, signal, callerSignal, timeoutSignal, new Set(), 0);
     return { ...response, timeoutSignal };
   }
 
   private async requestWithRedirects(
+    initialUrl: URL,
     currentUrl: URL,
     signal: AbortSignal,
     callerSignal: AbortSignal | undefined,
@@ -255,99 +402,120 @@ export class GitHubClient {
     visited: Set<string>,
     redirectCount: number,
   ): Promise<Dispatcher.ResponseData> {
-    if (visited.has(currentUrl.href)) {
-      throw this.invalidResponse("GitHub API returned a redirect loop");
-    }
+    if (visited.has(currentUrl.href)) throw this.invalidResponse("GitHub redirect loop");
     visited.add(currentUrl.href);
-
     let response: Dispatcher.ResponseData;
     try {
       response = await undiciRequest(currentUrl, this.buildRequestOptions(signal));
     } catch (error) {
       this.throwRequestFailure(error, callerSignal, timeoutSignal);
     }
-
+    this.validateContentEncoding(response.headers);
     if (!REDIRECT_STATUS_CODES.has(response.statusCode)) return response;
-
+    await this.discardBody(response.body, callerSignal, timeoutSignal);
+    if (redirectCount >= MAX_REDIRECTS) throw this.invalidResponse("GitHub redirect limit exceeded");
+    const locations = headerValues(response.headers, "location");
+    if (locations.length !== 1) throw this.invalidResponse("GitHub redirect Location was missing or ambiguous");
+    let redirectUrl: URL;
     try {
-      await response.body.dump();
+      redirectUrl = new URL(locations[0] ?? "", currentUrl);
+    } catch (error) {
+      throw this.invalidResponse("GitHub redirect Location was invalid", error);
+    }
+    this.validateRedirectTarget(initialUrl, redirectUrl);
+    return this.requestWithRedirects(
+      initialUrl,
+      redirectUrl,
+      signal,
+      callerSignal,
+      timeoutSignal,
+      visited,
+      redirectCount + 1,
+    );
+  }
+
+  private validateRedirectTarget(initialUrl: URL, target: URL): void {
+    if (target.origin !== this.baseOrigin || target.username || target.password || target.hash) {
+      throw this.invalidResponse("GitHub redirect escaped the trusted origin");
+    }
+    const suffix = initialUrl.pathname.endsWith("/activity")
+      ? "/activity"
+      : initialUrl.pathname.endsWith("/languages")
+        ? "/languages"
+        : initialUrl.pathname.endsWith("/tags")
+          ? "/tags"
+          : initialUrl.pathname.endsWith("/repos")
+            ? "/repos"
+            : "";
+    const numericPrefix = initialUrl.pathname.startsWith("/users/") ? "/user/" : "/repositories/";
+    const numericPattern = new RegExp(`^${numericPrefix}([0-9]+)${suffix}$`);
+    const numericMatch = numericPattern.exec(target.pathname);
+    if (target.pathname !== initialUrl.pathname) {
+      const numericId = numericMatch?.[1] === undefined ? null : canonicalSafeInteger(numericMatch[1]);
+      if (numericId === null) throw this.invalidResponse("GitHub redirect path was not allowlisted");
+    }
+    if (!sameQuery(initialUrl, target)) throw this.invalidResponse("GitHub redirect query changed");
+  }
+
+  private validateContentEncoding(headers: ResponseHeaders): void {
+    const values = headerValues(headers, "content-encoding");
+    if (values.length > 1 || (values.length === 1 && values[0]?.trim().toLowerCase() !== "identity")) {
+      throw this.invalidResponse("GitHub response used unsupported content encoding");
+    }
+  }
+
+  private validateContentType(headers: ResponseHeaders): void {
+    const values = headerValues(headers, "content-type");
+    if (values.length !== 1) throw this.invalidResponse("GitHub response omitted or repeated Content-Type");
+    const value = values[0] ?? "";
+    if (!validJsonMediaType(value)) {
+      throw this.invalidResponse("GitHub response was not JSON");
+    }
+  }
+
+  private async readBoundedBody(
+    body: Dispatcher.ResponseData["body"],
+    headers: ResponseHeaders,
+    callerSignal: AbortSignal | undefined,
+    timeoutSignal: AbortSignal,
+  ): Promise<Buffer> {
+    const declared = oneHeader(headers, "content-length");
+    if (declared !== undefined) {
+      const size = canonicalSafeInteger(declared);
+      if (size !== null && size > MAX_RESPONSE_BYTES) {
+        await this.discardBody(body, callerSignal, timeoutSignal);
+        throw this.invalidResponse("GitHub response exceeded the body limit");
+      }
+    }
+    const chunks: Buffer[] = [];
+    let length = 0;
+    try {
+      for await (const chunk of body) {
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        length += bytes.length;
+        if (length > MAX_RESPONSE_BYTES) {
+          body.destroy();
+          throw this.invalidResponse("GitHub response exceeded the body limit");
+        }
+        chunks.push(bytes);
+      }
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      this.throwRequestFailure(error, callerSignal, timeoutSignal);
+    }
+    return Buffer.concat(chunks, length);
+  }
+
+  private async discardBody(
+    body: Dispatcher.ResponseData["body"],
+    callerSignal: AbortSignal | undefined,
+    timeoutSignal: AbortSignal,
+  ): Promise<void> {
+    try {
+      await body.dump();
     } catch (error) {
       this.throwRequestFailure(error, callerSignal, timeoutSignal);
     }
-
-    if (redirectCount >= MAX_REDIRECTS) {
-      throw this.invalidResponse(`GitHub API exceeded ${MAX_REDIRECTS} redirects`);
-    }
-
-    const location = getHeader(response.headers, "location");
-    if (!location) {
-      throw this.invalidResponse("GitHub API redirect omitted Location");
-    }
-
-    let redirectUrl: URL;
-    try {
-      redirectUrl = new URL(location, currentUrl);
-    } catch {
-      throw this.invalidResponse("GitHub API returned an invalid redirect URL");
-    }
-    if (redirectUrl.origin !== this.baseOrigin) {
-      throw this.invalidResponse("GitHub API attempted a cross-origin redirect");
-    }
-    return this.requestWithRedirects(redirectUrl, signal, callerSignal, timeoutSignal, visited, redirectCount + 1);
-  }
-
-  private async readValidatedBody<const Schema extends TSchema>(
-    body: Dispatcher.ResponseData["body"],
-    schema: Schema,
-    callerSignal: AbortSignal | undefined,
-    timeoutSignal: AbortSignal,
-  ): Promise<StaticDecode<Schema>> {
-    let value: unknown;
-    try {
-      value = await body.json();
-    } catch (error) {
-      if (callerSignal?.aborted || timeoutSignal.aborted || hasUndiciErrorCode(error)) {
-        this.throwRequestFailure(error, callerSignal, timeoutSignal);
-      }
-      throw this.invalidResponse("GitHub API returned invalid JSON");
-    }
-
-    try {
-      Value.Assert(schema, value);
-      return Value.Decode(schema, value);
-    } catch {
-      throw this.invalidResponse("GitHub API response did not match its documented schema");
-    }
-  }
-
-  private invalidResponse(reason: string): GitHubApiError {
-    return new GitHubApiError("GitHub API returned an invalid response", 502, GITHUB_ERROR_UPSTREAM, undefined, {
-      cause: new TypeError(reason),
-    });
-  }
-
-  private async readErrorMessage(
-    body: Dispatcher.ResponseData["body"],
-    callerSignal: AbortSignal | undefined,
-    timeoutSignal: AbortSignal,
-  ): Promise<string | undefined> {
-    try {
-      const errorBody = await body.json();
-      if (
-        typeof errorBody === "object" &&
-        errorBody !== null &&
-        "message" in errorBody &&
-        typeof errorBody.message === "string"
-      ) {
-        return errorBody.message;
-      }
-    } catch (error) {
-      if (callerSignal?.aborted || timeoutSignal.aborted || hasUndiciErrorCode(error)) {
-        this.throwRequestFailure(error, callerSignal, timeoutSignal);
-      }
-      return undefined;
-    }
-    return undefined;
   }
 
   private throwRequestFailure(
@@ -355,114 +523,194 @@ export class GitHubClient {
     callerSignal: AbortSignal | undefined,
     timeoutSignal: AbortSignal,
   ): never {
-    if (callerSignal?.aborted) {
-      throw callerSignal.reason instanceof Error ? callerSignal.reason : error;
-    }
+    if (callerSignal?.aborted) throw callerSignal.reason instanceof Error ? callerSignal.reason : error;
     if (
       timeoutSignal.aborted ||
       hasErrorCode(error, "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_CONNECT_TIMEOUT")
     ) {
-      throw new GitHubApiError("GitHub API request timed out", 504, GITHUB_ERROR_TIMEOUT, undefined, {
-        cause: error,
-      });
+      throw new GitHubApiError("GitHub request timed out", 504, GITHUB_ERROR_TIMEOUT, undefined, { cause: error });
     }
-    throw new GitHubApiError("GitHub API request failed", 502, GITHUB_ERROR_UPSTREAM, undefined, {
-      cause: error,
-    });
+    throw new GitHubApiError("GitHub request failed", 502, GITHUB_ERROR_UPSTREAM, undefined, { cause: error });
   }
 
-  private mapError(statusCode: number, headers: ResponseHeaders, message?: string): GitHubApiError {
-    const retryAfter = getHeader(headers, "retry-after");
-    const rateLimitRemaining = getHeader(headers, "x-ratelimit-remaining");
-    const secondaryRateLimit = statusCode === 403 && SECONDARY_RATE_LIMIT_PATTERN.test(message ?? "");
-    const rateLimited =
-      statusCode === 429 ||
-      (statusCode === 403 && (retryAfter !== undefined || rateLimitRemaining === "0" || secondaryRateLimit));
-
-    if (rateLimited) {
+  private mapError(statusCode: number, headers: ResponseHeaders): GitHubApiError {
+    if (statusCode === 404) return new GitHubApiError("GitHub resource not found", 404, GITHUB_ERROR_NOT_FOUND);
+    if (statusCode === 403 || statusCode === 429) {
+      const retryAfter = this.quotaDelay(headers);
+      const reset = this.usableReset(headers);
       return new GitHubApiError(
-        message ?? "GitHub API rate limit exceeded",
-        statusCode,
+        "GitHub rate limit exceeded",
+        429,
         GITHUB_ERROR_RATE_LIMIT,
-        retryAfter ?? this.deriveRetryAfter(headers),
+        retryAfter,
+        undefined,
+        reset,
       );
     }
-
-    if (statusCode === 404) {
-      return new GitHubApiError(message ?? "Not found", 404, GITHUB_ERROR_NOT_FOUND);
-    }
-
-    if (statusCode === 403) {
-      return new GitHubApiError(message ?? "Forbidden", 403, GITHUB_ERROR_FORBIDDEN);
-    }
-
-    return new GitHubApiError(message ?? "Upstream GitHub API error", statusCode, GITHUB_ERROR_UPSTREAM);
+    return new GitHubApiError("GitHub upstream response is invalid", 502, GITHUB_ERROR_UPSTREAM);
   }
 
-  private deriveRetryAfter(headers: ResponseHeaders): string {
-    const reset = Number(getHeader(headers, "x-ratelimit-reset"));
-    if (Number.isFinite(reset) && reset > 0) {
-      return String(Math.max(0, Math.ceil(reset - Date.now() / 1000)));
-    }
+  private canonicalQuotaValue(headers: ResponseHeaders, name: string): number | null {
+    const values = headerValues(headers, name);
+    if (values.length !== 1 || values[0]?.includes(",") === true) return null;
+    return canonicalSafeInteger(values[0] ?? "");
+  }
+
+  private usableReset(headers: ResponseHeaders): string | undefined {
+    const reset = this.canonicalQuotaValue(headers, "x-ratelimit-reset");
+    return reset !== null && reset > this.now() / 1000 ? String(reset) : undefined;
+  }
+
+  private quotaDelay(headers: ResponseHeaders): string {
+    const retry = this.canonicalQuotaValue(headers, "retry-after");
+    if (retry !== null) return String(retry);
+    const reset = this.usableReset(headers);
+    if (reset !== undefined) return String(Math.max(1, Math.ceil(Number(reset) - this.now() / 1000)));
     return "60";
   }
 
-  private parseLinkCursor(
-    header: string | null,
-    relation: "next" | "prev",
-    parameter: "after" | "before",
-  ): string | null {
-    if (!header) return null;
-
-    for (const part of header.split(",")) {
-      const trimmed = part.trim();
-      if (!trimmed.includes(`rel="${relation}"`)) continue;
-
-      const start = trimmed.indexOf("<");
-      const end = trimmed.indexOf(">");
-      if (start < 0 || end < 0 || end <= start) continue;
-
-      try {
-        const linkUrl = new URL(trimmed.slice(start + 1, end));
-        const cursor = linkUrl.searchParams.get(parameter);
-        if (cursor) return cursor;
-      } catch {}
-    }
-    return null;
+  private numberedLinks(
+    headers: ResponseHeaders,
+    context: NumberedLinkContext,
+  ): { nextPage: number | null; prevPage: number | null } {
+    const relations = this.relevantLinks(headers);
+    const read = (relation: "next" | "prev"): number | null => {
+      const target = relations.get(relation);
+      if (!target) return null;
+      this.validateLinkOrigin(target);
+      if (!this.allowedNumericPath(target.pathname, context.expectedPath, context.numericSuffix)) {
+        throw this.invalidResponse("GitHub pagination path was invalid");
+      }
+      const expected = new Map(Object.entries(context.fixedQuery));
+      expected.set("per_page", String(context.limit));
+      const pageValues = target.searchParams.getAll("page");
+      if (pageValues.length !== 1) throw this.invalidResponse("GitHub pagination page was missing or repeated");
+      const page = canonicalSafeInteger(pageValues[0] ?? "");
+      if (page === null || page < 1) throw this.invalidResponse("GitHub pagination page was invalid");
+      target.searchParams.delete("page");
+      if (!this.exactQuery(target, expected)) throw this.invalidResponse("GitHub pagination query was invalid");
+      if (
+        (relation === "next" && page <= context.currentPage) ||
+        (relation === "prev" && page >= context.currentPage)
+      ) {
+        throw this.invalidResponse("GitHub pagination did not progress");
+      }
+      return page;
+    };
+    return { nextPage: read("next"), prevPage: read("prev") };
   }
 
-  private parseLinkPage(header: string | null, relation: "next" | "prev"): number | null {
-    if (!header) return null;
+  private activityLinks(
+    headers: ResponseHeaders,
+    context: ActivityLinkContext,
+  ): { nextCursor: string | null; prevCursor: string | null } {
+    const relations = this.relevantLinks(headers);
+    const read = (relation: "next" | "prev"): string | null => {
+      const target = relations.get(relation);
+      if (!target) return null;
+      if (relation === "prev" && context.currentCursor === undefined) {
+        throw this.invalidResponse("initial activity page advertised previous navigation");
+      }
+      this.validateLinkOrigin(target);
+      if (!this.allowedNumericPath(target.pathname, context.expectedPath, "/activity")) {
+        throw this.invalidResponse("GitHub activity pagination path was invalid");
+      }
+      const parameter = relation === "next" ? "after" : "before";
+      const values = target.searchParams.getAll(parameter);
+      const opposite = relation === "next" ? "before" : "after";
+      if (values.length !== 1 || target.searchParams.has(opposite)) {
+        throw this.invalidResponse("GitHub activity pagination direction was invalid");
+      }
+      const value = values[0] ?? "";
+      if (value.length === 0 || value.length > 2048 || !/^[!-~]+$/.test(value)) {
+        throw this.invalidResponse("GitHub activity cursor was invalid");
+      }
+      target.searchParams.delete(parameter);
+      if (
+        !this.exactQuery(
+          target,
+          new Map([
+            ["direction", "desc"],
+            ["per_page", String(context.limit)],
+          ]),
+        )
+      ) {
+        throw this.invalidResponse("GitHub activity pagination query was invalid");
+      }
+      if (context.currentCursor?.direction === parameter && context.currentCursor.value === value) {
+        throw this.invalidResponse("GitHub activity pagination repeated the current cursor");
+      }
+      return value;
+    };
+    return { nextCursor: read("next"), prevCursor: read("prev") };
+  }
 
-    for (const part of header.split(",")) {
-      const trimmed = part.trim();
-      if (!trimmed.includes(`rel="${relation}"`)) continue;
-
-      const start = trimmed.indexOf("<");
-      const end = trimmed.indexOf(">");
-      if (start < 0 || end < 0 || end <= start) continue;
-
-      try {
-        const linkUrl = new URL(trimmed.slice(start + 1, end));
-        const page = Number(linkUrl.searchParams.get("page"));
-        if (Number.isSafeInteger(page) && page >= 1) return page;
-      } catch {}
+  private relevantLinks(headers: ResponseHeaders): Map<"next" | "prev", URL> {
+    const result = new Map<"next" | "prev", URL>();
+    for (const field of headerValues(headers, "link")) {
+      for (const value of splitLinkHeader(field)) {
+        const relationMatch = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s,]+))/i.exec(value);
+        const relations = (relationMatch?.[1] ?? relationMatch?.[2] ?? "").split(/\s+/);
+        const relevant = relations.filter(
+          (relation): relation is "next" | "prev" => relation === "next" || relation === "prev",
+        );
+        if (relevant.length === 0) continue;
+        if (/(?:^|;)\s*anchor\s*=/i.test(value)) continue;
+        const targetMatch = /^\s*<([^>]*)>/.exec(value);
+        if (!targetMatch || relevant.some((relation) => result.has(relation))) {
+          throw this.invalidResponse("GitHub pagination relation was malformed or repeated");
+        }
+        try {
+          const target = new URL(targetMatch[1] ?? "");
+          for (const relation of relevant) result.set(relation, target);
+        } catch (error) {
+          throw this.invalidResponse("GitHub pagination target was invalid", error);
+        }
+      }
     }
-    return null;
+    return result;
+  }
+
+  private validateLinkOrigin(url: URL): void {
+    if (url.origin !== this.baseOrigin || url.username || url.password || url.hash) {
+      throw this.invalidResponse("GitHub pagination target escaped the trusted origin");
+    }
+  }
+
+  private allowedNumericPath(path: string, namedPath: string, suffix: string): boolean {
+    if (path === namedPath) return true;
+    const prefix = suffix === "/repos" ? "/user/" : "/repositories/";
+    const match = new RegExp(`^${prefix}([0-9]+)${suffix}$`).exec(path);
+    return match?.[1] !== undefined && canonicalSafeInteger(match[1]) !== null;
+  }
+
+  private exactQuery(url: URL, expected: ReadonlyMap<string, string>): boolean {
+    if ([...url.searchParams.keys()].length !== expected.size) return false;
+    return [...expected].every(([name, value]) => {
+      const values = url.searchParams.getAll(name);
+      return values.length === 1 && values[0] === value;
+    });
+  }
+
+  private invalidResponse(reason: string, cause?: unknown): GitHubApiError {
+    return new GitHubApiError("GitHub upstream response is invalid", 502, GITHUB_ERROR_UPSTREAM, undefined, {
+      cause: cause ?? new TypeError(reason),
+    });
   }
 
   private toGitHubOwner(raw: RawGitHubOwner): GitHubOwner {
+    const display = (value: string | null | undefined): string | null => (value ? value : null);
     return {
-      login: raw.login,
       id: raw.id,
+      login: raw.login,
+      type: raw.type,
+      name: display(raw.name),
       avatarUrl: raw.avatar_url,
       htmlUrl: raw.html_url,
-      type: raw.type,
-      name: raw.name,
-      company: raw.company,
-      blog: raw.blog,
-      location: raw.location,
-      bio: raw.bio,
+      company: display(raw.company),
+      blog: display(raw.blog),
+      location: display(raw.location),
+      bio: display(raw.bio),
       publicRepos: raw.public_repos,
       followers: raw.followers,
       following: raw.following,
@@ -476,27 +724,27 @@ export class GitHubClient {
       id: raw.id,
       name: raw.name,
       fullName: raw.full_name,
-      description: raw.description,
+      description: raw.description ? raw.description : null,
       htmlUrl: raw.html_url,
-      language: raw.language,
-      stargazersCount: raw.stargazers_count,
-      forksCount: raw.forks_count,
-      openIssuesCount: raw.open_issues_count,
-      visibility: raw.visibility,
       fork: raw.fork,
-      archived: raw.archived,
-      createdAt: raw.created_at,
-      updatedAt: raw.updated_at,
-      pushedAt: raw.pushed_at,
     };
   }
 
   private toGitHubRepoDetail(raw: RawGitHubRepoDetail): GitHubRepoDetail {
+    const license = raw.license?.spdx_id;
     return {
       ...this.toGitHubRepo(raw),
+      language: raw.language,
+      stargazersCount: raw.stargazers_count,
+      forksCount: raw.forks_count,
+      openIssuesCount: raw.open_issues_count,
+      archived: raw.archived,
+      createdAt: raw.created_at,
+      updatedAt: raw.updated_at,
+      pushedAt: raw.pushed_at,
       defaultBranch: raw.default_branch,
-      license: raw.license?.spdx_id ?? null,
-      topics: raw.topics ?? [],
+      license: !license || license === "NOASSERTION" ? null : license,
+      topics: (raw.topics ?? []).toSorted(scalarCompare),
       disabled: raw.disabled,
     };
   }
@@ -505,10 +753,12 @@ export class GitHubClient {
     return {
       id: raw.id,
       actor: raw.actor?.login ?? null,
+      actorAvatarUrl: raw.actor?.avatar_url ?? null,
       ref: raw.ref,
       timestamp: raw.timestamp,
       activityType: raw.activity_type,
-      actorAvatarUrl: raw.actor?.avatar_url ?? null,
     };
   }
 }
+
+export { scalarCompare };

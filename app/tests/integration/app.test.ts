@@ -3,6 +3,8 @@ import { Writable } from "node:stream";
 import { decode as cborDecode, encode as cborEncode } from "cbor2";
 import { request } from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ProfileRepository } from "../../src/modules/profile/repository.js";
+import type { Profile, ProfileCreate, ProfileUpdate } from "../../src/modules/profile/schemas.js";
 import { createFirebaseAppMock, createFirebaseAuthMock } from "../mocks/firebase.js";
 
 // Mock firebase-admin modules
@@ -128,7 +130,8 @@ describe("App Integration", () => {
       expect(statusPayload).toEqual({
         title: "Service Unavailable",
         status: 503,
-        detail: "Service is shutting down",
+        detail: "A required dependency is unavailable",
+        code: "dependency_unavailable",
       });
 
       expect(health.statusCode).toBe(200);
@@ -142,11 +145,208 @@ describe("App Integration", () => {
       expect(rejectedWorkPayload).toEqual({
         title: "Service Unavailable",
         status: 503,
-        detail: "Service is shutting down",
+        detail: "A required dependency is unavailable",
+        code: "dependency_unavailable",
       });
     } finally {
       releasePreClose.resolve();
       await closeOperation;
+    }
+  });
+
+  it("serves the complete portable corpus through a real loopback listener with deterministic dependencies", async () => {
+    const { GitHubService } = await import("../../src/modules/github/service.js");
+    const owner = {
+      id: 1,
+      login: "octocat",
+      type: "User",
+      name: "The Octocat",
+      avatarUrl: "https://avatars.githubusercontent.com/u/1",
+      htmlUrl: "https://github.com/octocat",
+      company: null,
+      blog: null,
+      location: null,
+      bio: null,
+      publicRepos: 1,
+      followers: 2,
+      following: 0,
+      createdAt: "2011-01-25T18:44:36.000Z",
+      updatedAt: "2026-03-10T00:00:00.000Z",
+    } as const;
+    const repo = {
+      id: 2,
+      name: "repo",
+      fullName: "octocat/repo",
+      description: null,
+      htmlUrl: "https://github.com/octocat/repo",
+      fork: false,
+    } as const;
+    const getOwner = vi.spyOn(GitHubService.prototype, "getOwner").mockResolvedValue(owner);
+    const listOwnerRepos = vi.spyOn(GitHubService.prototype, "listOwnerRepos").mockResolvedValue({ items: [repo] });
+    const getRepo = vi.spyOn(GitHubService.prototype, "getRepo").mockResolvedValue({
+      ...repo,
+      language: "TypeScript",
+      stargazersCount: 3,
+      forksCount: 1,
+      openIssuesCount: 0,
+      archived: false,
+      createdAt: "2026-03-10T00:00:00.000Z",
+      updatedAt: "2026-03-10T00:00:00.000Z",
+      pushedAt: null,
+      defaultBranch: "main",
+      license: "MIT",
+      topics: ["fastify"],
+      disabled: false,
+    });
+    const listRepoActivity = vi.spyOn(GitHubService.prototype, "listRepoActivity").mockResolvedValue({
+      items: [
+        {
+          id: 3,
+          actor: "octocat",
+          actorAvatarUrl: "https://avatars.githubusercontent.com/u/1",
+          ref: "refs/heads/main",
+          timestamp: "2026-03-10T00:00:00.000Z",
+          activityType: "push",
+        },
+      ],
+    });
+    const listRepoLanguages = vi
+      .spyOn(GitHubService.prototype, "listRepoLanguages")
+      .mockResolvedValue({ languages: [{ name: "TypeScript", bytes: 42 }] });
+    const listRepoTags = vi.spyOn(GitHubService.prototype, "listRepoTags").mockResolvedValue({
+      items: [{ name: "v1.0.0", commit: { sha: "a".repeat(40) } }],
+    });
+
+    let stored: Profile | undefined;
+    const repository: ProfileRepository = {
+      async create(id: string, input: ProfileCreate, now: string) {
+        if (stored) return null;
+        stored = { id, ...input, marketingOptIn: input.marketingOptIn ?? false, createdAt: now, updatedAt: now };
+        return structuredClone(stored);
+      },
+      async get() {
+        return stored ? structuredClone(stored) : null;
+      },
+      async update(_id: string, input: ProfileUpdate, now: string) {
+        if (!stored) return null;
+        stored = { ...stored, ...input, updatedAt: now };
+        return structuredClone(stored);
+      },
+      async delete() {
+        if (!stored) return false;
+        stored = undefined;
+        return true;
+      },
+    };
+    mockAuth.verifyIdToken.mockResolvedValue({ uid: "real-http-user" });
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp({
+      profileRepository: repository,
+      profileClock: () => new Date("2026-03-10T12:00:00.000Z"),
+    });
+    const address = await fastify.listen({ host: "127.0.0.1", port: 0 });
+
+    const status = async (path: string, options?: Parameters<typeof request>[1]): Promise<number> => {
+      const response = await request(`${address}${path}`, options);
+      await response.body.dump();
+      return response.statusCode;
+    };
+    try {
+      expect(await status("/health")).toBe(200);
+      expect(await status("/v1/hello")).toBe(200);
+      expect(
+        await status("/v1/hello", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Ada" }),
+        }),
+      ).toBe(200);
+
+      expect(await status("/v1/items")).toBe(200);
+      const firstItemPage = await request(`${address}/v1/items?limit=1`);
+      expect(firstItemPage.statusCode).toBe(200);
+      await firstItemPage.body.dump();
+      const nextTarget = /<([^>]+)>; rel="next"/.exec(String(firstItemPage.headers["link"]))?.[1];
+      expect(nextTarget).toEqual(expect.any(String));
+      expect(await status(nextTarget ?? "/invalid")).toBe(200);
+      expect(await status("/v1/items?limit=100")).toBe(200);
+      expect(await status("/v1/items?category=tools")).toBe(200);
+      expect(await status("/v1/items?limit=0")).toBe(422);
+
+      const authorization = { authorization: "Bearer real-http-user" };
+      expect(await status("/v1/profile")).toBe(401);
+      expect(
+        await status("/v1/profile", {
+          method: "POST",
+          headers: { ...authorization, "content-type": "application/json" },
+          body: JSON.stringify({
+            firstName: "Ada",
+            lastName: "Lovelace",
+            contactEmail: "Ada@EXAMPLE.COM",
+            phoneNumber: "+358401234567",
+            termsAccepted: true,
+          }),
+        }),
+      ).toBe(201);
+      expect(await status("/v1/profile", { headers: authorization })).toBe(200);
+      expect(
+        await status("/v1/profile", {
+          method: "PATCH",
+          headers: { ...authorization, "content-type": "application/json" },
+          body: JSON.stringify({ marketingOptIn: true }),
+        }),
+      ).toBe(200);
+      expect(await status("/v1/profile", { method: "DELETE", headers: authorization })).toBe(204);
+
+      const githubSuccesses = [
+        "/v1/github/owners/octocat",
+        "/v1/github/owners/octocat/repos?limit=2",
+        "/v1/github/repos/octocat/repo",
+        "/v1/github/repos/octocat/repo/activity?limit=2",
+        "/v1/github/repos/octocat/repo/languages",
+        "/v1/github/repos/octocat/repo/tags?limit=2",
+      ];
+      expect(await Promise.all(githubSuccesses.map((path) => status(path)))).toEqual(Array(6).fill(200));
+      const githubRejections = [
+        "/v1/github/owners/-",
+        "/v1/github/owners/-/repos",
+        "/v1/github/repos/-/repo",
+        "/v1/github/repos/octocat/.../activity",
+        "/v1/github/repos/octocat/.../languages",
+        "/v1/github/repos/octocat/repo/tags?limit=101",
+      ];
+      expect(await Promise.all(githubRejections.map((path) => status(path)))).toEqual(Array(6).fill(422));
+      for (const spy of [getOwner, listOwnerRepos, getRepo, listRepoActivity, listRepoLanguages, listRepoTags]) {
+        expect(spy).toHaveBeenCalledOnce();
+      }
+
+      const openapi = await request(`${address}/openapi.json`);
+      expect(openapi.statusCode).toBe(200);
+      const document = (await openapi.body.json()) as {
+        paths?: Record<string, Record<string, { operationId?: string }>>;
+      };
+      const portableOperationIds = new Set([
+        "getHealth",
+        "getHello",
+        "createHello",
+        "listItems",
+        "createProfile",
+        "getProfile",
+        "updateProfile",
+        "deleteProfile",
+        "getGitHubOwner",
+        "listGitHubOwnerRepositories",
+        "getGitHubRepository",
+        "listGitHubRepositoryActivity",
+        "listGitHubRepositoryLanguages",
+        "listGitHubRepositoryTags",
+      ]);
+      const servedPortableOperations = Object.values(document.paths ?? {})
+        .flatMap((path) => Object.values(path))
+        .filter((operation) => operation.operationId && portableOperationIds.has(operation.operationId));
+      expect(servedPortableOperations).toHaveLength(14);
+    } finally {
+      await fastify.close();
     }
   });
 
@@ -176,7 +376,7 @@ describe("App Integration", () => {
     expect(authenticated.headers["content-type"]).toBe("application/cbor");
     expect(cborDecode(authenticated.rawPayload)).toEqual({ userId: "user-123" });
     expect(authenticated.payload).not.toContain("private-email-canary");
-    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", false);
+    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", true);
 
     mockAuth.verifyIdToken.mockRejectedValueOnce(
       Object.assign(new Error("firebase-provider-detail-canary"), { code: "auth/internal-error" }),
@@ -187,11 +387,12 @@ describe("App Integration", () => {
       headers: { authorization: "Bearer another-token" },
     });
     expect(unavailable.statusCode).toBe(503);
-    expect(unavailable.headers["retry-after"]).toBe("10");
+    expect(unavailable.headers["retry-after"]).toBeUndefined();
     expect(unavailable.json()).toMatchObject({
       title: "Service Unavailable",
       status: 503,
-      detail: "Authentication service is unavailable",
+      detail: "A required dependency is unavailable",
+      code: "dependency_unavailable",
     });
     expect(unavailable.payload).not.toContain("firebase-provider-detail-canary");
     await fastify.close();
@@ -381,7 +582,11 @@ describe("App Integration", () => {
     expect(validation.statusCode).toBe(422);
     expect(validation.headers["content-type"]).toBe("application/cbor");
     expect(validation.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
-    expect(cborDecode(validation.rawPayload)).toMatchObject({ status: 422, detail: "validation failed" });
+    expect(cborDecode(validation.rawPayload)).toMatchObject({
+      status: 422,
+      detail: "Request validation failed",
+      code: "validation_failed",
+    });
     await fastify.close();
   });
 
@@ -475,7 +680,11 @@ describe("App Integration", () => {
 
     expect(invalid.statusCode).toBe(422);
     expect(invalid.headers["content-type"]).toContain("application/problem+json");
-    expect(invalid.json()).toMatchObject({ status: 422, detail: "validation failed" });
+    expect(invalid.json()).toMatchObject({
+      status: 422,
+      detail: "Request validation failed",
+      code: "validation_failed",
+    });
     expect(listActivity).not.toHaveBeenCalled();
     expect(githubOperations).toHaveLength(6);
     for (const operation of githubOperations) {
@@ -488,42 +697,143 @@ describe("App Integration", () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
 
-    const response = await fastify.inject({ method: "GET", url: "/api-docs/json" });
+    const response = await fastify.inject({ method: "GET", url: "/openapi.json" });
     const document = response.json();
-    const getHello = document.paths["/v1/hello/"].get;
-    const postHello = document.paths["/v1/hello/"].post;
-    const readiness = document.paths["/status"].get;
-    const authenticatedUser = document.paths["/v1/auth/me"].get;
+    const getHello = document.paths["/v1/hello"].get;
+    const postHello = document.paths["/v1/hello"].post;
+    const createProfile = document.paths["/v1/profile"].post;
 
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/json");
     expect(Object.keys(getHello.responses["200"].content)).toEqual(["application/json", "application/cbor"]);
     expect(Object.keys(getHello.responses["406"].content)).toEqual(["application/problem+json", "application/cbor"]);
     expect(getHello.responses["200"].headers).toHaveProperty("Vary");
     expect(getHello.responses["200"].headers).toHaveProperty("X-Request-ID");
-    expect(getHello.responses["200"].headers).toHaveProperty("Link");
+    expect(getHello.responses["200"].headers).not.toHaveProperty("Link");
+    expect(getHello.security).toEqual([]);
     expect(Object.keys(postHello.requestBody.content)).toEqual(["application/json", "application/cbor"]);
-    expect(postHello.operationId).toBe("createGreeting");
-    expect(Object.keys(readiness.responses["200"].content)).toEqual(["application/json"]);
-    expect(Object.keys(readiness.responses["503"].content)).toEqual(["application/problem+json", "application/cbor"]);
-    expect(readiness.responses["503"].headers).toHaveProperty("Retry-After");
-    expect(authenticatedUser.security).toEqual([{ bearerAuth: [] }]);
-    expect(Object.keys(authenticatedUser.responses["200"].content)).toEqual(["application/json", "application/cbor"]);
-    expect(authenticatedUser.responses["401"].headers).toHaveProperty("WWW-Authenticate");
+    expect(postHello.operationId).toBe("createHello");
+    expect(createProfile.security).toEqual([{ bearerAuth: [] }]);
+    expect(createProfile.responses["201"].headers).toHaveProperty("Location");
+    expect(createProfile.responses["401"].headers).toHaveProperty("WWW-Authenticate");
+    expect(createProfile.requestBody.required).toBe(true);
+    expect(createProfile.requestBody.content["application/json"].schema).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["firstName", "lastName", "contactEmail", "phoneNumber", "termsAccepted"],
+    });
     expect(document.servers).toEqual([{ url: "/", description: "Current server" }]);
 
-    const operationIds: string[] = [];
-    for (const path of Object.values(document.paths) as Record<string, Record<string, unknown>>[]) {
-      for (const operation of Object.values(path)) {
-        if (typeof operation !== "object" || operation === null || !("responses" in operation)) continue;
-        expect(operation).toHaveProperty("operationId");
-        const responses = (operation as { responses: Record<string, { headers?: Record<string, unknown> }> }).responses;
-        expect(responses).toHaveProperty("503");
-        expect(responses["503"]?.headers).toHaveProperty("Retry-After");
-        operationIds.push((operation as { operationId: string }).operationId);
+    const expected = [
+      ["get", "/health", "getHealth"],
+      ["get", "/v1/hello", "getHello"],
+      ["post", "/v1/hello", "createHello"],
+      ["get", "/v1/items", "listItems"],
+      ["post", "/v1/profile", "createProfile"],
+      ["get", "/v1/profile", "getProfile"],
+      ["patch", "/v1/profile", "updateProfile"],
+      ["delete", "/v1/profile", "deleteProfile"],
+      ["get", "/v1/github/owners/{owner}", "getGitHubOwner"],
+      ["get", "/v1/github/owners/{owner}/repos", "listGitHubOwnerRepositories"],
+      ["get", "/v1/github/repos/{owner}/{repo}", "getGitHubRepository"],
+      ["get", "/v1/github/repos/{owner}/{repo}/activity", "listGitHubRepositoryActivity"],
+      ["get", "/v1/github/repos/{owner}/{repo}/languages", "listGitHubRepositoryLanguages"],
+      ["get", "/v1/github/repos/{owner}/{repo}/tags", "listGitHubRepositoryTags"],
+    ] as const;
+    const actual = expected.map(([method, path]) => [method, path, document.paths[path]?.[method]?.operationId]);
+    expect(actual).toEqual(expected);
+    expect(new Set(expected.map(([, , operationId]) => operationId)).size).toBe(14);
+    expect(document.paths["/openapi.json"]).toBeUndefined();
+    expect(document.openapi).toMatch(/^3\.1\./);
+    expect(JSON.stringify(document)).not.toContain("application/problem+cbor");
+
+    const expectedStatuses: Record<string, string[]> = {
+      getHealth: ["200", "400", "406", "500"],
+      getHello: ["200", "400", "406", "500"],
+      createHello: ["200", "400", "406", "413", "415", "422", "500"],
+      listItems: ["200", "400", "406", "422", "500"],
+      createProfile: ["201", "400", "401", "406", "409", "413", "415", "422", "500", "503"],
+      getProfile: ["200", "400", "401", "404", "406", "500", "503"],
+      updateProfile: ["200", "400", "401", "404", "406", "413", "415", "422", "500", "503"],
+      deleteProfile: ["204", "400", "401", "404", "500", "503"],
+      getGitHubOwner: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
+      listGitHubOwnerRepositories: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
+      getGitHubRepository: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
+      listGitHubRepositoryActivity: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
+      listGitHubRepositoryLanguages: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
+      listGitHubRepositoryTags: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
+    };
+    const requiredHeaders = [
+      "Vary",
+      "X-Request-ID",
+      "Cache-Control",
+      "X-Content-Type-Options",
+      "X-Frame-Options",
+      "Referrer-Policy",
+    ];
+    for (const [, path, operationId] of expected) {
+      const method = expected.find((entry) => entry[2] === operationId)?.[0];
+      const operation = document.paths[path][method ?? "get"];
+      expect(Object.keys(operation.responses).toSorted()).toEqual(expectedStatuses[operationId]);
+      expect(operation.parameters).toContainEqual(
+        expect.objectContaining({
+          name: "X-Request-ID",
+          in: "header",
+          required: false,
+          schema: expect.objectContaining({ maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
+        }),
+      );
+      for (const projectedResponse of Object.values(operation.responses) as Array<Record<string, unknown>>) {
+        expect(Object.keys(projectedResponse["headers"] as Record<string, unknown>)).toEqual(
+          expect.arrayContaining(requiredHeaders),
+        );
       }
     }
-    expect(operationIds).toHaveLength(12);
-    expect(new Set(operationIds).size).toBe(operationIds.length);
-    expect(JSON.stringify(document)).not.toContain("application/problem+cbor");
+
+    const quota = document.paths["/v1/github/owners/{owner}"].get.responses["429"];
+    expect(quota.headers["Retry-After"].schema).toEqual({
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    });
+    expect(quota.headers["X-RateLimit-Reset"].schema).toEqual({
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    });
+    expect(quota.content["application/problem+json"].schema.allOf[1].properties).toMatchObject({
+      status: { const: 429 },
+      code: { const: "github_rate_limit" },
+      detail: { const: "GitHub rate limit exceeded" },
+    });
+    expect(
+      document.paths["/v1/profile"].get.responses["404"].content["application/problem+json"].schema.allOf[1].properties,
+    ).toMatchObject({ status: { const: 404 }, code: { const: "profile_not_found" } });
+    expect(document.paths["/v1/items"].get.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "limit",
+          in: "query",
+          required: false,
+          schema: expect.objectContaining({ default: 20, minimum: 1, maximum: 100 }),
+        }),
+        expect.objectContaining({
+          name: "cursor",
+          in: "query",
+          required: false,
+          schema: expect.objectContaining({ maxLength: 2048 }),
+        }),
+      ]),
+    );
+    expect(document.components.schemas.ItemsResponse.properties.items.items.properties.price).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["amountMinor", "currency"],
+      properties: {
+        amountMinor: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+        currency: { type: "string", enum: ["USD"] },
+      },
+    });
     await fastify.close();
   });
 });

@@ -6,7 +6,7 @@
 [![pnpm 11.17.0](https://img.shields.io/badge/pnpm-11.17.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![MIT license](https://img.shields.io/github/license/janisto/fastify-playground)](LICENSE)
 
-A production-oriented reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates OpenAPI documentation, Firebase Authentication, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
+A production-oriented reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates generated OpenAPI, Firebase Authentication and Firestore-backed current-principal profiles, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
 
 <img src="assets/ts.svg" alt="TypeScript logo" width="200">
 
@@ -16,12 +16,12 @@ A production-oriented reference REST API built with Fastify, TypeScript, and Nod
 
 - Layered plugin architecture with production HSTS, an exact CORS origin allowlist, and [fastify-observability](https://www.npmjs.com/package/fastify-observability)
 - Validated request IDs, strict [W3C Trace Context](https://www.w3.org/TR/trace-context/), request-scoped Pino fields, and exactly one structured terminal access record
-- Firebase Authentication with ID token verification, a `request.user` decorator, and a protected `/v1/auth/me` example
+- Firebase Authentication with revocation-aware ID token verification, a `request.user` decorator, and current-principal profile CRUD backed by Firestore transactions
 - TypeBox schema validation with compile-time TypeScript types and runtime JSON Schema validation
 - [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457) for application-owned error responses with optional field-level validation errors
 - Content negotiation supporting [JSON (RFC 8259)](https://datatracker.ietf.org/doc/html/rfc8259) and [CBOR (RFC 8949)](https://datatracker.ietf.org/doc/html/rfc8949) formats via `Accept` header
 - Cursor-based pagination with [RFC 8288 Link](https://datatracker.ietf.org/doc/html/rfc8288) headers
-- [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) documentation with Swagger UI, auto-generated from TypeBox route schemas
+- [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) at `/openapi.json`, with Swagger UI and schemas generated from TypeBox route metadata
 - Graceful SIGTERM/SIGINT shutdown owned by the executable server boundary; fatal Node.js errors are not treated as recoverable application events
 - Health check endpoints (`/health` for process liveness and `/status` for shutdown/load readiness)
 
@@ -37,12 +37,12 @@ Application-owned errors, including `/status` failures, use [RFC 9457 Problem De
 
 ```json
 {
-  "title": "Unprocessable Entity",
+  "title": "Unprocessable Content",
   "status": 422,
-  "type": "about:blank",
-  "detail": "validation failed",
+  "detail": "Request validation failed",
+  "code": "validation_failed",
   "errors": [
-    { "location": "body", "message": "must have required property 'name'" }
+    { "detail": "Request validation failed", "source": { "pointer": "/name" } }
   ]
 }
 ```
@@ -63,14 +63,16 @@ returns 406 before parsing the request body or running the handler. A 204 or 205
 | Response class | Media types | Policy |
 |----------------|-------------|--------|
 | `/v1` success | `application/json`, `application/cbor` | Strict negotiation; JSON is the default and tie preference |
-| `/health` | `application/json` | Strict JSON-only liveness response |
+| `/health` | `application/json`, `application/cbor` | Strict negotiation; JSON is the default and tie preference |
 | `/status` | `application/json` | Strict JSON-only readiness response; unavailable responses use negotiated Problem Details |
 | `/schemas/*.json` | `application/schema+json` | Strict JSON Schema representation |
 | Problem Details | `application/problem+json`, `application/cbor` | Best effort; explicit CBOR preference wins, otherwise JSON preserves the original error status |
 | `/api-docs` assets | Fastify-owned JSON, YAML, HTML, CSS, or JavaScript | Fixed formats outside application negotiation |
 
 JSON and CBOR request bodies are selected independently with `Content-Type`. Modeled request bodies accept
-`application/json` and `application/cbor`, with media-type parameters ignored. Unowned structured suffixes such as
+`application/json`, optionally with the single parameter `charset=utf-8`, and exact parameterless `application/cbor`.
+The parser rejects duplicate keys, trailing data, invalid JSON UTF-8, non-finite numbers, unsupported content codings,
+and bodies larger than 1,000,000 octets. Unowned structured suffixes such as
 `application/vnd.example+cbor` and the unregistered `application/problem+cbor` are rejected with 415. RFC 9290's
 registered `application/concise-problem-details+cbor` uses a different compact data model and is not implemented.
 Negotiated responses include `Vary: Accept, Origin`. Successful modeled responses and Problem Details use an RFC 8288
@@ -84,7 +86,7 @@ Collections use cursor-based pagination with [RFC 8288 Link](https://datatracker
 ```
 GET /v1/items?limit=5
 
-Link: </v1/items?cursor=aXRlbTo1Oio6aXRlbS0wMDU&limit=5>; rel="next"
+Link: </v1/items?limit=5&cursor=OPAQUE_SERVER_VALUE>; rel="next"
 ```
 
 - `cursor` - Canonical, unpadded Base64URL cursor with a 2,048-character limit (do not decode on client)
@@ -97,8 +99,8 @@ without an empty `cursor` parameter.
 
 ### Request Identification
 
-- Client-provided `X-Request-Id` is accepted only when it contains 1–128 URI-unreserved ASCII characters (`A-Z`, `a-z`, `0-9`, `-`, `.`, `_`, or `~`)
-- Missing, empty, duplicate, oversized, or invalid values are replaced with a generated request ID
+- Client-provided `X-Request-Id` is accepted only when it starts with an ASCII alphanumeric and contains 1–128 characters from `A-Z`, `a-z`, `0-9`, `.`, `_`, `:`, or `-`
+- Missing, empty, duplicate, oversized, or invalid values are replaced with a cryptographically generated 32-character lowercase hexadecimal request ID
 - Response includes `X-Request-Id` header
 - `request.id`, `request.observability.requestId`, and the Pino `request_id` binding always agree
 
@@ -123,9 +125,9 @@ app/
     env.ts              # Environment validation (TypeBox)
     plugins/            # Application-owned Fastify plugins
     routes/             # Route handlers (health, schemas)
-    modules/            # Feature modules (auth/, github/, hello/, items/)
+    modules/            # Feature modules (auth/, github/, hello/, items/, profile/)
       <name>/           # index.ts, routes.ts, schemas.ts, service.ts
-    schemas/            # Shared TypeBox schemas (problem-details, pagination)
+    schemas/            # Shared TypeBox schemas (portable scalars, errors, pagination)
     utils/              # Utility functions
   tests/
     unit/               # Unit tests (mirror src/ structure)
@@ -141,7 +143,7 @@ functions/              # Firebase Cloud Functions (placeholder)
 - pnpm 11.17.0 through Corepack
 - [just](https://github.com/casey/just) for repository workflows
 - [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.28.0](https://docs.zizmor.sh/) for local workflow checks
-- Firebase project with Authentication, or the Authentication emulator, only when exercising `/v1/auth/me`
+- Firebase project with Authentication and Firestore, or their emulators, when exercising authenticated identity and profile routes
 
 ## Quick Start
 
@@ -166,11 +168,11 @@ The root `Justfile` loads `.env` for its recipes. Direct runtime commands such a
 | Framework | Fastify 5.x with TypeScript 7 |
 | Observability | fastify-observability 2 with Pino 10 |
 | Package manager | pnpm 11.17.0 |
-| Authentication | Firebase Admin SDK |
+| Authentication and persistence | Firebase Admin SDK Authentication and Firestore |
 | Schema Validation | TypeBox with @fastify/type-provider-typebox |
 | Testing | Vitest with V8 coverage (90% minimum) |
 | Code Quality | Biome (formatting, linting, imports) |
-| Backend Services | Firebase Authentication |
+| Backend Services | Firebase Authentication and Firestore |
 | Module System | ESM (`"type": "module"`) |
 
 ## Development Commands
@@ -206,8 +208,9 @@ corepack pnpm start         # Start the compiled server
 ```
 
 The audit gate deliberately reports lower-severity advisories instead of hiding them. The workspace contains one
-narrow GHSA exception for an unexercised Firebase Admin Firestore toolchain whose parent range cannot accept the fixed
-`brace-expansion` major; remove it as soon as the parent dependency resolves the advisory.
+narrow GHSA exception reached through rimraf/glob packages that the Firebase Admin Firestore runtime chain does not
+import; its parent range cannot accept the fixed `brace-expansion` major. Remove the exception as soon as the parent
+dependency resolves the advisory.
 
 ## Container
 
@@ -254,15 +257,19 @@ Trace correlation requires only a valid incoming W3C `traceparent`; no Google Cl
 | GET | `/v1/hello` | Greeting endpoint |
 | POST | `/v1/hello` | Personalized greeting (200 OK; no resource is created) |
 | GET | `/v1/items` | Items with cursor-based pagination and category filtering |
+| POST | `/v1/profile` | Atomically create the authenticated principal's profile |
+| GET | `/v1/profile` | Read the authenticated principal's profile |
+| PATCH | `/v1/profile` | Atomically update supplied mutable profile fields |
+| DELETE | `/v1/profile` | Atomically delete the authenticated principal's profile |
 | GET | `/v1/github/owners/:owner` | GitHub user profile |
 | GET | `/v1/github/owners/:owner/repos` | User repositories (paginated) |
 | GET | `/v1/github/repos/:owner/:repo` | Repository details |
-| GET | `/v1/github/repos/:owner/:repo/activity` | Repository activity (paginated) |
 | GET | `/v1/github/repos/:owner/:repo/languages` | Repository languages |
 | GET | `/v1/github/repos/:owner/:repo/tags` | Repository tags (paginated) |
 | GET | `/schemas/:schemaName.json` | Standalone JSON Schema discovery |
+| GET | `/openapi.json` | Accepted generated OpenAPI 3.1.0 document |
 | GET | `/api-docs` | Swagger UI |
-| GET | `/api-docs/json` | OpenAPI 3.1.0 spec (JSON) |
+| GET | `/api-docs/json` | Legacy generated OpenAPI JSON alias |
 
 ## Environment Variables
 
@@ -280,12 +287,13 @@ cp .env.example .env
 | `LOG_LEVEL` | `info` | Logging level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent`) |
 | `CORS_ORIGINS` | empty | JSON array or comma-separated exact browser origins; empty denies all browser origins |
 
-Firebase Authentication configuration:
+Firebase Authentication and Firestore configuration:
 
 | Variable | Description |
 |----------|-------------|
 | `GOOGLE_APPLICATION_CREDENTIALS` | Local path used directly by Application Default Credentials; the application does not read the key file |
 | `FIREBASE_AUTH_EMULATOR_HOST` | Auth emulator address (e.g., `localhost:9099`) |
+| `FIRESTORE_EMULATOR_HOST` | Firestore emulator address (e.g., `localhost:8080`) |
 
 The **API `GITHUB_TOKEN`** in `.env.example` is test-only. It raises the limit for opt-in tests that instantiate `GitHubClient` directly; the running API deliberately does not decode or forward it. Prefer a fine-grained token without private-repository access. It is separate from the **Merge `GITHUB_TOKEN`**, GitHub Actions' automatic token for repository workflows.
 
@@ -297,15 +305,15 @@ Plugins are registered explicitly in `app.ts` with layered dependencies:
 |-------|---------|
 | 1. Observability | fastify-observability |
 | 2. Core | sensible, helmet, cors |
-| 3. HTTP Lifecycle | vary-header, cbor-parser, content-negotiation |
-| 4. Infrastructure | Firebase Auth, lifecycle, Swagger, process-pressure protection |
+| 3. HTTP Lifecycle | portable request validation, strict JSON/CBOR parsing, content negotiation |
+| 4. Infrastructure | Firebase Admin, lifecycle, Swagger, process-pressure protection |
 | 5. Application | auth, error-handler |
 | 6. Response Metadata | schema-registry, schema-discovery |
 | 7. Routes | health, schemas, v1 modules |
 
 Observability is registered once at the root before every application hook and route. Application-owned plugins use `fastify-plugin` when decorators or hooks must escape encapsulation.
 
-## Firebase Authentication
+## Firebase Authentication and profiles
 
 ```bash
 curl \
@@ -316,17 +324,21 @@ curl \
 
 The response contains only `{ "userId": "..." }`; claims such as email addresses are not reflected. Missing, malformed,
 invalid, or expired credentials return a controlled 401 Problem Details response with the required Bearer
-`WWW-Authenticate` challenge, while Firebase configuration or provider failures return 503. The example uses
-Firebase's default `checkRevoked: false`; enable revocation checks only when immediate session invalidation is part of
-the product contract and the extra lookup is acceptable.
+`WWW-Authenticate` challenge, while Firebase configuration or provider failures return 503. Verification always uses
+Firebase Admin's revocation check. The same verified `uid` is the sole ownership key for `/v1/profile`; callers cannot
+select another profile ID. Firestore creates, updates, and deletes are transactional, duplicate creates preserve the
+existing record, no-op patches preserve `updatedAt`, and the Firestore client is initialized lazily so public routes do
+not require database access.
 
 ## GitHub Proxy Boundary
 
 The `/v1/github` examples proxy public GitHub REST data without a server credential. This is intentional: attaching a
 broad deployment token to caller-selected owner and repository paths could expose private resources available to that
-token. Each upstream request has a 10-second overall deadline beneath the application's 15-second handler deadline,
-propagates request cancellation, follows at most three same-origin redirects, asserts the raw successful GitHub
-payload before decoding it, and maps upstream failures to controlled Problem Details. Repository, tag, and activity
+token. Each upstream request sends the fixed GitHub media type, API version `2026-03-10`, user agent, and
+`Accept-Encoding: identity`; it has a 10-second overall deadline beneath the application's 15-second handler deadline,
+propagates request cancellation, follows at most three allowlisted same-origin redirects, enforces a 4 MiB streamed
+response limit, validates strict JSON and the exact public payload shape, and maps failures to controlled Problem
+Details. Repository, tag, and activity
 routes translate GitHub pagination into the API's opaque cursor and Link contract.
 
 GitHub's [unauthenticated primary rate limit](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) is 60 requests per hour per source IP. The example has no cache or distributed inbound rate limiter. A production public proxy that needs more capacity should define a different authorization boundary and add cache and distributed abuse controls rather than putting a private-capable token behind these caller-selected routes.
@@ -355,9 +367,9 @@ not commit random corpora.
 | Symptom | Repository-owned cause | Smallest corrective action |
 |---|---|---|
 | Startup rejects `CORS_ORIGINS` | An entry is not an exact HTTP(S) origin, contains credentials/path/query/fragment, or the JSON array contains a non-string | Use exact origins such as `https://app.example`; explicit default ports normalize to the origin default |
-| A request returns 401 without contacting Firebase | The authorization value is not exactly case-insensitive `Bearer`, one ASCII space, and one non-whitespace token | Send `Authorization: Bearer <token>` with no extra fields or alternate whitespace |
+| A request returns 401 without contacting Firebase | The authorization value is not case-insensitive `Bearer`, one or more ASCII spaces, and one token68 credential, or the field is repeated | Send one `Authorization: Bearer <token>` field with no extra fields or alternate whitespace |
 | A response is 406 | `Accept` excludes every representation the route can produce | Request `application/json`, or explicitly request `application/cbor` on routes that produce it |
-| A request body is 415 | `Content-Type` is not owned by the route; arbitrary `+cbor` and `application/problem+cbor` are unsupported | Send the route's declared `application/json` or exact `application/cbor` media type |
+| A request body is 415 | `Content-Type` or `Content-Encoding` is malformed or not owned by the route; arbitrary `+cbor` and `application/problem+cbor` are unsupported | Send `application/json` (optionally `charset=utf-8`) or exact parameterless `application/cbor`, with no content coding or `identity` |
 | A GitHub proxy route returns 502 or 504 | GitHub returned invalid/upstream data, transport failed, or the 10-second upstream deadline elapsed | Retry after checking GitHub availability, the correlated terminal record, and controlled domain diagnostics; do not add a broad server token |
 | `/health` is healthy while `/status` is 503 | Liveness intentionally bypasses process pressure; readiness reports shutdown or excessive load | Keep probing `/health` for process liveness and use `/status` for traffic readiness |
 | Requests emit duplicate or uncorrelated terminal records | Fastify was wired outside the canonical `fastify-observability` constructor and root-plugin setup | Restore the package-created logger/genReqId wiring and register the observability plugin once before routes |

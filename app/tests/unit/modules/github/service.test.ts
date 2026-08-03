@@ -63,11 +63,11 @@ describe("GitHubService", () => {
 
       const result = await service.listOwnerRepos("octocat", { limit: 5 });
 
-      expect(result.nextCursor).toBe(encodeCursor({ type: "gh-owner-repos", value: "5:octocat:2" }));
+      expect(result.nextCursor).toBe(encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:5:octocat:2" }));
     });
 
     it("rejects a repository cursor reused with a different owner or limit", async () => {
-      const cursor = encodeCursor({ type: "gh-owner-repos", value: "5:octocat:2" });
+      const cursor = encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:5:octocat:2" });
       const service = new GitHubService(mockClient as unknown as GitHubClient);
 
       await expect(service.listOwnerRepos("octocat", { cursor, limit: 10 })).rejects.toThrow(
@@ -81,13 +81,23 @@ describe("GitHubService", () => {
 
     it("links a second repository page back to the cursorless first page", async () => {
       mockClient.listOwnerRepos.mockResolvedValueOnce({ items: [], nextPage: 3, prevPage: 1 });
-      const cursor = encodeCursor({ type: "gh-owner-repos", value: "5:octocat:2" });
+      const cursor = encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:5:octocat:2" });
       const service = new GitHubService(mockClient as unknown as GitHubClient);
 
       const result = await service.listOwnerRepos("octocat", { cursor, limit: 5 });
 
       expect(result.prevCursor).toBeNull();
       expect(mockClient.listOwnerRepos).toHaveBeenCalledWith("octocat", 5, 2, undefined);
+    });
+
+    it("encodes a non-first previous repository page", async () => {
+      mockClient.listOwnerRepos.mockResolvedValueOnce({ items: [], nextPage: null, prevPage: 2 });
+      const cursor = encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:5:octocat:3" });
+      const result = await new GitHubService(mockClient as unknown as GitHubClient).listOwnerRepos("octocat", {
+        cursor,
+        limit: 5,
+      });
+      expect(result.prevCursor).toBe(encodeCursor({ type: "listGitHubOwnerRepositories", value: "prev:5:octocat:2" }));
     });
   });
 
@@ -137,6 +147,12 @@ describe("GitHubService", () => {
 
       expect(result.languages).toEqual([]);
     });
+
+    it("breaks equal byte counts by Unicode scalar order", async () => {
+      mockClient.listRepoLanguages.mockResolvedValueOnce({ 𐀀: 10, "": 10 });
+      const result = await new GitHubService(mockClient as unknown as GitHubClient).listRepoLanguages();
+      expect(result.languages.map(({ name }) => name)).toEqual(["", "𐀀"]);
+    });
   });
 
   describe("listRepoTags", () => {
@@ -155,6 +171,21 @@ describe("GitHubService", () => {
 
       expect(result.items).toHaveLength(2);
       expect(mockClient.listRepoTags).toHaveBeenCalledWith("octocat", "git-consortium", 20, 1, undefined);
+    });
+
+    it("translates both numbered tag directions", async () => {
+      mockClient.listRepoTags.mockResolvedValueOnce({ items: [], nextPage: 4, prevPage: 2 });
+      const cursor = encodeCursor({ type: "listGitHubRepositoryTags", value: "next:5:octocat%2Frepo:3" });
+      const result = await new GitHubService(mockClient as unknown as GitHubClient).listRepoTags("octocat", "repo", {
+        cursor,
+        limit: 5,
+      });
+      expect(result.nextCursor).toBe(
+        encodeCursor({ type: "listGitHubRepositoryTags", value: "next:5:octocat%2Frepo:4" }),
+      );
+      expect(result.prevCursor).toBe(
+        encodeCursor({ type: "listGitHubRepositoryTags", value: "prev:5:octocat%2Frepo:2" }),
+      );
     });
   });
 
@@ -176,10 +207,32 @@ describe("GitHubService", () => {
       );
     });
 
+    it.each([
+      encodeCursor({ type: "listGitHubRepositoryActivity", value: "sideways:20:octocat%2Frepo:value" }),
+      encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:%E0%A4%A:value" }),
+      encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:" }),
+    ])("rejects invalid decoded activity state", async (cursor) => {
+      await expect(
+        new GitHubService(mockClient as unknown as GitHubClient).listRepoActivity("octocat", "repo", { cursor }),
+      ).rejects.toThrow(InvalidCursorError);
+      expect(mockClient.listRepoActivity).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:20:octocat:1" }),
+      encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:20:%E0%A4%A:2" }),
+      encodeCursor({ type: "listGitHubRepositoryTags", value: "next:20:octocat%2Frepo:2" }),
+    ])("rejects impossible or wrong-operation numbered state", async (cursor) => {
+      await expect(
+        new GitHubService(mockClient as unknown as GitHubClient).listOwnerRepos("octocat", { cursor }),
+      ).rejects.toThrow(InvalidCursorError);
+      expect(mockClient.listOwnerRepos).not.toHaveBeenCalled();
+    });
+
     it("decodes a forward cursor for GitHub's after parameter", async () => {
       const validCursor = encodeCursor({
-        type: "gh-activity-after",
-        value: "20:octocat%2Frepo:2:cursor123",
+        type: "listGitHubRepositoryActivity",
+        value: "next:20:octocat%2Frepo:cursor123",
       });
 
       mockClient.listRepoActivity.mockResolvedValueOnce({
@@ -201,8 +254,8 @@ describe("GitHubService", () => {
 
     it("decodes a backward cursor for GitHub's before parameter", async () => {
       const validCursor = encodeCursor({
-        type: "gh-activity-before",
-        value: "20:octocat%2Frepo:2:cursor456",
+        type: "listGitHubRepositoryActivity",
+        value: "prev:20:octocat%2Frepo:cursor456",
       });
       mockClient.listRepoActivity.mockResolvedValueOnce({ activities: [], nextCursor: null, prevCursor: null });
 
@@ -220,8 +273,8 @@ describe("GitHubService", () => {
 
     it("rejects an activity cursor reused with a different repository or limit", async () => {
       const cursor = encodeCursor({
-        type: "gh-activity-after",
-        value: "20:octocat%2Frepo:2:cursor123",
+        type: "listGitHubRepositoryActivity",
+        value: "next:20:octocat%2Frepo:cursor123",
       });
       const service = new GitHubService(mockClient as unknown as GitHubClient);
 
@@ -236,8 +289,8 @@ describe("GitHubService", () => {
 
     it("keeps cursor-bearing links when navigating beyond the second activity page", async () => {
       const currentCursor = encodeCursor({
-        type: "gh-activity-after",
-        value: "20:octocat%2Frepo:3:current-page",
+        type: "listGitHubRepositoryActivity",
+        value: "next:20:octocat%2Frepo:current-page",
       });
       mockClient.listRepoActivity.mockResolvedValueOnce({
         activities: [
@@ -259,17 +312,17 @@ describe("GitHubService", () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.nextCursor).toBe(
-        encodeCursor({ type: "gh-activity-after", value: "20:octocat%2Frepo:4:cursor123" }),
+        encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:cursor123" }),
       );
       expect(result.prevCursor).toBe(
-        encodeCursor({ type: "gh-activity-before", value: "20:octocat%2Frepo:2:cursor456" }),
+        encodeCursor({ type: "listGitHubRepositoryActivity", value: "prev:20:octocat%2Frepo:cursor456" }),
       );
     });
 
     it("links the second activity page back to the cursorless first page", async () => {
       const currentCursor = encodeCursor({
-        type: "gh-activity-after",
-        value: "20:octocat%2Frepo:2:current-page",
+        type: "listGitHubRepositoryActivity",
+        value: "next:20:octocat%2Frepo:current-page",
       });
       mockClient.listRepoActivity.mockResolvedValueOnce({
         activities: [],
@@ -280,9 +333,11 @@ describe("GitHubService", () => {
 
       const result = await service.listRepoActivity("octocat", "repo", { cursor: currentCursor });
 
-      expect(result.prevCursor).toBeNull();
+      expect(result.prevCursor).toBe(
+        encodeCursor({ type: "listGitHubRepositoryActivity", value: "prev:20:octocat%2Frepo:first-page" }),
+      );
       expect(result.nextCursor).toBe(
-        encodeCursor({ type: "gh-activity-after", value: "20:octocat%2Frepo:3:next-page" }),
+        encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:next-page" }),
       );
     });
 

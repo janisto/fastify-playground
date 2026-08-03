@@ -31,6 +31,14 @@ describe("content negotiation", () => {
     ["application/json;q=1.0000", JSON_MEDIA_TYPE, false, false],
     ["application/json;q=1.001", JSON_MEDIA_TYPE, false, false],
     ["application/json;q=0.123", JSON_MEDIA_TYPE, false, true],
+    ["application/json;q=0.2, application/json;q=0.8", JSON_MEDIA_TYPE, false, true],
+    ["application/json;q=1;q=0.5", JSON_MEDIA_TYPE, false, false],
+    ["application/json;charset=utf-8;charset=UTF-8", JSON_MEDIA_TYPE, false, false],
+    ["application/json;;q=1", JSON_MEDIA_TYPE, false, true],
+    ["application/json;broken", JSON_MEDIA_TYPE, false, false],
+    [",application/json", JSON_MEDIA_TYPE, false, true],
+    ["json", JSON_MEDIA_TYPE, false, false],
+    ["application/json/extra", JSON_MEDIA_TYPE, false, false],
   ])("evaluates %s for %s", (accept, mediaType, explicitOnly, expected) => {
     expect(acceptsMediaType(accept, mediaType, explicitOnly)).toBe(expected);
   });
@@ -57,14 +65,24 @@ describe("content negotiation", () => {
     );
   });
 
+  it("returns null when the server has no available representation", () => {
+    expect(negotiateMediaType("*/*", [])).toBeNull();
+  });
+
+  it("can disable CBOR independently of the incoming range", () => {
+    expect(negotiateApiMediaType("application/cbor", false)).toBeNull();
+    expect(negotiateApiMediaType("application/json", false)).toBe(JSON_MEDIA_TYPE);
+  });
+
   it.each([
     ["", PROBLEM_JSON_MEDIA_TYPE],
     ["application/cbor", CBOR_MEDIA_TYPE],
     ["application/cbor;q=0", PROBLEM_JSON_MEDIA_TYPE],
-    ["application/json;q=0.8, application/cbor;q=0.4", PROBLEM_JSON_MEDIA_TYPE],
+    ["application/json;q=0.8, application/cbor;q=0.4", CBOR_MEDIA_TYPE],
     ["application/problem+json;q=0, application/cbor;q=0.5", CBOR_MEDIA_TYPE],
     ["application/problem+cbor", PROBLEM_JSON_MEDIA_TYPE],
     ["text/html", PROBLEM_JSON_MEDIA_TYPE],
+    ["application/*", PROBLEM_JSON_MEDIA_TYPE],
   ])("negotiates problem media type for %s", (accept, expected) => {
     expect(negotiateProblemMediaType(accept)).toBe(expected);
   });

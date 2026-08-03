@@ -3,6 +3,13 @@ import { authRoutes } from "../modules/auth/index.js";
 import { githubRoutes } from "../modules/github/index.js";
 import { helloRoutes } from "../modules/hello/index.js";
 import { itemsRoutes } from "../modules/items/index.js";
+import { type ProfileRepository, profileRoutes } from "../modules/profile/index.js";
+import type { ProfileClock } from "../modules/profile/service.js";
+
+export interface V1RoutesOptions {
+  readonly profileClock?: ProfileClock;
+  readonly profileRepository?: ProfileRepository;
+}
 
 /**
  * V1 API router plugin.
@@ -10,11 +17,16 @@ import { itemsRoutes } from "../modules/items/index.js";
  * Registers all versioned business routes under /v1 prefix.
  * Add new modules here to include them in the v1 API.
  */
-const v1Routes: FastifyPluginAsyncTypebox = async (fastify) => {
+const v1Routes: FastifyPluginAsyncTypebox<V1RoutesOptions> = async (fastify, options) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
   await fastify.register(githubRoutes, { prefix: "/github" });
   await fastify.register(helloRoutes, { prefix: "/hello" });
   await fastify.register(itemsRoutes, { prefix: "/items" });
+  await fastify.register(profileRoutes, {
+    prefix: "/profile",
+    ...(options.profileClock === undefined ? {} : { clock: options.profileClock }),
+    ...(options.profileRepository === undefined ? {} : { repository: options.profileRepository }),
+  });
 };
 
 export default v1Routes;

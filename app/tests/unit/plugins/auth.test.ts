@@ -20,17 +20,20 @@ describe("Firebase authentication", () => {
     await Promise.all(apps.splice(0).map((app) => app.close()));
   });
 
-  async function build(checkRevoked = false) {
-    const [{ default: sensible }, { default: firebase }, { default: auth }] = await Promise.all([
-      import("../../../src/plugins/sensible.js"),
-      import("../../../src/plugins/firebase.js"),
-      import("../../../src/plugins/auth.js"),
-    ]);
+  async function build(checkRevoked = true) {
+    const [{ default: sensible }, { default: firebase }, { default: auth }, { default: errorHandler }] =
+      await Promise.all([
+        import("../../../src/plugins/sensible.js"),
+        import("../../../src/plugins/firebase.js"),
+        import("../../../src/plugins/auth.js"),
+        import("../../../src/plugins/error-handler.js"),
+      ]);
     const app = Fastify({ logger: false });
     apps.push(app);
     app.register(sensible);
     app.register(firebase);
     app.register(auth, { checkRevoked });
+    app.register(errorHandler);
     app.register(async (scope) => {
       scope.get("/protected", { preHandler: [scope.authenticate] }, async (request) => ({
         uid: request.user?.uid,
@@ -51,15 +54,15 @@ describe("Firebase authentication", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ uid: "user-123" });
-    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", false);
+    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("valid-token", true);
   });
 
   it("rejects a missing authorization header before Firebase", async () => {
     const response = await (await build()).inject({ method: "GET", url: "/protected" });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().message).toBe("Missing authorization header");
-    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground"');
+    expect(response.json()).toMatchObject({ code: "unauthorized", detail: "Authentication is required or invalid" });
+    expect(response.headers["www-authenticate"]).toBe("Bearer");
     expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
   });
 
@@ -67,7 +70,6 @@ describe("Firebase authentication", () => {
     ["wrong scheme", "Basic token"],
     ["missing token", "Bearer"],
     ["extra field", "Bearer valid-token extra"],
-    ["multiple spaces", "Bearer  valid-token"],
     ["tab separator", "Bearer\tvalid-token"],
     ["leading whitespace", " Bearer valid-token"],
   ])("rejects an authorization header with %s before Firebase", async (_case, authorization) => {
@@ -78,8 +80,8 @@ describe("Firebase authentication", () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().message).toBe("Invalid authorization header format. Expected: Bearer <token>");
-    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground", error="invalid_request"');
+    expect(response.json()).toMatchObject({ code: "unauthorized", detail: "Authentication is required or invalid" });
+    expect(response.headers["www-authenticate"]).toBe("Bearer");
     expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
   });
 
@@ -94,8 +96,8 @@ describe("Firebase authentication", () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().message).toBe("Invalid or expired token");
-    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground", error="invalid_token"');
+    expect(response.json()).toMatchObject({ code: "unauthorized", detail: "Authentication is required or invalid" });
+    expect(response.headers["www-authenticate"]).toBe("Bearer");
     expect(response.payload).not.toContain("provider detail canary");
   });
 
@@ -115,7 +117,10 @@ describe("Firebase authentication", () => {
     });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json().message).toBe("Authentication service is unavailable");
+    expect(response.json()).toMatchObject({
+      code: "dependency_unavailable",
+      detail: "A required dependency is unavailable",
+    });
     expect(response.payload).not.toContain("provider infrastructure canary");
   });
 
@@ -142,8 +147,30 @@ describe("Firebase authentication", () => {
     });
 
     expect(response.statusCode).toBe(401);
-    expect(response.json().message).toBe("Token has been revoked. Please sign in again.");
-    expect(response.headers["www-authenticate"]).toBe('Bearer realm="fastify-playground", error="invalid_token"');
+    expect(response.json()).toMatchObject({ code: "unauthorized", detail: "Authentication is required or invalid" });
+    expect(response.headers["www-authenticate"]).toBe("Bearer");
     expect(response.payload).not.toContain("provider revocation canary");
+  });
+
+  it("accepts one or more ASCII spaces and token68 punctuation", async () => {
+    mockAuth.verifyIdToken.mockResolvedValueOnce({ uid: "user-123" });
+    const response = await (await build()).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: "Bearer   ._~+/-==" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("._~+/-==", true);
+  });
+
+  it.each(["", "x".repeat(129)])("rejects an invalid verified principal %j", async (uid) => {
+    mockAuth.verifyIdToken.mockResolvedValueOnce({ uid });
+    const response = await (await build()).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: "Bearer valid-token" },
+    });
+    expect(response.json()).toMatchObject({ status: 401, code: "unauthorized" });
   });
 });

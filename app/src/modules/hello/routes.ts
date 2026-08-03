@@ -13,17 +13,19 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     "/",
     {
+      prefixTrailingSlash: "no-slash",
       schema: {
-        operationId: "getGreeting",
+        operationId: "getHello",
+        security: [],
         description: "Get a greeting message",
         summary: "Hello World",
         tags: ["Hello"],
         produces: API_MEDIA_TYPES,
         response: {
           200: HelloResponseSchema,
+          400: ErrorModelSchema,
           406: ErrorModelSchema,
           500: ErrorModelSchema,
-          503: ErrorModelSchema,
         },
       },
     },
@@ -35,8 +37,10 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.post(
     "/",
     {
+      prefixTrailingSlash: "no-slash",
       schema: {
-        operationId: "createGreeting",
+        operationId: "createHello",
+        security: [],
         description: "Returns a personalized greeting without creating a resource",
         summary: "Personalize greeting",
         tags: ["Hello"],
@@ -47,10 +51,10 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           200: HelloResponseSchema,
           400: ErrorModelSchema,
           406: ErrorModelSchema,
+          413: ErrorModelSchema,
           415: ErrorModelSchema,
           422: ErrorModelSchema,
           500: ErrorModelSchema,
-          503: ErrorModelSchema,
         },
       },
     },

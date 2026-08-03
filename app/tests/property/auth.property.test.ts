@@ -54,25 +54,25 @@ const bearerScheme = fc
     ...[..."Bearer"].map((character) => fc.boolean().map((upper) => (upper ? character.toUpperCase() : character))),
   )
   .map((characters) => characters.join(""));
-const token = fc.stringMatching(/^[!-~]{1,64}$/);
+const token = fc.stringMatching(/^[A-Za-z0-9._~+/-]{1,64}=*$/);
 
-test.prop([bearerScheme, token], propertyParameters)(
+test.prop([bearerScheme, token, fc.integer({ min: 1, max: 8 })], propertyParameters)(
   "verifies only the token from an exact Bearer header",
-  async (scheme, value) => {
+  async (scheme, value, spaces) => {
     mockAuth.verifyIdToken.mockResolvedValueOnce({ uid: "property-user" });
 
     const response = await Promise.resolve(
       currentApp().inject({
         method: "GET",
         url: "/protected",
-        headers: { authorization: `${scheme} ${value}` },
+        headers: { authorization: `${scheme}${" ".repeat(spaces)}${value}` },
       }),
     );
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ uid: "property-user" });
     expect(mockAuth.verifyIdToken).toHaveBeenCalledTimes(1);
-    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith(value, false);
+    expect(mockAuth.verifyIdToken).toHaveBeenCalledWith(value, true);
   },
 );
 
@@ -80,7 +80,6 @@ const invalidAuthorization = token.chain((value) =>
   fc.constantFrom(
     `Basic ${value}`,
     `Bearer\t${value}`,
-    `Bearer  ${value}`,
     ` Bearer ${value}`,
     `Bearer ${value} extra`,
     `Bearer ${value}\tmore`,

@@ -46,7 +46,7 @@ export default fp<CorsPluginOptions>(
         "traceparent",
         "tracestate",
       ],
-      exposedHeaders: ["Link", "Location", "X-Request-Id"],
+      exposedHeaders: ["Link", "Location", "Retry-After", "X-RateLimit-Reset", "X-Request-Id"],
     });
   },
   {

@@ -1,159 +1,139 @@
 import { type Static, Type } from "@fastify/type-provider-typebox";
+import { SafeIntegerSchema, TimestampSchema } from "../../schemas/portable.js";
 
-// Path Parameters
-export const OwnerParamsSchema = Type.Object({
-  owner: Type.String({
-    description: "GitHub account name",
-    examples: ["octocat"],
-    minLength: 1,
-    maxLength: 100,
-  }),
-});
+const HttpUrlSchema = Type.String({ format: "uri", pattern: "^https?://" });
+const NonEmptyString = Type.String({ minLength: 1 });
+const NullableString = Type.Union([NonEmptyString, Type.Null()]);
 
-export const RepoParamsSchema = Type.Object({
-  owner: Type.String({
-    description: "GitHub account name",
-    examples: ["octocat"],
-    minLength: 1,
-    maxLength: 100,
-  }),
-  repo: Type.String({
-    description: "Repository name",
-    examples: ["git-consortium"],
-    minLength: 1,
-    maxLength: 100,
-  }),
-});
+export const OwnerParamsSchema = Type.Object(
+  {
+    owner: Type.String({
+      description: "Safe GitHub account path segment",
+      examples: ["octocat"],
+      minLength: 1,
+      maxLength: 39,
+      pattern: "^(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9_-]{0,37}[A-Za-z0-9])$",
+    }),
+  },
+  { additionalProperties: false },
+);
 
-// Owner Schema
+export const RepoParamsSchema = Type.Object(
+  {
+    ...OwnerParamsSchema.properties,
+    repo: Type.String({
+      description: "Safe non-dot-only GitHub repository path segment",
+      examples: ["git-consortium"],
+      minLength: 1,
+      maxLength: 100,
+      pattern: "^(?=.*[A-Za-z0-9_-])[A-Za-z0-9._-]+$",
+    }),
+  },
+  { additionalProperties: false },
+);
+
 export const GitHubOwnerSchema = Type.Object(
   {
-    login: Type.String({ examples: ["octocat"] }),
-    id: Type.Integer({ examples: [1] }),
-    avatarUrl: Type.String({ format: "uri" }),
-    htmlUrl: Type.String({ format: "uri" }),
-    type: Type.String({ examples: ["User"] }),
-    name: Type.Union([Type.String(), Type.Null()]),
-    company: Type.Union([Type.String(), Type.Null()]),
-    blog: Type.Union([Type.String(), Type.Null()]),
-    location: Type.Union([Type.String(), Type.Null()]),
-    bio: Type.Union([Type.String(), Type.Null()]),
-    publicRepos: Type.Integer(),
-    followers: Type.Integer(),
-    following: Type.Integer(),
-    createdAt: Type.String({ format: "date-time" }),
-    updatedAt: Type.String({ format: "date-time" }),
+    id: SafeIntegerSchema,
+    login: NonEmptyString,
+    type: NonEmptyString,
+    name: NullableString,
+    avatarUrl: HttpUrlSchema,
+    htmlUrl: HttpUrlSchema,
+    company: NullableString,
+    blog: NullableString,
+    location: NullableString,
+    bio: NullableString,
+    publicRepos: SafeIntegerSchema,
+    followers: SafeIntegerSchema,
+    following: SafeIntegerSchema,
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
   },
-  { $id: "GitHubOwner" },
+  { $id: "GitHubOwner", additionalProperties: false },
 );
 
-// Base Repo Schema (for property reuse, not exported)
-const GitHubRepoBaseSchema = Type.Object({
-  id: Type.Integer(),
-  name: Type.String(),
-  fullName: Type.String(),
-  description: Type.Union([Type.String(), Type.Null()]),
-  htmlUrl: Type.String({ format: "uri" }),
-  language: Type.Union([Type.String(), Type.Null()]),
-  stargazersCount: Type.Integer(),
-  forksCount: Type.Integer(),
-  openIssuesCount: Type.Integer(),
-  visibility: Type.String(),
+const GitHubRepoSummaryProperties = {
+  id: SafeIntegerSchema,
+  name: NonEmptyString,
+  fullName: NonEmptyString,
+  description: NullableString,
+  htmlUrl: HttpUrlSchema,
   fork: Type.Boolean(),
-  archived: Type.Boolean(),
-  createdAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
-  updatedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
-  pushedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+} as const;
+
+export const GitHubRepoSchema = Type.Object(GitHubRepoSummaryProperties, {
+  $id: "GitHubRepositorySummary",
+  additionalProperties: false,
 });
 
-// Repo Summary Schema
-export const GitHubRepoSchema = Type.Object(
-  {
-    ...GitHubRepoBaseSchema.properties,
-  },
-  { $id: "GitHubRepo" },
-);
-
-// Repo Detail Schema (extends base)
 export const GitHubRepoDetailSchema = Type.Object(
   {
-    ...GitHubRepoBaseSchema.properties,
-    defaultBranch: Type.String({ description: "Default branch name" }),
-    license: Type.Union([Type.String(), Type.Null()], { description: "License SPDX identifier" }),
-    topics: Type.Array(Type.String(), { description: "Repository topics" }),
-    disabled: Type.Boolean({ description: "Whether repo is disabled" }),
+    ...GitHubRepoSummaryProperties,
+    language: NullableString,
+    stargazersCount: SafeIntegerSchema,
+    forksCount: SafeIntegerSchema,
+    openIssuesCount: SafeIntegerSchema,
+    archived: Type.Boolean(),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+    pushedAt: Type.Union([TimestampSchema, Type.Null()]),
+    defaultBranch: NonEmptyString,
+    license: NullableString,
+    topics: Type.Array(Type.String(), { uniqueItems: true }),
+    disabled: Type.Boolean(),
   },
-  { $id: "GitHubRepoDetail" },
+  { $id: "GitHubRepository", additionalProperties: false },
 );
 
-// Activity Schema
 export const GitHubActivitySchema = Type.Object(
   {
-    id: Type.Integer({ examples: [1] }),
-    actor: Type.Union([Type.String(), Type.Null()], {
-      examples: ["octocat"],
-      description: "Actor username, or null when the GitHub account no longer exists",
-    }),
-    ref: Type.String({ examples: ["refs/heads/master"], description: "Git reference" }),
-    timestamp: Type.String({ format: "date-time" }),
-    activityType: Type.String({ examples: ["push"], description: "Type of activity" }),
-    actorAvatarUrl: Type.Union([Type.String({ format: "uri" }), Type.Null()], {
-      description: "Actor avatar URL, or null when the GitHub account no longer exists",
-    }),
+    id: SafeIntegerSchema,
+    actor: NullableString,
+    actorAvatarUrl: Type.Union([HttpUrlSchema, Type.Null()]),
+    ref: NonEmptyString,
+    timestamp: TimestampSchema,
+    activityType: NonEmptyString,
   },
-  { $id: "GitHubActivity" },
+  { $id: "GitHubActivity", additionalProperties: false },
 );
 
-// Language Schema
-export const GitHubLanguageSchema = Type.Object({
-  name: Type.String({ examples: ["TypeScript"] }),
-  bytes: Type.Integer({ examples: [78769], description: "Bytes of code" }),
-});
+export const GitHubLanguageSchema = Type.Object(
+  { name: NonEmptyString, bytes: SafeIntegerSchema },
+  { additionalProperties: false },
+);
 
-// Tag Schema
 export const GitHubTagSchema = Type.Object(
   {
-    name: Type.String({ description: "Tag name" }),
-    commit: Type.Object({
-      sha: Type.String({ description: "Commit SHA" }),
-    }),
+    name: NonEmptyString,
+    commit: Type.Object(
+      { sha: Type.String({ pattern: "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" }) },
+      { additionalProperties: false },
+    ),
   },
-  { $id: "GitHubTag" },
+  { $id: "GitHubTag", additionalProperties: false },
 );
 
-// Response Wrapper Schemas
 export const GitHubOwnerReposResponseSchema = Type.Object(
-  {
-    repos: Type.Array(GitHubRepoSchema),
-    count: Type.Integer({ description: "Number of repositories returned" }),
-  },
-  { $id: "GitHubOwnerReposResponse" },
+  { repos: Type.Array(GitHubRepoSchema, { maxItems: 100 }), count: Type.Integer({ minimum: 0, maximum: 100 }) },
+  { $id: "GitHubRepositoryPage", additionalProperties: false },
 );
-
 export const GitHubActivityListResponseSchema = Type.Object(
   {
-    activities: Type.Array(GitHubActivitySchema),
-    count: Type.Integer({ description: "Number of activities returned" }),
+    activities: Type.Array(GitHubActivitySchema, { maxItems: 100 }),
+    count: Type.Integer({ minimum: 0, maximum: 100 }),
   },
-  { $id: "GitHubActivityListResponse" },
+  { $id: "GitHubActivityPage", additionalProperties: false },
 );
-
 export const GitHubLanguagesResponseSchema = Type.Object(
-  {
-    languages: Type.Array(GitHubLanguageSchema, { description: "Repository languages with byte counts" }),
-  },
-  { $id: "GitHubLanguagesResponse" },
+  { languages: Type.Array(GitHubLanguageSchema) },
+  { $id: "GitHubLanguages", additionalProperties: false },
 );
-
 export const GitHubTagsResponseSchema = Type.Object(
-  {
-    tags: Type.Array(GitHubTagSchema),
-    count: Type.Integer({ description: "Number of tags returned" }),
-  },
-  { $id: "GitHubTagsResponse" },
+  { tags: Type.Array(GitHubTagSchema, { maxItems: 100 }), count: Type.Integer({ minimum: 0, maximum: 100 }) },
+  { $id: "GitHubTagPage", additionalProperties: false },
 );
 
-// TypeScript types derived from schemas
 export type GitHubOwner = Static<typeof GitHubOwnerSchema>;
 export type GitHubRepo = Static<typeof GitHubRepoSchema>;
 export type GitHubRepoDetail = Static<typeof GitHubRepoDetailSchema>;

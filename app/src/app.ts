@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
 import Fastify, { LogController } from "fastify";
@@ -8,14 +9,17 @@ import fastifyObservability, {
   type ObservabilityLoggerOptions,
 } from "fastify-observability";
 import { env } from "./env.js";
+import type { ProfileRepository } from "./modules/profile/index.js";
+import type { ProfileClock } from "./modules/profile/service.js";
 import authPlugin from "./plugins/auth.js";
-import cborParserPlugin from "./plugins/cbor-parser.js";
 import contentNegotiationPlugin from "./plugins/content-negotiation.js";
 import corsPlugin from "./plugins/cors.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
 import firebasePlugin from "./plugins/firebase.js";
 import helmetPlugin from "./plugins/helmet.js";
 import lifecyclePlugin from "./plugins/lifecycle.js";
+import portableHttpPlugin from "./plugins/portable-http.js";
+import requestBodyPlugin, { MAX_REQUEST_BODY_BYTES } from "./plugins/request-body.js";
 import schemaDiscoveryPlugin from "./plugins/schema-discovery.js";
 import schemaRegistryPlugin from "./plugins/schema-registry.js";
 import sensiblePlugin from "./plugins/sensible.js";
@@ -50,6 +54,8 @@ const OBSERVABILITY_OPTIONS = {
 export interface BuildAppOptions {
   readonly loggerDestination?: ObservabilityLoggerOptions["destination"];
   readonly loggerLevel?: ObservabilityLoggerOptions["level"];
+  readonly profileClock?: ProfileClock;
+  readonly profileRepository?: ProfileRepository;
 }
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -66,7 +72,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
     return503OnClosing: false,
     loggerInstance: logger,
     requestIdHeader: false,
-    genReqId: createRequestIdGenerator(),
+    genReqId: createRequestIdGenerator({
+      generate: () => randomBytes(16).toString("hex"),
+      validateIncoming: (value) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value),
+    }),
+    bodyLimit: MAX_REQUEST_BODY_BYTES,
+    exposeHeadRoutes: false,
     logController: new LogController({
       disableRequestLogging: true,
       requestIdLogLabel: "request_id",
@@ -89,7 +100,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
     // Layer 3: HTTP lifecycle and content negotiation plugins
     await fastify.register(varyHeaderPlugin);
-    await fastify.register(cborParserPlugin);
+    await fastify.register(portableHttpPlugin);
+    await fastify.register(requestBodyPlugin);
     await fastify.register(contentNegotiationPlugin);
 
     // Layer 4: Infrastructure plugins
@@ -112,7 +124,11 @@ export async function buildApp(options: BuildAppOptions = {}) {
     await fastify.register(schemasRoutes);
 
     // Business routes (versioned)
-    await fastify.register(v1Routes, { prefix: "/v1" });
+    await fastify.register(v1Routes, {
+      prefix: "/v1",
+      ...(options.profileClock === undefined ? {} : { profileClock: options.profileClock }),
+      ...(options.profileRepository === undefined ? {} : { profileRepository: options.profileRepository }),
+    });
   } catch (startupError) {
     try {
       await fastify.close();
