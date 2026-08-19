@@ -1,6 +1,7 @@
-import { decodeCursor, encodeCursor, InvalidCursorError } from "../../utils/pagination.js";
+import { decodeCursor, encodeCursor, InvalidCursorError, MAX_CURSOR_LENGTH } from "../../utils/pagination.js";
 
 import { type ActivityCursor, GitHubClient, scalarCompare } from "./client.js";
+import { GITHUB_ERROR_UPSTREAM, GitHubApiError } from "./errors.js";
 import type {
   GitHubActivity,
   GitHubLanguage,
@@ -188,10 +189,14 @@ export class GitHubService {
     page: number,
     value: string,
   ): string {
-    return encodeCursor({
+    const cursor = encodeCursor({
       type: ACTIVITY_OPERATION,
       value: `${direction}:${limit}:${encodeURIComponent(scope)}:${page}:${encodeURIComponent(value)}`,
     });
+    if (cursor.length > MAX_CURSOR_LENGTH) {
+      throw new GitHubApiError("GitHub activity pagination cursor was invalid", 502, GITHUB_ERROR_UPSTREAM);
+    }
+    return cursor;
   }
 
   private validatePageCursor(

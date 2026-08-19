@@ -73,6 +73,7 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
         summary: "Readiness check",
         response: {
           200: ReadinessResponseSchema,
+          400: ErrorModelSchema,
           406: ErrorModelSchema,
           503: ErrorModelSchema,
         },

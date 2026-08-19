@@ -1,8 +1,9 @@
 import { Buffer } from "node:buffer";
 import type { Firestore } from "firebase-admin/firestore";
+import Value from "typebox/value";
 import { TIMESTAMP_PATTERN } from "../../schemas/portable.js";
 import { PortableError } from "../../utils/portable-error.js";
-import type { Profile, ProfileCreate, ProfileUpdate } from "./schemas.js";
+import { type Profile, type ProfileCreate, ProfileSchema, type ProfileUpdate } from "./schemas.js";
 
 const PROFILE_COLLECTION = "profiles";
 const TIMESTAMP_REGEX = new RegExp(TIMESTAMP_PATTERN);
@@ -27,14 +28,8 @@ function isProfile(value: unknown, expectedId: string): value is Profile {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   return (
-    Object.keys(record).length === 9 &&
+    Value.Check(ProfileSchema, record) &&
     record["id"] === expectedId &&
-    typeof record["firstName"] === "string" &&
-    typeof record["lastName"] === "string" &&
-    typeof record["contactEmail"] === "string" &&
-    typeof record["phoneNumber"] === "string" &&
-    typeof record["marketingOptIn"] === "boolean" &&
-    record["termsAccepted"] === true &&
     isCanonicalTimestamp(record["createdAt"]) &&
     isCanonicalTimestamp(record["updatedAt"]) &&
     record["updatedAt"] >= record["createdAt"]

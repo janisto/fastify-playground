@@ -8,7 +8,9 @@ const PAGINATION_QUERY = new Set(["limit", "cursor"]);
 const ITEM_QUERY = new Set(["limit", "cursor", "category"]);
 const QUERY_POLICY = new Map<string, ReadonlySet<string>>([
   ["/health", NO_QUERY],
+  ["/status", NO_QUERY],
   ["/openapi.json", NO_QUERY],
+  ["/v1/auth/me", NO_QUERY],
   ["/v1/hello", NO_QUERY],
   ["/v1/items", ITEM_QUERY],
   ["/v1/profile", NO_QUERY],

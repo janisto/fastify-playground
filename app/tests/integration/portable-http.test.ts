@@ -45,6 +45,25 @@ describe("portable raw HTTP boundary", () => {
     await app.close();
   });
 
+  it("rejects unknown readiness and identity queries before Firebase authentication", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp();
+
+    const [readiness, identity] = await Promise.all([
+      app.inject({ method: "GET", url: "/status?unknown=1" }),
+      app.inject({
+        method: "GET",
+        url: "/v1/auth/me?unknown=1",
+        headers: { authorization: "Bearer synthetic-token" },
+      }),
+    ]);
+
+    expect(readiness.json()).toMatchObject({ status: 400, code: "invalid_request" });
+    expect(identity.json()).toMatchObject({ status: 400, code: "invalid_request" });
+    expect(firebaseAuth.verifyIdToken).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it.each([
     ["unsupported content encoding", { "content-type": "application/json", "content-encoding": "gzip" }, "{}", 415],
     [

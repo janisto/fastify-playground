@@ -131,6 +131,41 @@ describe("FirestoreProfileRepository", () => {
     });
   });
 
+  it.each([
+    ["empty first name", "firstName", ""],
+    ["name with surrounding whitespace", "lastName", "Lovelace "],
+    ["malformed contact email", "contactEmail", "not-an-email"],
+    ["non-E.164 phone number", "phoneNumber", "0401234567"],
+  ] as const)("classifies a persisted profile with %s as corrupt", async (_case, field, value) => {
+    const fixture = firestoreDouble();
+    const repository = new FirestoreProfileRepository(fixture.firestore);
+    await repository.create("principal", INPUT, NOW);
+    const key = fixture.doc.mock.calls.at(-1)?.[0];
+    if (typeof key !== "string") throw new Error("missing document key");
+    const stored = fixture.records.get(key);
+    if (typeof stored !== "object" || stored === null) throw new Error("missing stored profile");
+    fixture.records.set(key, { ...stored, [field]: value });
+
+    await expect(repository.get("principal")).rejects.toMatchObject({ code: "internal_error" });
+  });
+
+  it("rejects a no-op update against semantically corrupt persisted data without writing", async () => {
+    const fixture = firestoreDouble();
+    const repository = new FirestoreProfileRepository(fixture.firestore);
+    await repository.create("principal", INPUT, NOW);
+    const key = fixture.doc.mock.calls.at(-1)?.[0];
+    if (typeof key !== "string") throw new Error("missing document key");
+    const stored = fixture.records.get(key);
+    if (typeof stored !== "object" || stored === null) throw new Error("missing stored profile");
+    fixture.records.set(key, { ...stored, contactEmail: "not-an-email" });
+    const writesBeforeUpdate = fixture.writes();
+
+    await expect(repository.update("principal", { firstName: "Ada" }, NOW)).rejects.toMatchObject({
+      code: "internal_error",
+    });
+    expect(fixture.writes()).toBe(writesBeforeUpdate);
+  });
+
   it("maps lazy Firestore initialization failure and retries without poisoning the repository", async () => {
     const fixture = firestoreDouble();
     const factory = vi

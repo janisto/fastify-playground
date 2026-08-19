@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GitHubClient } from "../../../../src/modules/github/client.js";
 import { GitHubService } from "../../../../src/modules/github/service.js";
-import { encodeCursor, InvalidCursorError } from "../../../../src/utils/pagination.js";
+import { encodeCursor, InvalidCursorError, MAX_CURSOR_LENGTH } from "../../../../src/utils/pagination.js";
 
 describe("GitHubService", () => {
   const mockClient = {
@@ -339,6 +339,20 @@ describe("GitHubService", () => {
       expect(result.nextCursor).toBe(
         encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:3:next-page" }),
       );
+    });
+
+    it("rejects provider navigation when the final public activity cursor exceeds its bound", async () => {
+      mockClient.listRepoActivity
+        .mockResolvedValueOnce({ activities: [], nextCursor: "a".repeat(1482), prevCursor: null })
+        .mockResolvedValueOnce({ activities: [], nextCursor: "a".repeat(1483), prevCursor: null });
+      const service = new GitHubService(mockClient as unknown as GitHubClient);
+
+      const boundary = await service.listRepoActivity("octocat", "repo");
+      expect(boundary.nextCursor).toHaveLength(MAX_CURSOR_LENGTH);
+      await expect(service.listRepoActivity("octocat", "repo")).rejects.toMatchObject({
+        statusCode: 502,
+        code: "github_upstream",
+      });
     });
 
     it("returns undefined nextCursor when no more pages", async () => {

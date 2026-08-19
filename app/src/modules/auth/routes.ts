@@ -29,6 +29,7 @@ const authRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         produces: API_MEDIA_TYPES,
         response: {
           200: AuthenticatedUserSchema,
+          400: ErrorModelSchema,
           401: UnauthorizedErrorSchema,
           406: ErrorModelSchema,
           500: ErrorModelSchema,

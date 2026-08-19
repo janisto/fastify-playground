@@ -825,6 +825,8 @@ describe("App Integration", () => {
     }
 
     const readinessUnavailable = document.paths["/status"].get.responses["503"];
+    expect(document.paths["/status"].get.responses).toHaveProperty("400");
+    expect(document.paths["/v1/auth/me"].get.responses).toHaveProperty("400");
     expect(readinessUnavailable.headers["Retry-After"].schema).toEqual({
       type: "integer",
       minimum: 0,
