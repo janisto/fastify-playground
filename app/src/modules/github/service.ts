@@ -27,6 +27,11 @@ export interface PaginatedResult<T> {
   prevCursor?: string | null;
 }
 
+interface DecodedActivityCursor {
+  readonly page: number;
+  readonly upstream: ActivityCursor;
+}
+
 export class GitHubService {
   private readonly client: GitHubClient;
 
@@ -74,15 +79,18 @@ export class GitHubService {
     const resolvedOwner = owner ?? DEFAULT_OWNER;
     const resolvedRepo = repo ?? DEFAULT_REPO;
     const scope = `${resolvedOwner}/${resolvedRepo}`;
-    const upstreamCursor = this.validateActivityCursor(options?.cursor, scope, limit);
+    const cursor = this.validateActivityCursor(options?.cursor, scope, limit);
+    const currentPage = cursor?.page ?? 1;
 
-    const result = await this.client.listRepoActivity(resolvedOwner, resolvedRepo, limit, upstreamCursor, signal);
+    const result = await this.client.listRepoActivity(resolvedOwner, resolvedRepo, limit, cursor?.upstream, signal);
 
     const nextCursor = result.nextCursor
-      ? this.encodeActivityCursor("next", scope, limit, result.nextCursor)
+      ? this.encodeActivityCursor("next", scope, limit, currentPage + 1, result.nextCursor)
       : undefined;
     const prevCursor = result.prevCursor
-      ? this.encodeActivityCursor("prev", scope, limit, result.prevCursor)
+      ? currentPage <= 2
+        ? null
+        : this.encodeActivityCursor("prev", scope, limit, currentPage - 1, result.prevCursor)
       : undefined;
 
     return {
@@ -133,7 +141,7 @@ export class GitHubService {
     encodedCursor: string | undefined,
     expectedScope: string,
     expectedLimit: number,
-  ): ActivityCursor | undefined {
+  ): DecodedActivityCursor | undefined {
     if (encodedCursor === undefined) return undefined;
 
     const cursor = decodeCursor(encodedCursor);
@@ -142,8 +150,9 @@ export class GitHubService {
     }
     if (cursor.type !== ACTIVITY_OPERATION) throw new InvalidCursorError("cursor type mismatch");
 
-    const [direction, limitValue, scopeValue, upstreamValue, ...extra] = cursor.value.split(":");
+    const [direction, limitValue, scopeValue, pageValue, upstreamValue, ...extra] = cursor.value.split(":");
     const limit = Number(limitValue);
+    const page = Number(pageValue);
     let scope: string;
     let upstreamCursor: string;
     try {
@@ -158,18 +167,30 @@ export class GitHubService {
       !upstreamCursor ||
       !Number.isSafeInteger(limit) ||
       limit !== expectedLimit ||
+      !/^[1-9][0-9]*$/.test(pageValue ?? "") ||
+      !Number.isSafeInteger(page) ||
+      page < 2 ||
       scope !== expectedScope
     ) {
       throw new InvalidCursorError("cursor does not match the requested collection or limit");
     }
 
-    return { direction: direction === "next" ? "after" : "before", value: upstreamCursor };
+    return {
+      page,
+      upstream: { direction: direction === "next" ? "after" : "before", value: upstreamCursor },
+    };
   }
 
-  private encodeActivityCursor(direction: "next" | "prev", scope: string, limit: number, value: string): string {
+  private encodeActivityCursor(
+    direction: "next" | "prev",
+    scope: string,
+    limit: number,
+    page: number,
+    value: string,
+  ): string {
     return encodeCursor({
       type: ACTIVITY_OPERATION,
-      value: `${direction}:${limit}:${encodeURIComponent(scope)}:${encodeURIComponent(value)}`,
+      value: `${direction}:${limit}:${encodeURIComponent(scope)}:${page}:${encodeURIComponent(value)}`,
     });
   }
 

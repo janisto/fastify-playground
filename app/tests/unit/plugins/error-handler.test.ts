@@ -123,11 +123,13 @@ describe("portable error handler", () => {
 
   it("returns exact 404 and 405 problems with a truthful Allow field", async () => {
     const app = await build();
+    app.get("/resource/:id", async () => ({}));
+    app.patch("/resource/:id", async () => ({}));
     const missing = await app.inject({ method: "GET", url: "/missing" });
-    const method = await app.inject({ method: "POST", url: "/v1/github/owners/octocat/repos" });
+    const method = await app.inject({ method: "PUT", url: "/resource/example" });
     expect(missing.json()).toMatchObject({ code: "not_found", status: 404 });
     expect(method.json()).toMatchObject({ code: "method_not_allowed", status: 405 });
-    expect(method.headers.allow).toBe("GET");
+    expect(method.headers.allow).toBe("GET, HEAD, PATCH");
   });
 
   it.each([

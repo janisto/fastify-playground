@@ -1,5 +1,5 @@
 import { encode as cborEncode } from "cbor2";
-import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { GitHubApiError } from "../modules/github/errors.js";
 import { CBOR_MEDIA_TYPE, negotiateProblemMediaType, PROBLEM_JSON_MEDIA_TYPE } from "../utils/content-negotiation.js";
@@ -80,20 +80,12 @@ function classifyError(error: FastifyError): PortableErrorCode {
   }
 }
 
-const PORTABLE_METHODS = new Map<string, readonly string[]>([
-  ["/health", ["GET"]],
-  ["/openapi.json", ["GET"]],
-  ["/v1/hello", ["GET", "POST"]],
-  ["/v1/items", ["GET"]],
-  ["/v1/profile", ["GET", "POST", "PATCH", "DELETE"]],
-]);
+const RESOURCE_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] as const;
 
-function allowedMethods(path: string): readonly string[] | undefined {
-  const fixed = PORTABLE_METHODS.get(path);
-  if (fixed) return fixed;
-  if (/^\/v1\/github\/owners\/[^/]+(?:\/repos)?$/.test(path)) return ["GET"];
-  if (/^\/v1\/github\/repos\/[^/]+\/[^/]+(?:\/(?:activity|languages|tags))?$/.test(path)) return ["GET"];
-  return undefined;
+function allowedMethods(fastify: FastifyInstance, path: string): readonly string[] | undefined {
+  const methods = RESOURCE_METHODS.filter((method) => fastify.findRoute({ method, url: path }) !== null);
+  if (methods.length === 0) return undefined;
+  return fastify.findRoute({ method: "OPTIONS", url: path }) === null ? methods : [...methods, "OPTIONS"];
 }
 
 export default fp(
@@ -117,7 +109,7 @@ export default fp(
 
     fastify.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
       const path = (request.raw.url ?? "").split("?", 1)[0] ?? "";
-      const methods = allowedMethods(path);
+      const methods = allowedMethods(fastify, path);
       if (methods && !methods.includes(request.method)) {
         reply.header("Allow", methods.join(", "));
         sendProblemDetails(request, reply, "method_not_allowed");

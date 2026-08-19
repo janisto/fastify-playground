@@ -8,7 +8,7 @@ const OptionalDisplayString = Type.Optional(Type.Union([Type.String(), Type.Null
 const DateTimeString = Type.String({
   format: "date-time",
   pattern:
-    "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$",
+    "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{3})?Z$",
 });
 const UriString = Type.String({ format: "uri", pattern: "^https?://" });
 

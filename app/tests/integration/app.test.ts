@@ -89,6 +89,31 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
+  it("derives truthful 405 responses from every registered application route", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+    const cases = [
+      ["POST", "/status", "GET, OPTIONS"],
+      ["POST", "/v1/auth/me", "GET, OPTIONS"],
+      ["PUT", "/v1/profile", "GET, POST, PATCH, DELETE, OPTIONS"],
+      ["POST", "/schemas/Profile.json", "GET, OPTIONS"],
+    ] as const;
+
+    const responses = await Promise.all(
+      cases.map(async ([method, url, allow]) => ({ allow, response: await fastify.inject({ method, url }) })),
+    );
+    for (const { allow, response } of responses) {
+      expect(response.statusCode).toBe(405);
+      expect(response.headers.allow).toBe(allow);
+      expect(response.json()).toMatchObject({ status: 405, code: "method_not_allowed" });
+    }
+    const missing = await fastify.inject({ method: "GET", url: "/not-registered" });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.headers.allow).toBeUndefined();
+    expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
+    await fastify.close();
+  });
+
   it("preserves modeled lifecycle responses while a real listener drains", async () => {
     const { buildApp } = await import("../../src/app.js");
     const { shutdown } = await import("../../src/server.js");
@@ -709,13 +734,15 @@ describe("App Integration", () => {
     expect(Object.keys(getHello.responses["406"].content)).toEqual(["application/problem+json", "application/cbor"]);
     expect(getHello.responses["200"].headers).toHaveProperty("Vary");
     expect(getHello.responses["200"].headers).toHaveProperty("X-Request-ID");
-    expect(getHello.responses["200"].headers).not.toHaveProperty("Link");
+    expect(getHello.responses["200"].headers).toHaveProperty("Link");
+    expect(getHello.responses["406"].headers).toHaveProperty("Link");
     expect(getHello.security).toEqual([]);
     expect(Object.keys(postHello.requestBody.content)).toEqual(["application/json", "application/cbor"]);
     expect(postHello.operationId).toBe("createHello");
     expect(createProfile.security).toEqual([{ bearerAuth: [] }]);
     expect(createProfile.responses["201"].headers).toHaveProperty("Location");
     expect(createProfile.responses["401"].headers).toHaveProperty("WWW-Authenticate");
+    expect(createProfile.responses["503"].headers).not.toHaveProperty("Retry-After");
     expect(createProfile.requestBody.required).toBe(true);
     expect(createProfile.requestBody.content["application/json"].schema).toMatchObject({
       type: "object",
@@ -783,12 +810,26 @@ describe("App Integration", () => {
           schema: expect.objectContaining({ maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
         }),
       );
-      for (const projectedResponse of Object.values(operation.responses) as Array<Record<string, unknown>>) {
+      for (const [status, projectedResponse] of Object.entries(operation.responses) as Array<
+        [string, Record<string, unknown>]
+      >) {
         expect(Object.keys(projectedResponse["headers"] as Record<string, unknown>)).toEqual(
           expect.arrayContaining(requiredHeaders),
         );
+        if (status === "204") {
+          expect(projectedResponse["headers"]).not.toHaveProperty("Link");
+        } else {
+          expect(projectedResponse["headers"]).toHaveProperty("Link");
+        }
       }
     }
+
+    const readinessUnavailable = document.paths["/status"].get.responses["503"];
+    expect(readinessUnavailable.headers["Retry-After"].schema).toEqual({
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    });
 
     const quota = document.paths["/v1/github/owners/{owner}"].get.responses["429"];
     expect(quota.headers["Retry-After"].schema).toEqual({

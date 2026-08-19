@@ -40,13 +40,21 @@ const COMMON_RESPONSE_HEADERS: Record<string, OpenAPIV3_1.HeaderObject> = {
   },
 };
 
+const RETRY_AFTER_HEADER: OpenAPIV3_1.HeaderObject = {
+  description: "Delay in seconds before retrying the request.",
+  schema: { type: "integer", minimum: 0, maximum: 9_007_199_254_740_991 },
+};
+
 function alignResponseHeaders(status: string, response: OpenAPIV3_1.ResponseObject): void {
   response.headers = { ...COMMON_RESPONSE_HEADERS, ...response.headers };
-  if (status === "429") {
-    response.headers["Retry-After"] = {
-      description: "Delay in seconds before retrying the request.",
-      schema: { type: "integer", minimum: 0, maximum: 9_007_199_254_740_991 },
+  if (status !== "204") {
+    response.headers["Link"] = {
+      description: 'RFC 8288 link to the response schema using rel="describedby".',
+      schema: { type: "string" },
     };
+  }
+  if (status === "429") {
+    response.headers["Retry-After"] = RETRY_AFTER_HEADER;
   }
 }
 
@@ -146,7 +154,10 @@ function alignOperation(operation: OpenAPIV3_1.OperationObject): void {
   if (operation.operationId && PAGINATED_OPERATION_IDS.has(operation.operationId) && success && !("$ref" in success)) {
     success.headers = {
       ...success.headers,
-      Link: { description: "Optional RFC 8288 next and previous navigation.", schema: { type: "string" } },
+      Link: {
+        description: "RFC 8288 describedby link plus optional next and previous navigation.",
+        schema: { type: "string" },
+      },
     };
   }
   const created = operation.responses?.["201"];
@@ -175,6 +186,10 @@ function alignOperation(operation: OpenAPIV3_1.OperationObject): void {
         schema: { type: "integer", minimum: 0, maximum: 9_007_199_254_740_991 },
       },
     };
+  }
+  const unavailable = operation.responses?.["503"];
+  if (operation.operationId === "getReadiness" && unavailable && !("$ref" in unavailable)) {
+    unavailable.headers = { ...unavailable.headers, "Retry-After": RETRY_AFTER_HEADER };
   }
   const empty = operation.responses?.["204"];
   if (empty && !("$ref" in empty)) delete empty.content;

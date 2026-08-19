@@ -134,6 +134,47 @@ describe("GitHubClient", () => {
     await new GitHubClient({ dispatcher: agent, token: "smoke-token" }).getOwner("octocat");
   });
 
+  it("normalizes whole-second provider timestamps to canonical public milliseconds", async () => {
+    pool
+      .intercept({ path: "/users/octocat", method: "GET" })
+      .reply(
+        200,
+        { ...OWNER, created_at: "2011-01-25T18:44:36Z", updated_at: "2024-01-01T00:00:00Z" },
+        { headers: JSON_HEADERS },
+      );
+    pool.intercept({ path: "/repos/octocat/repo", method: "GET" }).reply(
+      200,
+      {
+        ...DETAIL,
+        created_at: "2024-01-01T00:00:00Z",
+        updated_at: "2024-01-02T00:00:00Z",
+        pushed_at: "2024-01-03T00:00:00Z",
+      },
+      { headers: JSON_HEADERS },
+    );
+    pool
+      .intercept({ path: /\/repos\/octocat\/repo\/activity/, method: "GET" })
+      .reply(200, [{ ...ACTIVITY, timestamp: "2024-01-03T00:00:00Z" }], { headers: JSON_HEADERS });
+    const client = new GitHubClient({ dispatcher: agent });
+
+    const [owner, repo, activity] = await Promise.all([
+      client.getOwner("octocat"),
+      client.getRepo("octocat", "repo"),
+      client.listRepoActivity("octocat", "repo"),
+    ]);
+
+    expect(owner).toMatchObject({
+      createdAt: "2011-01-25T18:44:36.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    });
+    expect(repo).toMatchObject({
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-02T00:00:00.000Z",
+      pushedAt: "2024-01-03T00:00:00.000Z",
+    });
+    expect(activity.activities).toEqual([expect.objectContaining({ timestamp: "2024-01-03T00:00:00.000Z" })]);
+  });
+
   it("follows a same-origin numeric resource redirect without changing the query", async () => {
     pool.intercept({ path: "/users/octocat", method: "GET" }).reply(301, "", {
       headers: { location: "/user/1" },
@@ -278,7 +319,7 @@ describe("GitHubClient", () => {
     { ...DETAIL, private: true },
     { ...DETAIL, visibility: "private" },
     { ...DETAIL, topics: ["duplicate", "duplicate"] },
-    { ...DETAIL, pushed_at: "2024-01-01T00:00:00Z" },
+    { ...DETAIL, pushed_at: "2024-01-01T00:00:00.0001Z" },
   ])("rejects a private or inconsistent repository detail", async (payload) => {
     pool.intercept({ path: "/repos/octocat/repo", method: "GET" }).reply(200, payload, { headers: JSON_HEADERS });
     await expect(new GitHubClient({ dispatcher: agent }).getRepo("octocat", "repo")).rejects.toMatchObject({
@@ -509,16 +550,11 @@ describe("GitHubClient", () => {
     await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).resolves.toMatchObject({ id: 1 });
   });
 
-  it("rejects unsafe integer and timestamp projection values", async () => {
-    pool.intercept({ path: "/users/octocat", method: "GET" }).reply(
-      200,
-      {
-        ...OWNER,
-        id: Number.MAX_SAFE_INTEGER + 1,
-        created_at: "2024-01-01T00:00:00Z",
-      },
-      { headers: JSON_HEADERS },
-    );
+  it.each([
+    { ...OWNER, id: Number.MAX_SAFE_INTEGER + 1 },
+    { ...OWNER, created_at: "2024-01-01T00:00:00.0001Z" },
+  ])("rejects an unsafe integer or non-millisecond timestamp", async (payload) => {
+    pool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, payload, { headers: JSON_HEADERS });
     await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).rejects.toMatchObject({
       code: GITHUB_ERROR_UPSTREAM,
     });

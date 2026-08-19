@@ -226,6 +226,25 @@ describe("GitHub routes", () => {
     await fastify.close();
   });
 
+  it("GET /repos/:owner/:repo/activity links the second page to the cursorless first page", async () => {
+    vi.spyOn(githubService.GitHubService.prototype, "listRepoActivity").mockResolvedValueOnce({
+      items: [],
+      prevCursor: null,
+    });
+    const fastify = Fastify();
+    const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
+    fastify.register(githubRoutes);
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/repos/octocat/repo/activity?cursor=second-page&limit=20",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers.link).toBe('</v1/github/repos/octocat/repo/activity?limit=20>; rel="prev"');
+    await fastify.close();
+  });
+
   it("GET /repos/:owner/:repo/languages returns languages", async () => {
     const spy = vi.spyOn(githubService.GitHubService.prototype, "listRepoLanguages");
     spy.mockResolvedValueOnce({

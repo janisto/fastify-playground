@@ -62,7 +62,8 @@ function applyUpdate(profile: Profile, input: ProfileUpdate, now: string): Profi
   return { ...profile, ...input, updatedAt: nextUpdatedAt(profile.updatedAt, now) };
 }
 
-function dependencyError(error: unknown): PortableError {
+function dependencyError(error: unknown, signal?: AbortSignal): PortableError {
+  signal?.throwIfAborted();
   if (error instanceof PortableError) return error;
   return new PortableError("dependency_unavailable", { cause: error });
 }
@@ -79,7 +80,9 @@ export class FirestoreProfileRepository implements ProfileRepository {
       signal?.throwIfAborted();
       const reference = this.firestore.collection(PROFILE_COLLECTION).doc(profileDocumentId(id));
       const result = await this.firestore.runTransaction(async (transaction) => {
+        signal?.throwIfAborted();
         const snapshot = await transaction.get(reference);
+        signal?.throwIfAborted();
         if (snapshot.exists) return null;
         const profile: Profile = {
           id,
@@ -94,7 +97,7 @@ export class FirestoreProfileRepository implements ProfileRepository {
       signal?.throwIfAborted();
       return result;
     } catch (error) {
-      throw dependencyError(error);
+      throw dependencyError(error, signal);
     }
   }
 
@@ -105,7 +108,7 @@ export class FirestoreProfileRepository implements ProfileRepository {
       signal?.throwIfAborted();
       return snapshot.exists ? decodeProfile(snapshot.data(), id) : null;
     } catch (error) {
-      throw dependencyError(error);
+      throw dependencyError(error, signal);
     }
   }
 
@@ -114,7 +117,9 @@ export class FirestoreProfileRepository implements ProfileRepository {
       signal?.throwIfAborted();
       const reference = this.firestore.collection(PROFILE_COLLECTION).doc(profileDocumentId(id));
       const result = await this.firestore.runTransaction(async (transaction) => {
+        signal?.throwIfAborted();
         const snapshot = await transaction.get(reference);
+        signal?.throwIfAborted();
         if (!snapshot.exists) return null;
         const profile = decodeProfile(snapshot.data(), id);
         const updated = applyUpdate(profile, input, now);
@@ -125,7 +130,7 @@ export class FirestoreProfileRepository implements ProfileRepository {
       signal?.throwIfAborted();
       return result;
     } catch (error) {
-      throw dependencyError(error);
+      throw dependencyError(error, signal);
     }
   }
 
@@ -134,7 +139,9 @@ export class FirestoreProfileRepository implements ProfileRepository {
       signal?.throwIfAborted();
       const reference = this.firestore.collection(PROFILE_COLLECTION).doc(profileDocumentId(id));
       const result = await this.firestore.runTransaction(async (transaction) => {
+        signal?.throwIfAborted();
         const snapshot = await transaction.get(reference);
+        signal?.throwIfAborted();
         if (!snapshot.exists) return false;
         transaction.delete(reference);
         return true;
@@ -142,7 +149,7 @@ export class FirestoreProfileRepository implements ProfileRepository {
       signal?.throwIfAborted();
       return result;
     } catch (error) {
-      throw dependencyError(error);
+      throw dependencyError(error, signal);
     }
   }
 }

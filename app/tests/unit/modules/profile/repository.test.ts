@@ -47,6 +47,33 @@ function firestoreDouble() {
   return { firestore, doc, records, writes: () => writes };
 }
 
+function controlledTransactionDouble(exists: boolean) {
+  const readStarted = Promise.withResolvers<void>();
+  const releaseRead = Promise.withResolvers<void>();
+  const stored = {
+    id: "principal",
+    ...INPUT,
+    marketingOptIn: false,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+  const transaction = {
+    get: vi.fn(async () => {
+      readStarted.resolve();
+      await releaseRead.promise;
+      return { exists, data: () => stored };
+    }),
+    create: vi.fn(),
+    set: vi.fn(),
+    delete: vi.fn(),
+  };
+  const firestore = {
+    collection: vi.fn(() => ({ doc: vi.fn(() => ({})) })),
+    runTransaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => callback(transaction)),
+  } as unknown as Firestore;
+  return { firestore, readStarted, releaseRead, transaction };
+}
+
 describe("FirestoreProfileRepository", () => {
   it("uses an injective hardened key and conditionally creates without overwriting", async () => {
     const fixture = firestoreDouble();
@@ -120,5 +147,59 @@ describe("FirestoreProfileRepository", () => {
     });
     await expect(repository.get("principal")).resolves.toBeNull();
     expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["create", "update", "delete"] as const)(
+    "preserves cancellation and queues no %s write when the transaction read completes after abort",
+    async (operation) => {
+      const fixture = controlledTransactionDouble(operation !== "create");
+      const repository = new FirestoreProfileRepository(fixture.firestore);
+      const controller = new AbortController();
+      const cancellation = new Error("request canceled");
+      const pending =
+        operation === "create"
+          ? repository.create("principal", INPUT, NOW, controller.signal)
+          : operation === "update"
+            ? repository.update("principal", { firstName: "Grace" }, NOW, controller.signal)
+            : repository.delete("principal", controller.signal);
+
+      await fixture.readStarted.promise;
+      controller.abort(cancellation);
+      fixture.releaseRead.resolve();
+
+      await expect(pending).rejects.toBe(cancellation);
+      expect(fixture.transaction.create).not.toHaveBeenCalled();
+      expect(fixture.transaction.set).not.toHaveBeenCalled();
+      expect(fixture.transaction.delete).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not start a delayed transaction attempt after cancellation", async () => {
+    const attemptScheduled = Promise.withResolvers<void>();
+    const startAttempt = Promise.withResolvers<void>();
+    const transaction = {
+      get: vi.fn(async () => ({ exists: false })),
+      create: vi.fn(),
+    };
+    const firestore = {
+      collection: vi.fn(() => ({ doc: vi.fn(() => ({})) })),
+      runTransaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => {
+        attemptScheduled.resolve();
+        await startAttempt.promise;
+        return callback(transaction);
+      }),
+    } as unknown as Firestore;
+    const repository = new FirestoreProfileRepository(firestore);
+    const controller = new AbortController();
+    const cancellation = new Error("request canceled before retry");
+    const pending = repository.create("principal", INPUT, NOW, controller.signal);
+
+    await attemptScheduled.promise;
+    controller.abort(cancellation);
+    startAttempt.resolve();
+
+    await expect(pending).rejects.toBe(cancellation);
+    expect(transaction.get).not.toHaveBeenCalled();
+    expect(transaction.create).not.toHaveBeenCalled();
   });
 });

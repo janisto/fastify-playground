@@ -179,6 +179,10 @@ function hasUndiciErrorCode(error: unknown): boolean {
   );
 }
 
+function canonicalGitHubTimestamp(value: string): string {
+  return value.includes(".") ? value : `${value.slice(0, -1)}.000Z`;
+}
+
 function scalarCompare(left: string, right: string): number {
   const leftScalars = Array.from(left, (value) => value.codePointAt(0) ?? 0);
   const rightScalars = Array.from(right, (value) => value.codePointAt(0) ?? 0);
@@ -714,8 +718,8 @@ export class GitHubClient {
       publicRepos: raw.public_repos,
       followers: raw.followers,
       following: raw.following,
-      createdAt: raw.created_at,
-      updatedAt: raw.updated_at,
+      createdAt: canonicalGitHubTimestamp(raw.created_at),
+      updatedAt: canonicalGitHubTimestamp(raw.updated_at),
     };
   }
 
@@ -739,9 +743,9 @@ export class GitHubClient {
       forksCount: raw.forks_count,
       openIssuesCount: raw.open_issues_count,
       archived: raw.archived,
-      createdAt: raw.created_at,
-      updatedAt: raw.updated_at,
-      pushedAt: raw.pushed_at,
+      createdAt: canonicalGitHubTimestamp(raw.created_at),
+      updatedAt: canonicalGitHubTimestamp(raw.updated_at),
+      pushedAt: raw.pushed_at === null ? null : canonicalGitHubTimestamp(raw.pushed_at),
       defaultBranch: raw.default_branch,
       license: !license || license === "NOASSERTION" ? null : license,
       topics: (raw.topics ?? []).toSorted(scalarCompare),
@@ -755,7 +759,7 @@ export class GitHubClient {
       actor: raw.actor?.login ?? null,
       actorAvatarUrl: raw.actor?.avatar_url ?? null,
       ref: raw.ref,
-      timestamp: raw.timestamp,
+      timestamp: canonicalGitHubTimestamp(raw.timestamp),
       activityType: raw.activity_type,
     };
   }
