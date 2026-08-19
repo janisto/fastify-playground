@@ -14,8 +14,10 @@ const itemsRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     "/",
     {
+      prefixTrailingSlash: "no-slash",
       schema: {
         operationId: "listItems",
+        security: [],
         description: "Returns a paginated list of items",
         summary: "List items",
         tags: ["Items"],
@@ -27,7 +29,6 @@ const itemsRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           500: ErrorModelSchema,
-          503: ErrorModelSchema,
         },
       },
     },

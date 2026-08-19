@@ -22,8 +22,8 @@ overrides:
 
 auditConfig:
   ignoreGhsas:
-    # Reached only through Firebase Admin's unused Firestore toolchain. Its
-    # minimatch dependency cannot accept the patched brace-expansion major.
+    # Reached through rimraf/glob packages that the Firebase Admin Firestore
+    # runtime chain does not import. Minimatch 9 cannot accept the patched major.
     - GHSA-mh99-v99m-4gvg
 
 allowBuilds:

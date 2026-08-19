@@ -1,4 +1,5 @@
 import { Type } from "@fastify/type-provider-typebox";
+import { BoundedNameSchema } from "../../schemas/portable.js";
 
 export const HelloResponseSchema = Type.Object(
   {
@@ -6,13 +7,14 @@ export const HelloResponseSchema = Type.Object(
   },
   {
     $id: "HelloResponse",
+    additionalProperties: false,
     description: "Successful response with greeting message",
   },
 );
 
 export const HelloInputSchema = Type.Object(
   {
-    name: Type.String({ minLength: 1, maxLength: 100, description: "Name to greet" }),
+    name: BoundedNameSchema,
   },
   { additionalProperties: false },
 );

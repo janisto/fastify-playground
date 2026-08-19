@@ -9,11 +9,20 @@ export class GitHubApiError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
   public readonly retryAfter: string | undefined;
+  public readonly rateLimitReset: string | undefined;
 
-  constructor(message: string, statusCode: number, code: string, retryAfter?: string, options?: ErrorOptions) {
+  constructor(
+    message: string,
+    statusCode: number,
+    code: string,
+    retryAfter?: string,
+    options?: ErrorOptions,
+    rateLimitReset?: string,
+  ) {
     super(message, options);
     this.statusCode = statusCode;
     this.code = code;
     this.retryAfter = retryAfter;
+    this.rateLimitReset = rateLimitReset;
   }
 }

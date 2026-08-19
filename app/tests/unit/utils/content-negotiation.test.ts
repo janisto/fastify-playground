@@ -24,13 +24,24 @@ describe("content negotiation", () => {
     ["*/*;q=1, application/json;q=0", JSON_MEDIA_TYPE, false, false],
     ["application/json;profile=example", JSON_MEDIA_TYPE, false, false],
     ["application/json;charset=utf-8", JSON_MEDIA_TYPE, false, true],
-    ["application/json;charset=utf-8;q=0, application/json;q=1", JSON_MEDIA_TYPE, false, false],
+    ['application/json;charset="UTF\\-8"', JSON_MEDIA_TYPE, false, true],
+    ["application/json;charset=utf-8;q=0, application/json;q=1", JSON_MEDIA_TYPE, false, true],
     ['application/problem+json;charset="UTF-8"', PROBLEM_JSON_MEDIA_TYPE, false, true],
     ["application/json;charset=iso-8859-1", JSON_MEDIA_TYPE, false, false],
     ["application/cbor;charset=utf-8", CBOR_MEDIA_TYPE, true, false],
     ["application/json;q=1.0000", JSON_MEDIA_TYPE, false, false],
     ["application/json;q=1.001", JSON_MEDIA_TYPE, false, false],
     ["application/json;q=0.123", JSON_MEDIA_TYPE, false, true],
+    ["application/json;q=0.2, application/json;q=0.8", JSON_MEDIA_TYPE, false, true],
+    ["application/json;q=1;q=0.5", JSON_MEDIA_TYPE, false, false],
+    ["application/json;charset=utf-8;charset=UTF-8", JSON_MEDIA_TYPE, false, false],
+    ["application/json;;q=1", JSON_MEDIA_TYPE, false, false],
+    ["application/json;q=1;note=portable", JSON_MEDIA_TYPE, false, true],
+    ['application/json;q=1;note="a,b;c"', JSON_MEDIA_TYPE, false, true],
+    ["application/json;broken", JSON_MEDIA_TYPE, false, false],
+    [",application/json", JSON_MEDIA_TYPE, false, true],
+    ["json", JSON_MEDIA_TYPE, false, false],
+    ["application/json/extra", JSON_MEDIA_TYPE, false, false],
   ])("evaluates %s for %s", (accept, mediaType, explicitOnly, expected) => {
     expect(acceptsMediaType(accept, mediaType, explicitOnly)).toBe(expected);
   });
@@ -41,10 +52,12 @@ describe("content negotiation", () => {
     ["application/cbor", CBOR_MEDIA_TYPE],
     ["application/json, application/cbor", JSON_MEDIA_TYPE],
     ["application/json;q=0.4, application/cbor;q=0.8", CBOR_MEDIA_TYPE],
+    ['application/cbor;q=1;note="unterminated, application/json', JSON_MEDIA_TYPE],
     ["*/*;q=1, application/json;q=0", null],
     ["application/cbor;q=0", null],
-    ["application/json; charset=utf-8", JSON_MEDIA_TYPE],
-    ["application/json;charset=utf-8;q=0, application/json;q=1", null],
+    ["application/json; charset=utf-8", "application/json; charset=utf-8"],
+    ["application/json;charset=utf-8;q=0, application/json;q=1", JSON_MEDIA_TYPE],
+    ["application/json;q=0, application/json;charset=utf-8;q=1", "application/json; charset=utf-8"],
     ["text/html", null],
     ["application/json;q=.5, application/cbor;q=2", null],
   ])("negotiates API media type for %s", (accept, expected) => {
@@ -57,14 +70,29 @@ describe("content negotiation", () => {
     );
   });
 
+  it("returns null when the server has no available representation", () => {
+    expect(negotiateMediaType("*/*", [])).toBeNull();
+  });
+
+  it("can disable CBOR independently of the incoming range", () => {
+    expect(negotiateApiMediaType("application/cbor", false)).toBeNull();
+    expect(negotiateApiMediaType("application/json", false)).toBe(JSON_MEDIA_TYPE);
+  });
+
   it.each([
     ["", PROBLEM_JSON_MEDIA_TYPE],
     ["application/cbor", CBOR_MEDIA_TYPE],
     ["application/cbor;q=0", PROBLEM_JSON_MEDIA_TYPE],
-    ["application/json;q=0.8, application/cbor;q=0.4", PROBLEM_JSON_MEDIA_TYPE],
+    ["application/json;q=0.8, application/cbor;q=0.4", CBOR_MEDIA_TYPE],
     ["application/problem+json;q=0, application/cbor;q=0.5", CBOR_MEDIA_TYPE],
     ["application/problem+cbor", PROBLEM_JSON_MEDIA_TYPE],
     ["text/html", PROBLEM_JSON_MEDIA_TYPE],
+    ["application/*", PROBLEM_JSON_MEDIA_TYPE],
+    ["application/problem+json;charset=utf-8;q=0, application/problem+json;q=1", PROBLEM_JSON_MEDIA_TYPE],
+    [
+      "application/problem+json;q=0, application/problem+json;charset=utf-8;q=1",
+      "application/problem+json; charset=utf-8",
+    ],
   ])("negotiates problem media type for %s", (accept, expected) => {
     expect(negotiateProblemMediaType(accept)).toBe(expected);
   });

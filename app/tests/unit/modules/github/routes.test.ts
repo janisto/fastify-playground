@@ -28,8 +28,8 @@ describe("GitHub routes", () => {
       publicRepos: 8,
       followers: 1000,
       following: 0,
-      createdAt: "2011-01-25T18:44:36Z",
-      updatedAt: "2024-01-01T00:00:00Z",
+      createdAt: "2011-01-25T18:44:36.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
     });
 
     const fastify = Fastify();
@@ -65,8 +65,8 @@ describe("GitHub routes", () => {
       publicRepos: 0,
       followers: 0,
       following: 0,
-      createdAt: "2024-01-01T00:00:00Z",
-      updatedAt: "2024-01-01T00:00:00Z",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
     });
 
     const fastify = Fastify();
@@ -91,16 +91,7 @@ describe("GitHub routes", () => {
           fullName: "octocat/Hello-World",
           description: "My first repository",
           htmlUrl: "https://github.com/octocat/Hello-World",
-          language: "JavaScript",
-          stargazersCount: 100,
-          forksCount: 50,
-          openIssuesCount: 5,
-          visibility: "public",
           fork: false,
-          archived: false,
-          createdAt: "2011-01-25T18:44:36Z",
-          updatedAt: "2024-01-01T00:00:00Z",
-          pushedAt: "2024-01-01T00:00:00Z",
         },
       ],
       nextCursor: "repos-page-2",
@@ -139,12 +130,11 @@ describe("GitHub routes", () => {
       stargazersCount: 100,
       forksCount: 50,
       openIssuesCount: 5,
-      visibility: "public",
       fork: false,
       archived: false,
-      createdAt: "2011-01-25T18:44:36Z",
-      updatedAt: "2024-01-01T00:00:00Z",
-      pushedAt: "2024-01-01T00:00:00Z",
+      createdAt: "2011-01-25T18:44:36.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+      pushedAt: "2024-01-01T00:00:00.000Z",
       defaultBranch: "main",
       license: "MIT",
       topics: ["javascript"],
@@ -191,15 +181,15 @@ describe("GitHub routes", () => {
 
     const response = await fastify.inject({
       method: "GET",
-      url: "/repos/managed%20account/repo%23name/activity",
+      url: "/repos/managed_account/repo-name/activity",
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ activities: [{ actor: "user" }], count: 1 });
     expect(response.headers.link).toBe(
-      '</v1/github/repos/managed%20account/repo%23name/activity?cursor=abc123&limit=20>; rel="next", </v1/github/repos/managed%20account/repo%23name/activity?cursor=previous123&limit=20>; rel="prev"',
+      '</v1/github/repos/managed_account/repo-name/activity?cursor=abc123&limit=20>; rel="next", </v1/github/repos/managed_account/repo-name/activity?cursor=previous123&limit=20>; rel="prev"',
     );
-    expect(spy).toHaveBeenCalledWith("managed account", "repo#name", { limit: 20 }, expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("managed_account", "repo-name", { limit: 20 }, expect.any(AbortSignal));
 
     await fastify.close();
   });
@@ -233,6 +223,25 @@ describe("GitHub routes", () => {
     expect(response.json()).toMatchObject({ activities: [{ actor: "user" }], count: 1 });
     expect(response.headers.link).toBeUndefined();
 
+    await fastify.close();
+  });
+
+  it("GET /repos/:owner/:repo/activity links the second page to the cursorless first page", async () => {
+    vi.spyOn(githubService.GitHubService.prototype, "listRepoActivity").mockResolvedValueOnce({
+      items: [],
+      prevCursor: null,
+    });
+    const fastify = Fastify();
+    const { default: githubRoutes } = await import("../../../../src/modules/github/routes.js");
+    fastify.register(githubRoutes);
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/repos/octocat/repo/activity?cursor=second-page&limit=20",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers.link).toBe('</v1/github/repos/octocat/repo/activity?limit=20>; rel="prev"');
     await fastify.close();
   });
 

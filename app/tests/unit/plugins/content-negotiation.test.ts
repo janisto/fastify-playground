@@ -81,6 +81,76 @@ describe("Content negotiation plugin", () => {
     await fastify.close();
   });
 
+  it("combines repeated Accept fields before selecting the preferred representation", async () => {
+    const fastify = await buildServer();
+    fastify.get(
+      "/test",
+      {
+        schema: {
+          produces: API_MEDIA_TYPES,
+          response: { 200: { type: "object", properties: { message: { type: "string" } } } },
+        },
+      },
+      async () => ({ message: "hello" }),
+    );
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/test",
+      headers: { accept: ["application/json;q=0", "application/cbor;q=1"] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/cbor");
+    expect(cborDecode(new Uint8Array(response.rawPayload))).toEqual({ message: "hello" });
+    await fastify.close();
+  });
+
+  it("ignores a malformed range when a later valid Accept range remains", async () => {
+    const fastify = await buildServer();
+    const handler = vi.fn(async () => ({ message: "hello" }));
+    fastify.get(
+      "/test",
+      {
+        schema: {
+          produces: API_MEDIA_TYPES,
+          response: { 200: { type: "object", properties: { message: { type: "string" } } } },
+        },
+      },
+      handler,
+    );
+
+    const response = await fastify.inject({
+      method: "GET",
+      url: "/test",
+      headers: { accept: 'application/cbor;q=1;note="unterminated, application/json' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/json");
+    expect(response.json()).toEqual({ message: "hello" });
+    expect(handler).toHaveBeenCalledOnce();
+    await fastify.close();
+  });
+
+  it.each([
+    ["application/json;charset=utf-8;q=0, application/json;q=1", "application/json"],
+    ["application/json;q=0, application/json;charset=utf-8;q=1", "application/json; charset=utf-8"],
+  ])("emits the exact selected JSON form for %s", async (accept, expected) => {
+    const fastify = await buildServer();
+    fastify.get(
+      "/test",
+      { schema: { produces: API_MEDIA_TYPES, response: { 200: { type: "object" } } } },
+      async () => ({}),
+    );
+
+    const response = await fastify.inject({ method: "GET", url: "/test", headers: { accept } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe(expected);
+    await fastify.close();
+  });
+
   it("returns 406 before parsing the body or calling the handler", async () => {
     const fastify = await buildServer();
     const handler = vi.fn(async () => ({ message: "created" }));

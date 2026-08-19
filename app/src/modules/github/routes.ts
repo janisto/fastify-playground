@@ -40,6 +40,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "getGitHubOwner",
+        security: [],
         description: "Returns public profile information for a GitHub user.",
         summary: "Get a GitHub user",
         tags: ["GitHub"],
@@ -47,13 +48,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         params: OwnerParamsSchema,
         response: {
           200: GitHubOwnerSchema,
-          403: ErrorModelSchema,
+          400: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           429: ErrorModelSchema,
+          500: ErrorModelSchema,
           502: ErrorModelSchema,
-          503: ErrorModelSchema,
           504: ErrorModelSchema,
         },
       },
@@ -69,6 +70,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "listGitHubOwnerRepositories",
+        security: [],
         description:
           "Returns a paginated list of public repositories for a GitHub user. Follow the cursor in the Link header.",
         summary: "List user repositories",
@@ -79,13 +81,12 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         response: {
           200: GitHubOwnerReposResponseSchema,
           400: ErrorModelSchema,
-          403: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           429: ErrorModelSchema,
+          500: ErrorModelSchema,
           502: ErrorModelSchema,
-          503: ErrorModelSchema,
           504: ErrorModelSchema,
         },
       },
@@ -111,6 +112,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "getGitHubRepository",
+        security: [],
         description: "Returns detailed information for a GitHub repository.",
         summary: "Get a repository",
         tags: ["GitHub"],
@@ -118,13 +120,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         params: RepoParamsSchema,
         response: {
           200: GitHubRepoDetailSchema,
-          403: ErrorModelSchema,
+          400: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           429: ErrorModelSchema,
+          500: ErrorModelSchema,
           502: ErrorModelSchema,
-          503: ErrorModelSchema,
           504: ErrorModelSchema,
         },
       },
@@ -140,6 +142,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "listGitHubRepositoryActivity",
+        security: [],
         description:
           "Returns a paginated list of repository activities. Use the cursor from the Link header to navigate.",
         summary: "List repository activity",
@@ -150,13 +153,12 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         response: {
           200: GitHubActivityListResponseSchema,
           400: ErrorModelSchema,
-          403: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           429: ErrorModelSchema,
+          500: ErrorModelSchema,
           502: ErrorModelSchema,
-          503: ErrorModelSchema,
           504: ErrorModelSchema,
         },
       },
@@ -197,6 +199,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "listGitHubRepositoryLanguages",
+        security: [],
         description: "Returns the languages used in a repository with byte counts.",
         summary: "List repository languages",
         tags: ["GitHub"],
@@ -204,13 +207,13 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         params: RepoParamsSchema,
         response: {
           200: GitHubLanguagesResponseSchema,
-          403: ErrorModelSchema,
+          400: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           429: ErrorModelSchema,
+          500: ErrorModelSchema,
           502: ErrorModelSchema,
-          503: ErrorModelSchema,
           504: ErrorModelSchema,
         },
       },
@@ -226,6 +229,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         operationId: "listGitHubRepositoryTags",
+        security: [],
         description: "Returns a paginated list of tags for a repository. Follow the cursor in the Link header.",
         summary: "List repository tags",
         tags: ["GitHub"],
@@ -235,13 +239,12 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         response: {
           200: GitHubTagsResponseSchema,
           400: ErrorModelSchema,
-          403: ErrorModelSchema,
           404: ErrorModelSchema,
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           429: ErrorModelSchema,
+          500: ErrorModelSchema,
           502: ErrorModelSchema,
-          503: ErrorModelSchema,
           504: ErrorModelSchema,
         },
       },

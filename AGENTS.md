@@ -95,7 +95,8 @@ just container-build
 - JSON API fields use camelCase.
 - Declare implemented request and response formats with route `schema.consumes` and `schema.produces`; runtime negotiation and generated OpenAPI both depend on this metadata.
 - Successful modeled responses use strict RFC 9110 negotiation. JSON is the default and tie preference; CBOR requires an explicit positive-quality `application/cbor` range; unsupported `Accept` values return 406 before parsing or handler execution. Do not gate 204 or 205 responses on `Accept`.
-- Request bodies accept only the media types the route owns. The shared CBOR parser handles exact `application/cbor` with optional parameters; do not claim arbitrary `+cbor` suffixes.
+- Request bodies accept only the media types the route owns. Plain JSON accepts only an optional `charset=utf-8` parameter; CBOR accepts no parameters. Do not claim arbitrary `+cbor` suffixes.
+- Portable body parsing is strict: reject invalid UTF-8 JSON, duplicate object or map keys, trailing data, transparent decompression, unknown top-level application members, and bodies above 1,000,000 octets.
 - Errors use RFC 9457 `application/problem+json` by default or the same fields encoded as `application/cbor` when explicitly preferred. Do not use the unregistered `application/problem+cbor`; RFC 9290 concise CBOR problems are a different model and are not implemented.
 - Negotiated responses include `Vary: Accept, Origin`.
 - Pagination uses canonical unpadded Base64URL cursors, a 2,048-character maximum, and RFC 8288 `Link` headers. Previous links must return the preceding page without repeating the current page; link to the first page by omitting `cursor`.
@@ -104,11 +105,11 @@ just container-build
 ## Authentication, security, and logging
 
 - Verify Firebase ID tokens with Firebase Admin SDK. Do not add application-managed JWT verification.
-- The Firebase plugin exposes Authentication only. Reuse an existing default Firebase app; otherwise initialize a uniquely named app per Fastify instance. Delete only the named app owned by that instance. Do not reintroduce Firestore without an implemented feature and a cancellable lifecycle design.
+- The Firebase plugin owns the Admin app and exposes Authentication. Reuse an existing default Firebase app; otherwise initialize a uniquely named app per Fastify instance. Delete only the named app owned by that instance. The profile module obtains Firestore lazily from that app and keeps profile writes transactional and cancellation-aware.
 - Never commit, log, or include credentials, tokens, authorization headers, cookies, or PII in fixtures.
 - Use Application Default Credentials in production and emulators or `GOOGLE_APPLICATION_CREDENTIALS` locally.
 - Validate `CORS_ORIGINS` at startup as exact HTTP(S) origins. The secure default is empty; never trust localhost implicitly, use wildcard origins with credentials, or turn a denied origin into a 5xx response.
-- Parse bearer authorization as exactly `Bearer <non-whitespace-token>` (case-insensitive scheme). Reject extra fields or alternative whitespace before calling Firebase.
+- Parse bearer authorization as case-insensitive `Bearer`, one or more ASCII spaces, and exactly one token68 credential. Reject repeated fields, extra fields, tabs, or other whitespace before calling Firebase, and always verify revocation.
 - `fastify-observability` owns the Pino instance, validated request IDs, W3C trace context, request correlation, response request-ID header, and the single terminal access record. Do not add parallel request-ID, request-context, trace-parsing, or access-log plugins.
 - Keep the canonical Fastify constructor wiring: package-created `loggerInstance`, `requestIdHeader: false`, package `genReqId`, disabled Fastify request logging, and `requestIdLogLabel: "request_id"`. Register the package once at the root before other hooks and routes with Trace Context Level 1 and native error, concrete path, peer IP, and User-Agent capture disabled.
 - Log through `fastify.log`, `request.log`, or `reply.log`, not `console`. Do not emit a second generic raw-error record from the error handler; the terminal record already captures final status and abnormal outcome. Domain diagnostics must use controlled fields and must not serialize arbitrary error causes.

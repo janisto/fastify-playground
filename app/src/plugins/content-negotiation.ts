@@ -42,7 +42,11 @@ const contentNegotiationPlugin: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.addHook("onSend", async (request, reply, payload) => {
-    if (reply.statusCode >= 400 || request.responseMediaType !== CBOR_MEDIA_TYPE || payload === null) return payload;
+    if (reply.statusCode >= 400 || request.responseMediaType === null || payload === null) return payload;
+    if (request.responseMediaType !== CBOR_MEDIA_TYPE) {
+      reply.header("Content-Type", request.responseMediaType);
+      return payload;
+    }
     if (typeof payload !== "string" || payload.length === 0) return payload;
 
     reply.type(CBOR_MEDIA_TYPE);

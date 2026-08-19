@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import type { DecodedIdToken } from "firebase-admin/auth";
+import { isOpaqueId } from "../schemas/portable.js";
+import { PortableError } from "../utils/portable-error.js";
 
 /**
  * Options for the Firebase Authentication plugin.
@@ -11,7 +13,7 @@ export interface AuthPluginOptions {
    * When true, adds an extra database lookup to verify the token hasn't been revoked.
    * Use this for high-security routes where immediate session invalidation is required.
    *
-   * @default false
+   * @default true
    * @see https://firebase.google.com/docs/auth/admin/manage-sessions
    */
   checkRevoked?: boolean;
@@ -25,20 +27,23 @@ const INVALID_IDENTITY_CODES = new Set([
   "auth/user-disabled",
   "auth/user-not-found",
 ]);
-const BEARER_CHALLENGE = 'Bearer realm="fastify-playground"';
+const BEARER_CHALLENGE = "Bearer";
+const TOKEN68_PATTERN = /^[A-Za-z0-9._~+/-]+=*$/;
 
-function setBearerChallenge(reply: FastifyReply, error?: "invalid_request" | "invalid_token"): void {
-  reply.header("WWW-Authenticate", error ? `${BEARER_CHALLENGE}, error="${error}"` : BEARER_CHALLENGE);
+function setBearerChallenge(reply: FastifyReply): void {
+  reply.header("WWW-Authenticate", BEARER_CHALLENGE);
 }
 
-class AuthenticationServiceError extends Error {
-  public override readonly name = "AuthenticationServiceError";
-  public readonly code = "AUTH_SERVICE_UNAVAILABLE";
-  public readonly statusCode = 503;
-
-  constructor(options: ErrorOptions) {
-    super("Authentication service is unavailable", options);
+function rawAuthorizationValues(request: FastifyRequest): string[] {
+  const values: string[] = [];
+  const headers = request.raw.rawHeaders;
+  for (let index = 0; index + 1 < headers.length; index += 2) {
+    if (headers.at(index)?.toLowerCase() === "authorization") {
+      const value = headers.at(index + 1);
+      if (value !== undefined) values.push(value);
+    }
   }
+  return values;
 }
 
 declare module "fastify" {
@@ -81,44 +86,44 @@ declare module "fastify" {
  */
 export default fp<AuthPluginOptions>(
   async (fastify, options) => {
-    const { checkRevoked = false } = options;
+    const { checkRevoked = true } = options;
 
     // Decorate request with user placeholder
     fastify.decorateRequest("user", null);
 
     // Authentication preHandler
     const authenticate = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-      const authHeader = request.headers.authorization;
-
-      if (!authHeader) {
+      const authorizationValues = rawAuthorizationValues(request);
+      const authHeader = authorizationValues.length === 1 ? authorizationValues[0] : undefined;
+      if (authHeader === undefined) {
         setBearerChallenge(reply);
-        throw fastify.httpErrors.unauthorized("Missing authorization header");
+        throw new PortableError("unauthorized");
       }
 
-      const authorization = /^Bearer ([^\s]+)$/i.exec(authHeader);
+      const authorization = /^Bearer +([^\s]+)$/i.exec(authHeader);
       const token = authorization?.[1];
-      if (!token) {
-        setBearerChallenge(reply, "invalid_request");
-        throw fastify.httpErrors.unauthorized("Invalid authorization header format. Expected: Bearer <token>");
+      if (!token || !TOKEN68_PATTERN.test(token)) {
+        setBearerChallenge(reply);
+        throw new PortableError("unauthorized");
       }
 
       try {
         const decodedToken = await fastify.firebaseAuth.verifyIdToken(token, checkRevoked);
+        if (!isOpaqueId(decodedToken.uid)) {
+          setBearerChallenge(reply);
+          throw new PortableError("unauthorized");
+        }
         request.user = decodedToken;
       } catch (error) {
+        if (error instanceof PortableError) throw error;
         const firebaseError = error as { code?: string };
         const firebaseErrorCode = firebaseError.code ?? "unknown";
-        if (firebaseError.code === "auth/id-token-revoked") {
-          request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token has been revoked");
-          setBearerChallenge(reply, "invalid_token");
-          throw fastify.httpErrors.unauthorized("Token has been revoked. Please sign in again.");
-        }
         if (INVALID_IDENTITY_CODES.has(firebaseErrorCode)) {
           request.log.warn({ firebase_error_code: firebaseErrorCode }, "Firebase token verification failed");
-          setBearerChallenge(reply, "invalid_token");
-          throw fastify.httpErrors.unauthorized("Invalid or expired token");
+          setBearerChallenge(reply);
+          throw new PortableError("unauthorized");
         }
-        throw new AuthenticationServiceError({ cause: error });
+        throw new PortableError("dependency_unavailable", { cause: error });
       }
     };
 

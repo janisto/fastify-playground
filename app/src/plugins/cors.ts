@@ -37,6 +37,7 @@ export default fp<CorsPluginOptions>(
         callback(null, allowedOrigins.has(origin));
       },
       credentials: true,
+      methods: ["GET", "HEAD", "POST", "PATCH", "DELETE"],
       allowedHeaders: [
         "Accept",
         "Authorization",
@@ -46,7 +47,7 @@ export default fp<CorsPluginOptions>(
         "traceparent",
         "tracestate",
       ],
-      exposedHeaders: ["Link", "Location", "X-Request-Id"],
+      exposedHeaders: ["Link", "Location", "Retry-After", "X-RateLimit-Reset", "X-Request-Id"],
     });
   },
   {

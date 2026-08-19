@@ -1,16 +1,10 @@
 import type { FastifySchemaValidationError } from "fastify/types/schema.js";
 
-/**
- * Formatted validation error for RFC 9457 Problem Details response.
- */
 export interface FormattedValidationError {
-  message: string;
-  location: string;
+  detail: string;
+  source?: { pointer: string } | { parameter: string } | { header: string };
 }
 
-/**
- * Custom Fastify validation error with pre-formatted errors.
- */
 export interface SchemaValidationError extends Error {
   statusCode: number;
   code: string;
@@ -19,63 +13,47 @@ export interface SchemaValidationError extends Error {
   formattedErrors: FormattedValidationError[];
 }
 
-const CONTEXT_TO_PREFIX: Record<string, string> = {
-  querystring: "query",
-  params: "path",
-  headers: "headers",
-  body: "body",
-};
+const KNOWN_PARAMETERS = new Set(["limit", "cursor", "category", "owner", "repo"]);
+const KNOWN_HEADERS = new Set(["Authorization", "Content-Type", "Content-Encoding", "X-Request-ID"]);
 
-function buildLocation(instancePath: string, dataVar: string): string {
-  const prefix = CONTEXT_TO_PREFIX[dataVar] ?? dataVar;
-  const fieldPath = instancePath ? instancePath.replace(/^\//, "").replace(/\//g, ".") : "";
-  return fieldPath ? `${prefix}.${fieldPath}` : prefix;
+function safePointer(instancePath: string): { pointer: string } | undefined {
+  if (!instancePath) return undefined;
+  const segments = instancePath.split("/").slice(1);
+  if (segments.some((segment) => !/^[A-Za-z][A-Za-z0-9]*$/.test(segment))) return undefined;
+  return { pointer: `/${segments.join("/")}` };
 }
 
-function buildMessage(error: FastifySchemaValidationError): string {
-  if (!error.message) return "validation failed";
-  return error.message;
+function buildSource(error: FastifySchemaValidationError, dataVar: string): FormattedValidationError["source"] {
+  const segment = error.instancePath?.split("/").filter(Boolean).at(0);
+  if (dataVar === "body") return safePointer(error.instancePath ?? "");
+  if ((dataVar === "querystring" || dataVar === "params") && segment && KNOWN_PARAMETERS.has(segment)) {
+    return { parameter: segment };
+  }
+  if (dataVar === "headers" && segment) {
+    const header = [...KNOWN_HEADERS].find((candidate) => candidate.toLowerCase() === segment.toLowerCase());
+    if (header) return { header };
+  }
+  return undefined;
 }
 
 function formatErrors(errors: FastifySchemaValidationError[], dataVar: string): FormattedValidationError[] {
   const uniqueErrors = new Map<string, FormattedValidationError>();
-
   for (const error of errors) {
-    const message = buildMessage(error);
-    const location = buildLocation(error.instancePath || "", dataVar);
-    const key = JSON.stringify([location, message]);
-
-    if (!uniqueErrors.has(key)) {
-      uniqueErrors.set(key, { message, location });
-    }
+    const source = buildSource(error, dataVar);
+    const formatted = { detail: "Request validation failed", ...(source === undefined ? {} : { source }) };
+    uniqueErrors.set(JSON.stringify(formatted), formatted);
   }
-
-  return Array.from(uniqueErrors.values());
+  const result = Array.from(uniqueErrors.values());
+  if (result.length <= 32) return result;
+  return [...result.slice(0, 31), { detail: "Additional validation errors omitted" }];
 }
 
-/**
- * Schema error formatter for Fastify.
- *
- * This function formats validation errors into a structured format suitable for
- * RFC 9457 Problem Details responses. It pre-processes Ajv validation errors
- * and attaches them to the error object for use in the error handler.
- *
- * @param errors - Array of Fastify schema validation errors from Ajv
- * @param dataVar - The validation context (body, querystring, params, headers)
- * @returns An Error object with formatted validation errors attached
- *
- * @see https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/#schemaerrorformatter
- */
 export function schemaErrorFormatter(errors: FastifySchemaValidationError[], dataVar: string): SchemaValidationError {
-  const formattedErrors = formatErrors(errors, dataVar);
-  const message = "validation failed";
-
-  const error = new Error(message) as SchemaValidationError;
+  const error = new Error("Request validation failed") as SchemaValidationError;
   error.statusCode = 422;
   error.code = "FST_ERR_VALIDATION";
   error.validation = errors;
   error.validationContext = dataVar;
-  error.formattedErrors = formattedErrors;
-
+  error.formattedErrors = formatErrors(errors, dataVar);
   return error;
 }

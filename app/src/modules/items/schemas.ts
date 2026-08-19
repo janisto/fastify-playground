@@ -1,6 +1,13 @@
 import { type Static, Type } from "@fastify/type-provider-typebox";
 
-import { PaginationQuerySchema } from "../../schemas/pagination.js";
+import {
+  BoundedNameSchema,
+  MoneySchema,
+  OpaqueIdSchema,
+  SafeIntegerSchema,
+  TimestampSchema,
+} from "../../schemas/portable.js";
+import { MAX_CURSOR_LENGTH } from "../../utils/pagination.js";
 
 export const CategoryEnum = Type.Union([
   Type.Literal("electronics"),
@@ -13,29 +20,34 @@ export const CategoryEnum = Type.Union([
 
 export type Category = Static<typeof CategoryEnum>;
 
-const ItemSchema = Type.Object({
-  id: Type.String(),
-  name: Type.String(),
-  category: CategoryEnum,
-  price: Type.Number(),
-  inStock: Type.Boolean(),
-  createdAt: Type.String({ format: "date-time" }),
-  description: Type.String(),
-});
+const ItemSchema = Type.Object(
+  {
+    id: OpaqueIdSchema,
+    name: BoundedNameSchema,
+    category: CategoryEnum,
+    price: MoneySchema,
+    inStock: Type.Boolean(),
+    createdAt: TimestampSchema,
+    description: Type.String({ minLength: 1, maxLength: 500 }),
+  },
+  { additionalProperties: false },
+);
 
 export type Item = Static<typeof ItemSchema>;
 
-export const ItemsQuerySchema = Type.Intersect([
-  PaginationQuerySchema,
-  Type.Object({
+export const ItemsQuerySchema = Type.Object(
+  {
+    cursor: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_CURSOR_LENGTH, pattern: "^[!-~]+$" })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 20 })),
     category: Type.Optional(CategoryEnum),
-  }),
-]);
+  },
+  { additionalProperties: false },
+);
 
 export const ItemsResponseSchema = Type.Object(
   {
-    items: Type.Array(ItemSchema),
-    total: Type.Integer(),
+    items: Type.Array(ItemSchema, { maxItems: 100 }),
+    total: SafeIntegerSchema,
   },
-  { $id: "ItemsResponse", description: "Paginated items list" },
+  { $id: "ItemsResponse", additionalProperties: false, description: "Paginated items list" },
 );

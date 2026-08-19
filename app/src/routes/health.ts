@@ -1,5 +1,6 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 import { ErrorModelSchema } from "../schemas/index.js";
+import { API_MEDIA_TYPES } from "../utils/content-negotiation.js";
 
 export const HealthResponseSchema = Type.Object(
   {
@@ -10,6 +11,7 @@ export const HealthResponseSchema = Type.Object(
   },
   {
     $id: "HealthResponse",
+    additionalProperties: false,
     description: "Successful response indicating the API is healthy",
   },
 );
@@ -40,13 +42,15 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
       schema: {
         operationId: "getHealth",
         description: "Confirms that the API process is running without checking external dependencies",
-        produces: ["application/json"],
+        produces: API_MEDIA_TYPES,
+        security: [],
         tags: ["Health"],
         summary: "Liveness check",
         response: {
           200: HealthResponseSchema,
+          400: ErrorModelSchema,
           406: ErrorModelSchema,
-          503: ErrorModelSchema,
+          500: ErrorModelSchema,
         },
       },
     },
@@ -69,6 +73,7 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
         summary: "Readiness check",
         response: {
           200: ReadinessResponseSchema,
+          400: ErrorModelSchema,
           406: ErrorModelSchema,
           503: ErrorModelSchema,
         },

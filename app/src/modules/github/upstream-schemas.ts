@@ -1,86 +1,83 @@
 import Type, { type StaticDecode } from "typebox";
 
-const NullableString = Type.Union([Type.String(), Type.Null()]);
-const DateTimeString = Type.String({ format: "date-time" });
-const NullableDateTimeString = Type.Union([DateTimeString, Type.Null()]);
-const UriString = Type.String({ format: "uri" });
+const SAFE_INTEGER_MAXIMUM = 9_007_199_254_740_991;
+const SafeInteger = Type.Integer({ minimum: 0, maximum: SAFE_INTEGER_MAXIMUM });
+const NonEmptyString = Type.String({ minLength: 1 });
+const NullableAnyString = Type.Union([Type.String(), Type.Null()]);
+const OptionalDisplayString = Type.Optional(Type.Union([Type.String(), Type.Null()]));
+const DateTimeString = Type.String({
+  format: "date-time",
+  pattern:
+    "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.(?:[0-9]{1,3}|[0-9]{3}0+))?Z$",
+});
+const UriString = Type.String({ format: "uri", pattern: "^[Hh][Tt][Tt][Pp][Ss]?://" });
 
-const RepoProperties = {
-  id: Type.Integer(),
-  name: Type.String(),
-  full_name: Type.String(),
-  description: NullableString,
+const RepoSummaryProperties = {
+  id: SafeInteger,
+  name: NonEmptyString,
+  full_name: NonEmptyString,
+  description: OptionalDisplayString,
   html_url: UriString,
-  language: NullableString,
-  stargazers_count: Type.Integer({ minimum: 0 }),
-  forks_count: Type.Integer({ minimum: 0 }),
-  open_issues_count: Type.Integer({ minimum: 0 }),
-  visibility: Type.String(),
   fork: Type.Boolean(),
-  archived: Type.Boolean(),
-  created_at: NullableDateTimeString,
-  updated_at: NullableDateTimeString,
-  pushed_at: NullableDateTimeString,
+  private: Type.Literal(false),
+  visibility: Type.Literal("public"),
 } as const;
 
 export const RawGitHubOwnerSchema = Type.Object({
-  login: Type.String(),
-  id: Type.Integer(),
+  login: NonEmptyString,
+  id: SafeInteger,
   avatar_url: UriString,
   html_url: UriString,
-  type: Type.String(),
-  name: NullableString,
-  company: NullableString,
-  blog: NullableString,
-  location: NullableString,
-  bio: NullableString,
-  public_repos: Type.Integer({ minimum: 0 }),
-  followers: Type.Integer({ minimum: 0 }),
-  following: Type.Integer({ minimum: 0 }),
+  type: NonEmptyString,
+  name: OptionalDisplayString,
+  company: OptionalDisplayString,
+  blog: OptionalDisplayString,
+  location: OptionalDisplayString,
+  bio: OptionalDisplayString,
+  public_repos: SafeInteger,
+  followers: SafeInteger,
+  following: SafeInteger,
   created_at: DateTimeString,
   updated_at: DateTimeString,
 });
 
-export const RawGitHubRepoSchema = Type.Object(RepoProperties);
-
+export const RawGitHubRepoSchema = Type.Object(RepoSummaryProperties);
 export const RawGitHubRepoDetailSchema = Type.Object({
-  ...RepoProperties,
-  default_branch: Type.String(),
-  license: Type.Union([
-    Type.Object({
-      spdx_id: NullableString,
-    }),
-    Type.Null(),
-  ]),
-  topics: Type.Optional(Type.Array(Type.String())),
+  ...RepoSummaryProperties,
+  language: NullableAnyString,
+  stargazers_count: SafeInteger,
+  forks_count: SafeInteger,
+  open_issues_count: SafeInteger,
+  archived: Type.Boolean(),
+  created_at: DateTimeString,
+  updated_at: DateTimeString,
+  pushed_at: Type.Union([DateTimeString, Type.Null()]),
+  default_branch: NonEmptyString,
+  license: Type.Optional(
+    Type.Union([Type.Object({ spdx_id: Type.Optional(Type.Union([Type.String(), Type.Null()])) }), Type.Null()]),
+  ),
+  topics: Type.Optional(Type.Array(Type.String(), { uniqueItems: true })),
   disabled: Type.Boolean(),
 });
 
 export const RawGitHubActivitySchema = Type.Object({
-  id: Type.Integer(),
-  actor: Type.Union([
-    Type.Object({
-      login: Type.String(),
-      avatar_url: UriString,
-    }),
-    Type.Null(),
-  ]),
-  ref: Type.String(),
+  id: SafeInteger,
+  actor: Type.Union([Type.Object({ login: NonEmptyString, avatar_url: UriString }), Type.Null()]),
+  ref: NonEmptyString,
   timestamp: DateTimeString,
-  activity_type: Type.String(),
+  activity_type: NonEmptyString,
 });
 
 export const RawGitHubTagSchema = Type.Object({
-  name: Type.String(),
+  name: NonEmptyString,
   commit: Type.Object({
-    sha: Type.String(),
-    url: UriString,
+    sha: Type.String({ pattern: "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" }),
   }),
 });
 
 export const RawGitHubOwnerReposSchema = Type.Array(RawGitHubRepoSchema);
 export const RawGitHubActivityListSchema = Type.Array(RawGitHubActivitySchema);
-export const RawGitHubLanguagesSchema = Type.Record(Type.String(), Type.Integer({ minimum: 0 }));
+export const RawGitHubLanguagesSchema = Type.Record(NonEmptyString, SafeInteger);
 export const RawGitHubTagsSchema = Type.Array(RawGitHubTagSchema);
 
 export type RawGitHubOwner = StaticDecode<typeof RawGitHubOwnerSchema>;
