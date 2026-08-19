@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import type { Firestore } from "firebase-admin/firestore";
 import Value from "typebox/value";
-import { TIMESTAMP_PATTERN } from "../../schemas/portable.js";
+import { isOpaqueId, TIMESTAMP_PATTERN } from "../../schemas/portable.js";
 import { PortableError } from "../../utils/portable-error.js";
 import { type Profile, type ProfileCreate, ProfileSchema, type ProfileUpdate } from "./schemas.js";
 
@@ -17,6 +17,7 @@ export interface ProfileRepository {
 }
 
 function profileDocumentId(id: string): string {
+  if (!isOpaqueId(id)) throw new PortableError("internal_error");
   return `uid_${Buffer.from(id).toString("base64url")}`;
 }
 
@@ -30,6 +31,10 @@ function isProfile(value: unknown, expectedId: string): value is Profile {
   return (
     Value.Check(ProfileSchema, record) &&
     record["id"] === expectedId &&
+    typeof record["firstName"] === "string" &&
+    record["firstName"].isWellFormed() &&
+    typeof record["lastName"] === "string" &&
+    record["lastName"].isWellFormed() &&
     isCanonicalTimestamp(record["createdAt"]) &&
     isCanonicalTimestamp(record["updatedAt"]) &&
     record["updatedAt"] >= record["createdAt"]

@@ -134,6 +134,21 @@ function validQuotedString(value: string): boolean {
   return true;
 }
 
+function decodedQuotedString(value: string): string | null {
+  if (!validQuotedString(value)) return null;
+  let decoded = "";
+  for (let index = 1; index < value.length - 1; index += 1) {
+    if (value.at(index) === "\\") index += 1;
+    decoded += value.at(index) ?? "";
+  }
+  return decoded;
+}
+
+function linkParameterName(value: string): string {
+  const equals = value.indexOf("=");
+  return (equals < 0 ? value : value.slice(0, equals)).trim().toLowerCase();
+}
+
 function validJsonMediaType(value: string): boolean {
   const parts = splitMediaType(value);
   if (!parts || parts.length === 0) return false;
@@ -180,7 +195,10 @@ function hasUndiciErrorCode(error: unknown): boolean {
 }
 
 function canonicalGitHubTimestamp(value: string): string {
-  return value.includes(".") ? value : `${value.slice(0, -1)}.000Z`;
+  const fractionStart = value.indexOf(".");
+  if (fractionStart < 0) return `${value.slice(0, -1)}.000Z`;
+  const fraction = value.slice(fractionStart + 1, -1);
+  return `${value.slice(0, fractionStart)}.${fraction.padEnd(3, "0").slice(0, 3)}Z`;
 }
 
 function scalarCompare(left: string, right: string): number {
@@ -218,6 +236,73 @@ function splitLinkHeader(value: string): string[] {
   }
   result.push(value.slice(start).trim());
   return result.filter(Boolean);
+}
+
+function splitLinkParameters(value: string): string[] | null {
+  const result: string[] = [];
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+  let angle = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value.at(index);
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === "<") angle = true;
+    else if (character === ">") angle = false;
+    else if (character === ";" && !angle) {
+      result.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  if (quoted || escaped || angle) return null;
+  result.push(value.slice(start).trim());
+  return result;
+}
+
+type LinkRelation = "next" | "prev";
+
+interface RelevantLinkValue {
+  readonly relations: LinkRelation[];
+  readonly target: string;
+}
+
+function linkRelations(parameters: readonly string[]): string[] {
+  const relations: string[] = [];
+  for (const parameter of parameters) {
+    const equals = parameter.indexOf("=");
+    if (linkParameterName(parameter) !== "rel") continue;
+    const rawRelation = equals < 0 ? "" : parameter.slice(equals + 1).trim();
+    const relationValue = HTTP_TOKEN.test(rawRelation) ? rawRelation : decodedQuotedString(rawRelation);
+    if (relationValue === null || !relationValue) throw new TypeError("malformed pagination relation");
+    relations.push(...relationValue.split(/\s+/));
+  }
+  return relations;
+}
+
+function parseRelevantLinkValue(value: string): RelevantLinkValue | null {
+  const parameters = splitLinkParameters(value);
+  if (parameters === null) {
+    if (/(?:^|;)\s*rel\s*=/i.test(value)) throw new TypeError("malformed pagination relation");
+    return null;
+  }
+  const rawParameters = parameters.slice(1);
+  if (rawParameters.some((parameter) => linkParameterName(parameter) === "anchor")) return null;
+
+  const relevant = linkRelations(rawParameters).filter(
+    (relation): relation is LinkRelation => relation === "next" || relation === "prev",
+  );
+  if (relevant.length === 0) return null;
+  const target = /^<([^>]*)>$/.exec(parameters[0] ?? "")?.[1];
+  if (target === undefined || new Set(relevant).size !== relevant.length) {
+    throw new TypeError("malformed or repeated pagination relation");
+  }
+  return { relations: relevant, target };
 }
 
 function queryEntries(url: URL): [string, string][] {
@@ -312,7 +397,11 @@ export class GitHubClient {
   async listRepoLanguages(owner: string, repo: string, signal?: AbortSignal): Promise<Record<string, number>> {
     if (/^\.+$/.test(repo)) throw this.invalidResponse("dot-only repository reached URL construction");
     const url = new URL(`${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/languages`);
-    return (await this.getJson(url, RawGitHubLanguagesSchema, signal)).data;
+    const data = (await this.getJson(url, RawGitHubLanguagesSchema, signal)).data;
+    if (Object.keys(data).some((name) => name.length === 0)) {
+      throw this.invalidResponse("GitHub language name was empty");
+    }
+    return data;
   }
 
   async listRepoTags(
@@ -355,6 +444,7 @@ export class GitHubClient {
   private buildRequestOptions(signal: AbortSignal) {
     return {
       method: "GET",
+      idempotent: false,
       headers: this.buildHeaders(),
       headersTimeout: this.timeoutMs,
       bodyTimeout: this.timeoutMs,
@@ -554,8 +644,9 @@ export class GitHubClient {
   private mapError(statusCode: number, headers: ResponseHeaders): GitHubApiError {
     if (statusCode === 404) return new GitHubApiError("GitHub resource not found", 404, GITHUB_ERROR_NOT_FOUND);
     if (statusCode === 403 || statusCode === 429) {
-      const retryAfter = this.quotaDelay(headers);
-      const reset = this.usableReset(headers);
+      const nowSeconds = this.now() / 1000;
+      const reset = this.usableReset(headers, nowSeconds);
+      const retryAfter = this.quotaDelay(headers, nowSeconds, reset);
       return new GitHubApiError(
         "GitHub rate limit exceeded",
         429,
@@ -574,16 +665,15 @@ export class GitHubClient {
     return canonicalSafeInteger(values[0] ?? "");
   }
 
-  private usableReset(headers: ResponseHeaders): string | undefined {
+  private usableReset(headers: ResponseHeaders, nowSeconds: number): string | undefined {
     const reset = this.canonicalQuotaValue(headers, "x-ratelimit-reset");
-    return reset !== null && reset > this.now() / 1000 ? String(reset) : undefined;
+    return reset !== null && reset > nowSeconds ? String(reset) : undefined;
   }
 
-  private quotaDelay(headers: ResponseHeaders): string {
+  private quotaDelay(headers: ResponseHeaders, nowSeconds: number, reset: string | undefined): string {
     const retry = this.canonicalQuotaValue(headers, "retry-after");
     if (retry !== null) return String(retry);
-    const reset = this.usableReset(headers);
-    if (reset !== undefined) return String(Math.max(1, Math.ceil(Number(reset) - this.now() / 1000)));
+    if (reset !== undefined) return String(Math.max(1, Math.ceil(Number(reset) - nowSeconds)));
     return "60";
   }
 
@@ -663,27 +753,27 @@ export class GitHubClient {
     return { nextCursor: read("next"), prevCursor: read("prev") };
   }
 
-  private relevantLinks(headers: ResponseHeaders): Map<"next" | "prev", URL> {
-    const result = new Map<"next" | "prev", URL>();
+  private relevantLinks(headers: ResponseHeaders): Map<LinkRelation, URL> {
+    const result = new Map<LinkRelation, URL>();
     for (const field of headerValues(headers, "link")) {
       for (const value of splitLinkHeader(field)) {
-        const relationMatch = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s,]+))/i.exec(value);
-        const relations = (relationMatch?.[1] ?? relationMatch?.[2] ?? "").split(/\s+/);
-        const relevant = relations.filter(
-          (relation): relation is "next" | "prev" => relation === "next" || relation === "prev",
-        );
-        if (relevant.length === 0) continue;
-        if (/(?:^|;)\s*anchor\s*=/i.test(value)) continue;
-        const targetMatch = /^\s*<([^>]*)>/.exec(value);
-        if (!targetMatch || relevant.some((relation) => result.has(relation))) {
-          throw this.invalidResponse("GitHub pagination relation was malformed or repeated");
-        }
+        let parsed: RelevantLinkValue | null;
         try {
-          const target = new URL(targetMatch[1] ?? "");
-          for (const relation of relevant) result.set(relation, target);
+          parsed = parseRelevantLinkValue(value);
+        } catch (error) {
+          throw this.invalidResponse("GitHub pagination relation was malformed", error);
+        }
+        if (parsed === null) continue;
+        if (parsed.relations.some((relation) => result.has(relation))) {
+          throw this.invalidResponse("GitHub pagination relation was repeated");
+        }
+        let target: URL;
+        try {
+          target = new URL(parsed.target);
         } catch (error) {
           throw this.invalidResponse("GitHub pagination target was invalid", error);
         }
+        for (const relation of parsed.relations) result.set(relation, target);
       }
     }
     return result;

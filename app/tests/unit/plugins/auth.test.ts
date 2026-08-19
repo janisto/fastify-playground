@@ -164,7 +164,24 @@ describe("Firebase authentication", () => {
     expect(mockAuth.verifyIdToken).toHaveBeenCalledWith("._~+/-==", true);
   });
 
-  it.each(["", "x".repeat(129)])("rejects an invalid verified principal %j", async (uid) => {
+  it("accepts a well-formed 128-scalar verified principal", async () => {
+    const uid = "😀".repeat(128);
+    mockAuth.verifyIdToken.mockResolvedValueOnce({ uid });
+    const response = await (await build()).inject({
+      method: "GET",
+      url: "/protected",
+      headers: { authorization: "Bearer valid-token" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ uid });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["over 128 scalars", "x".repeat(129)],
+    ["unpaired high surrogate", String.fromCharCode(0xd800)],
+    ["unpaired low surrogate", String.fromCharCode(0xdc00)],
+  ])("rejects a verified principal that is %s", async (_case, uid) => {
     mockAuth.verifyIdToken.mockResolvedValueOnce({ uid });
     const response = await (await build()).inject({
       method: "GET",
@@ -172,5 +189,6 @@ describe("Firebase authentication", () => {
       headers: { authorization: "Bearer valid-token" },
     });
     expect(response.json()).toMatchObject({ status: 401, code: "unauthorized" });
+    expect(response.headers["www-authenticate"]).toBe("Bearer");
   });
 });

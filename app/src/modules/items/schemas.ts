@@ -46,7 +46,7 @@ export const ItemsQuerySchema = Type.Object(
 
 export const ItemsResponseSchema = Type.Object(
   {
-    items: Type.Array(ItemSchema),
+    items: Type.Array(ItemSchema, { maxItems: 100 }),
     total: SafeIntegerSchema,
   },
   { $id: "ItemsResponse", additionalProperties: false, description: "Paginated items list" },

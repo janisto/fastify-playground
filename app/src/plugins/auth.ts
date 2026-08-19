@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import type { DecodedIdToken } from "firebase-admin/auth";
+import { isOpaqueId } from "../schemas/portable.js";
 import { PortableError } from "../utils/portable-error.js";
 
 /**
@@ -108,11 +109,7 @@ export default fp<AuthPluginOptions>(
 
       try {
         const decodedToken = await fastify.firebaseAuth.verifyIdToken(token, checkRevoked);
-        if (
-          typeof decodedToken.uid !== "string" ||
-          decodedToken.uid.length === 0 ||
-          [...decodedToken.uid].length > 128
-        ) {
+        if (!isOpaqueId(decodedToken.uid)) {
           setBearerChallenge(reply);
           throw new PortableError("unauthorized");
         }

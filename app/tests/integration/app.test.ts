@@ -798,9 +798,28 @@ describe("App Integration", () => {
       "X-Frame-Options",
       "Referrer-Policy",
     ];
+    const publicOperationIds = new Set([
+      "getHealth",
+      "getHello",
+      "createHello",
+      "listItems",
+      "getGitHubOwner",
+      "listGitHubOwnerRepositories",
+      "getGitHubRepository",
+      "listGitHubRepositoryActivity",
+      "listGitHubRepositoryLanguages",
+      "listGitHubRepositoryTags",
+    ]);
+    const requestBodyOperationIds = new Set(["createHello", "createProfile", "updateProfile"]);
     for (const [, path, operationId] of expected) {
       const method = expected.find((entry) => entry[2] === operationId)?.[0];
       const operation = document.paths[path][method ?? "get"];
+      expect(operation.security).toEqual(publicOperationIds.has(operationId) ? [] : [{ bearerAuth: [] }]);
+      if (requestBodyOperationIds.has(operationId)) {
+        expect(operation.requestBody.required).toBe(true);
+      } else {
+        expect(operation).not.toHaveProperty("requestBody");
+      }
       expect(Object.keys(operation.responses).toSorted()).toEqual(expectedStatuses[operationId]);
       expect(operation.parameters).toContainEqual(
         expect.objectContaining({
@@ -877,6 +896,7 @@ describe("App Integration", () => {
         currency: { type: "string", enum: ["USD"] },
       },
     });
+    expect(document.components.schemas.ItemsResponse.properties.items.maxItems).toBe(100);
     await fastify.close();
   });
 });

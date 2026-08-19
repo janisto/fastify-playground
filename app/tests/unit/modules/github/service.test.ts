@@ -213,6 +213,9 @@ describe("GitHubService", () => {
       encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:2:" }),
       encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:1:value" }),
       encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:02:value" }),
+      encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:020:octocat%2Frepo:2:value" }),
+      encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:%6Fctocat%2Frepo:2:value" }),
+      encodeCursor({ type: "listGitHubRepositoryActivity", value: "next:20:octocat%2Frepo:2:%0A" }),
     ])("rejects invalid decoded activity state", async (cursor) => {
       await expect(
         new GitHubService(mockClient as unknown as GitHubClient).listRepoActivity("octocat", "repo", { cursor }),
@@ -224,6 +227,9 @@ describe("GitHubService", () => {
       encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:20:octocat:1" }),
       encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:20:%E0%A4%A:2" }),
       encodeCursor({ type: "listGitHubRepositoryTags", value: "next:20:octocat%2Frepo:2" }),
+      encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:20:octocat:02" }),
+      encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:020:octocat:2" }),
+      encodeCursor({ type: "listGitHubOwnerRepositories", value: "next:20:%6Fctocat:2" }),
     ])("rejects impossible or wrong-operation numbered state", async (cursor) => {
       await expect(
         new GitHubService(mockClient as unknown as GitHubClient).listOwnerRepos("octocat", { cursor }),

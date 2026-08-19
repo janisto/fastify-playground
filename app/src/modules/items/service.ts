@@ -317,6 +317,11 @@ export class ItemsService {
     ) {
       throw new InvalidCursorError("cursor does not match the requested category or limit");
     }
+    const canonical = encodeCursor({
+      type: CURSOR_TYPE,
+      value: `1:${direction}:${limit}:${category ?? "*"}:${itemId}`,
+    });
+    if (encodedCursor !== canonical) throw new InvalidCursorError("invalid cursor format");
     return { direction, anchor: itemId };
   }
 
@@ -325,8 +330,8 @@ export class ItemsService {
 
     const cursor = this.validateCursor(encodedCursor, limit, category);
     const filtered = category ? MOCK_ITEMS.filter((item) => item.category === category) : MOCK_ITEMS;
-    const startIndex = this.findStartIndex(filtered, cursor, limit);
-    const pageItems = filtered.slice(startIndex, startIndex + limit);
+    const { startIndex, endIndex } = this.findPageBounds(filtered, cursor, limit);
+    const pageItems = filtered.slice(startIndex, endIndex);
     const { nextCursor, prevCursor } = this.buildPaginationCursors(filtered, pageItems, startIndex, limit, category);
 
     return {
@@ -337,13 +342,27 @@ export class ItemsService {
     };
   }
 
-  private findStartIndex(items: Item[], cursor: ItemCursor | null, limit = 20): number {
-    if (cursor === null) return 0;
+  private findPageBounds(
+    items: Item[],
+    cursor: ItemCursor | null,
+    limit = 20,
+  ): { startIndex: number; endIndex: number } {
+    if (cursor === null) return { startIndex: 0, endIndex: limit };
     const cursorIndex = items.findIndex((item) => item.id === cursor.anchor);
     if (cursorIndex === -1) {
       throw new InvalidCursorError("cursor references unknown item");
     }
-    return cursor.direction === "next" ? cursorIndex + 1 : Math.max(0, cursorIndex - limit);
+    if (
+      (cursor.direction === "next" && cursorIndex === items.length - 1) ||
+      (cursor.direction === "prev" && cursorIndex === 0)
+    ) {
+      throw new InvalidCursorError("cursor has no page in the requested direction");
+    }
+    if (cursor.direction === "next") {
+      const startIndex = cursorIndex + 1;
+      return { startIndex, endIndex: startIndex + limit };
+    }
+    return { startIndex: Math.max(0, cursorIndex - limit), endIndex: cursorIndex };
   }
 
   private buildPaginationCursors(
@@ -353,7 +372,7 @@ export class ItemsService {
     limit: number,
     category: Category | undefined,
   ): { nextCursor: string | undefined; prevCursor: string | null | undefined } {
-    const hasNext = startIndex + limit < items.length;
+    const hasNext = startIndex + pageItems.length < items.length;
     const hasPrev = startIndex > 0;
 
     const lastPageItem = pageItems.at(-1);
@@ -364,7 +383,7 @@ export class ItemsService {
         ? encodeCursor({ type: CURSOR_TYPE, value: `1:next:${scope}:${lastPageItem.id}` })
         : undefined;
     const prevCursor = hasPrev
-      ? startIndex <= limit
+      ? startIndex === limit
         ? null
         : firstPageItem
           ? encodeCursor({ type: CURSOR_TYPE, value: `1:prev:${scope}:${firstPageItem.id}` })

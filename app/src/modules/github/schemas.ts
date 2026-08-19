@@ -1,9 +1,10 @@
 import { type Static, Type } from "@fastify/type-provider-typebox";
 import { SafeIntegerSchema, TimestampSchema } from "../../schemas/portable.js";
 
-const HttpUrlSchema = Type.String({ format: "uri", pattern: "^https?://" });
+const HttpUrlSchema = Type.String({ format: "uri", pattern: "^[Hh][Tt][Tt][Pp][Ss]?://" });
 const NonEmptyString = Type.String({ minLength: 1 });
 const NullableString = Type.Union([NonEmptyString, Type.Null()]);
+const NullableAnyString = Type.Union([Type.String(), Type.Null()]);
 
 export const OwnerParamsSchema = Type.Object(
   {
@@ -70,7 +71,7 @@ export const GitHubRepoSchema = Type.Object(GitHubRepoSummaryProperties, {
 export const GitHubRepoDetailSchema = Type.Object(
   {
     ...GitHubRepoSummaryProperties,
-    language: NullableString,
+    language: NullableAnyString,
     stargazersCount: SafeIntegerSchema,
     forksCount: SafeIntegerSchema,
     openIssuesCount: SafeIntegerSchema,

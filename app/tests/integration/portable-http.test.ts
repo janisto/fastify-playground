@@ -1,9 +1,47 @@
 import { Buffer } from "node:buffer";
+import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFirebaseAppMock, createFirebaseAuthMock } from "../mocks/firebase.js";
 
 const firebaseApp = createFirebaseAppMock();
 const firebaseAuth = createFirebaseAuthMock();
+
+function sizedHelloBody(size: number): Buffer {
+  const fixed = Buffer.from('{"name":""}');
+  if (size < fixed.length) throw new RangeError("requested body is too small");
+  return Buffer.from(`{"name":"${"a".repeat(size - fixed.length)}"}`);
+}
+
+async function streamedHelloRequest(
+  address: string,
+  payload: Buffer,
+  requestId: string,
+): Promise<{ body: string; headers: IncomingHttpHeaders; statusCode: number }> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      new URL("/v1/hello", address),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-request-id": requestId },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () =>
+          resolve({
+            body: Buffer.concat(chunks).toString("utf8"),
+            headers: response.headers,
+            statusCode: response.statusCode ?? 0,
+          }),
+        );
+      },
+    );
+    request.on("error", reject);
+    const midpoint = Math.floor(payload.length / 2);
+    request.write(payload.subarray(0, midpoint));
+    request.end(payload.subarray(midpoint));
+  });
+}
 
 vi.mock("firebase-admin/app", () => ({
   deleteApp: vi.fn().mockResolvedValue(undefined),
@@ -138,6 +176,29 @@ describe("portable raw HTTP boundary", () => {
     await app.close();
   });
 
+  it.each([
+    [
+      "duplicate map key",
+      Buffer.from([
+        0xa2, 0x64, 0x6e, 0x61, 0x6d, 0x65, 0x63, 0x41, 0x64, 0x61, 0x64, 0x6e, 0x61, 0x6d, 0x65, 0x65, 0x47, 0x72,
+        0x61, 0x63, 0x65,
+      ]),
+    ],
+    ["trailing item", Buffer.from([0xa1, 0x64, 0x6e, 0x61, 0x6d, 0x65, 0x63, 0x41, 0x64, 0x61, 0xf6])],
+  ])("rejects CBOR with a %s through the HTTP parser boundary", async (_case, payload) => {
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/hello",
+      headers: { "content-type": "application/cbor" },
+      payload,
+    });
+
+    expect(response.json()).toMatchObject({ status: 400, code: "invalid_request" });
+    await app.close();
+  });
+
   it("distinguishes a missing media type on empty and non-empty bodies", async () => {
     const { buildApp } = await import("../../src/app.js");
     const app = await buildApp();
@@ -146,5 +207,65 @@ describe("portable raw HTTP boundary", () => {
     expect(empty.json()).toMatchObject({ status: 400, code: "invalid_request" });
     expect(nonEmpty.json()).toMatchObject({ status: 415, code: "unsupported_media_type" });
     await app.close();
+  });
+
+  it("enforces the exact declared request-body boundary before the handler", async () => {
+    const { HelloService } = await import("../../src/modules/hello/service.js");
+    const greet = vi.spyOn(HelloService.prototype, "greet");
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp();
+    const cases = [
+      [999_999, 422],
+      [1_000_000, 422],
+      [1_000_001, 413],
+    ] as const;
+
+    const responses = await Promise.all(
+      cases.map(([size]) =>
+        app.inject({
+          method: "POST",
+          url: "/v1/hello",
+          headers: { "content-type": "application/json", "x-request-id": `declared-${size}` },
+          payload: sizedHelloBody(size),
+        }),
+      ),
+    );
+    for (const [index, [size, status]] of cases.entries()) {
+      const response = responses.at(index);
+      if (response === undefined) throw new Error("missing declared-boundary response");
+      expect(response.statusCode).toBe(status);
+      expect(response.headers["x-request-id"]).toBe(`declared-${size}`);
+    }
+    expect(greet).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("enforces the exact streamed request-body boundary over real HTTP", async () => {
+    const { HelloService } = await import("../../src/modules/hello/service.js");
+    const greet = vi.spyOn(HelloService.prototype, "greet");
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp();
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+    const cases = [
+      [999_999, 422],
+      [1_000_000, 422],
+      [1_000_001, 413],
+    ] as const;
+
+    try {
+      const responses = await Promise.all(
+        cases.map(([size]) => streamedHelloRequest(address, sizedHelloBody(size), `streamed-${size}`)),
+      );
+      for (const [index, [size, status]] of cases.entries()) {
+        const response = responses.at(index);
+        if (response === undefined) throw new Error("missing streamed-boundary response");
+        expect(response.statusCode).toBe(status);
+        expect(response.headers["x-request-id"]).toBe(`streamed-${size}`);
+        expect(JSON.parse(response.body)).toMatchObject({ status });
+      }
+      expect(greet).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
   });
 });

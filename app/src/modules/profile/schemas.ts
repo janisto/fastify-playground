@@ -2,7 +2,7 @@ import { type Static, Type } from "@fastify/type-provider-typebox";
 import { BoundedNameSchema, OpaqueIdSchema, PhoneNumberSchema, TimestampSchema } from "../../schemas/portable.js";
 
 const EMAIL_PATTERN =
-  "^(?!\\.)(?![^@]*\\.\\.)(?![^@]*\\.@)[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$";
+  "^(?!\\.)(?![^@]*\\.\\.)(?![^@]*\\.@)[A-Za-z0-9!#$%&'*+/=?^_{|}~.-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$";
 
 export const ContactEmailSchema = Type.String({ minLength: 3, maxLength: 254, pattern: EMAIL_PATTERN });
 

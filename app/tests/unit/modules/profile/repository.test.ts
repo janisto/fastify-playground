@@ -87,6 +87,20 @@ describe("FirestoreProfileRepository", () => {
     expect(fixture.writes()).toBe(1);
   });
 
+  it.each([
+    ["empty", ""],
+    ["over 128 scalars", "x".repeat(129)],
+    ["unpaired high surrogate", String.fromCharCode(0xd800)],
+    ["unpaired low surrogate", String.fromCharCode(0xdc00)],
+  ])("rejects a principal ID that is %s before selecting a document", async (_case, id) => {
+    const fixture = firestoreDouble();
+    const repository = new FirestoreProfileRepository(fixture.firestore);
+
+    await expect(repository.get(id)).rejects.toMatchObject({ code: "internal_error" });
+    expect(fixture.doc).not.toHaveBeenCalled();
+    expect(fixture.writes()).toBe(0);
+  });
+
   it("commits a real update atomically and performs no write for a no-op", async () => {
     const fixture = firestoreDouble();
     const repository = new FirestoreProfileRepository(fixture.firestore);
@@ -100,6 +114,28 @@ describe("FirestoreProfileRepository", () => {
     const changed = await repository.update("principal", { marketingOptIn: true }, NOW);
     expect(changed).toMatchObject({ marketingOptIn: true, createdAt: NOW, updatedAt: "2026-07-30T12:00:00.001Z" });
     expect(fixture.writes()).toBe(writesAfterCreate + 1);
+  });
+
+  it("fails a real update at the maximum timestamp without committing a write", async () => {
+    const fixture = firestoreDouble();
+    const repository = new FirestoreProfileRepository(fixture.firestore);
+    await repository.create("principal", INPUT, NOW);
+    const key = fixture.doc.mock.calls.at(-1)?.[0];
+    if (typeof key !== "string") throw new Error("missing document key");
+    const stored = fixture.records.get(key);
+    if (typeof stored !== "object" || stored === null) throw new Error("missing stored profile");
+    const maxTimestampProfile = {
+      ...stored,
+      updatedAt: "9999-12-31T23:59:59.999Z",
+    };
+    fixture.records.set(key, maxTimestampProfile);
+    const writesBeforeUpdate = fixture.writes();
+
+    await expect(
+      repository.update("principal", { firstName: "Grace" }, "9999-12-31T23:59:59.999Z"),
+    ).rejects.toMatchObject({ code: "internal_error" });
+    expect(fixture.records.get(key)).toEqual(maxTimestampProfile);
+    expect(fixture.writes()).toBe(writesBeforeUpdate);
   });
 
   it("returns definitive missing results and delete outcomes without resurrection", async () => {
@@ -133,6 +169,7 @@ describe("FirestoreProfileRepository", () => {
 
   it.each([
     ["empty first name", "firstName", ""],
+    ["first name with an unpaired surrogate", "firstName", String.fromCharCode(0xd800)],
     ["name with surrounding whitespace", "lastName", "Lovelace "],
     ["malformed contact email", "contactEmail", "not-an-email"],
     ["non-E.164 phone number", "phoneNumber", "0401234567"],

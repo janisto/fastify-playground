@@ -111,6 +111,19 @@ describe("portable error handler", () => {
     });
   });
 
+  it("combines repeated Accept fields before selecting an error representation", async () => {
+    const app = await build();
+    const response = await app.inject({
+      method: "GET",
+      url: "/missing",
+      headers: { accept: ["application/problem+json;q=0", "application/cbor;q=1"] },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers["content-type"]).toBe("application/cbor");
+    expect(cborDecode(response.rawPayload)).toMatchObject({ status: 404, code: "not_found" });
+  });
+
   it("does not treat application/problem+cbor as an implemented representation", async () => {
     const app = await build();
     const response = await app.inject({
@@ -119,6 +132,20 @@ describe("portable error handler", () => {
       headers: { accept: "application/problem+cbor" },
     });
     expect(response.headers["content-type"]).toContain("application/problem+json");
+  });
+
+  it.each([
+    ["application/problem+json;charset=utf-8;q=0, application/problem+json;q=1", "application/problem+json"],
+    [
+      "application/problem+json;q=0, application/problem+json;charset=utf-8;q=1",
+      "application/problem+json; charset=utf-8",
+    ],
+  ])("emits the exact selected Problem Details JSON form for %s", async (accept, expected) => {
+    const app = await build();
+    const response = await app.inject({ method: "GET", url: "/missing", headers: { accept } });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers["content-type"]).toBe(expected);
   });
 
   it("returns exact 404 and 405 problems with a truthful Allow field", async () => {

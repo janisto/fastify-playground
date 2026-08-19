@@ -1,6 +1,7 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 import { getFirestore } from "firebase-admin/firestore";
 import { ErrorModelSchema } from "../../schemas/index.js";
+import { isOpaqueId } from "../../schemas/portable.js";
 import { API_MEDIA_TYPES } from "../../utils/content-negotiation.js";
 import { PortableError } from "../../utils/portable-error.js";
 import { createLazyFirestoreProfileRepository, type ProfileRepository } from "./repository.js";
@@ -13,7 +14,7 @@ export interface ProfileRoutesOptions {
 }
 
 function principalId(user: { uid?: unknown } | null): string {
-  if (typeof user?.uid !== "string" || user.uid.length === 0 || [...user.uid].length > 128) {
+  if (!isOpaqueId(user?.uid)) {
     throw new PortableError("unauthorized");
   }
   return user.uid;

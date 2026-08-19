@@ -26,6 +26,8 @@ class DeterministicProfileRepository implements ProfileRepository {
   committedWrites = 0;
   failure: Error | undefined;
   createGate: Promise<void> | undefined;
+  updateGate: Promise<void> | undefined;
+  deleteGate: Promise<void> | undefined;
 
   async create(id: string, input: ProfileCreate, now: string): Promise<Profile | null> {
     this.calls += 1;
@@ -54,6 +56,7 @@ class DeterministicProfileRepository implements ProfileRepository {
   async update(id: string, input: ProfileUpdate, now: string): Promise<Profile | null> {
     this.calls += 1;
     if (this.failure) throw this.failure;
+    await this.updateGate;
     const current = this.records.get(id);
     if (!current) return null;
     const changed = Object.entries(input).some(([key, value]) => current[key as keyof Profile] !== value);
@@ -68,6 +71,7 @@ class DeterministicProfileRepository implements ProfileRepository {
   async delete(id: string): Promise<boolean> {
     this.calls += 1;
     if (this.failure) throw this.failure;
+    await this.deleteGate;
     const deleted = this.records.delete(id);
     if (deleted) this.committedWrites += 1;
     return deleted;
@@ -81,6 +85,20 @@ const CREATE_BODY = {
   phoneNumber: " +358401234567 ",
   termsAccepted: true,
 } as const;
+
+function storedProfile(id: string): Profile {
+  return {
+    id,
+    firstName: "Ada",
+    lastName: "Lovelace",
+    contactEmail: "Ada@example.com",
+    phoneNumber: "+358401234567",
+    marketingOptIn: false,
+    termsAccepted: true,
+    createdAt: "2026-07-30T12:00:00.000Z",
+    updatedAt: "2026-07-30T12:00:00.000Z",
+  };
+}
 
 describe("GCP current-principal profile", () => {
   beforeEach(() => {
@@ -194,6 +212,17 @@ describe("GCP current-principal profile", () => {
     expect(firebaseAuth.verifyIdToken).not.toHaveBeenCalled();
     expect(repository.calls).toBe(0);
 
+    firebaseAuth.verifyIdToken.mockResolvedValueOnce({ uid: `principal-${String.fromCharCode(0xd800)}` });
+    const malformedPrincipal = await app.inject({
+      method: "GET",
+      url: "/v1/profile",
+      headers: { authorization: "Bearer malformed-principal" },
+    });
+    expect(malformedPrincipal.json()).toMatchObject({ status: 401, code: "unauthorized" });
+    expect(malformedPrincipal.headers["www-authenticate"]).toBe("Bearer");
+    expect(firebaseAuth.verifyIdToken).toHaveBeenCalledWith("malformed-principal", true);
+    expect(repository.calls).toBe(0);
+
     const oversized = await app.inject({
       method: "POST",
       url: "/v1/profile",
@@ -205,7 +234,7 @@ describe("GCP current-principal profile", () => {
       payload: "{}",
     });
     expect(oversized.json()).toMatchObject({ status: 413, code: "payload_too_large" });
-    expect(firebaseAuth.verifyIdToken).not.toHaveBeenCalled();
+    expect(firebaseAuth.verifyIdToken).toHaveBeenCalledTimes(1);
     expect(repository.calls).toBe(0);
 
     const invalid = await app.inject({
@@ -242,6 +271,7 @@ describe("GCP current-principal profile", () => {
     ".Ada@example.com",
     "Ada.@example.com",
     "Ada..Lovelace@example.com",
+    "`Ada@example.com",
     "Ada@localhost",
     `${"a".repeat(65)}@example.com`,
   ])("rejects non-portable contact email %s before persistence", async (contactEmail) => {
@@ -284,6 +314,90 @@ describe("GCP current-principal profile", () => {
     expect(responses.map(({ statusCode }) => statusCode).toSorted()).toEqual([201, 409]);
     expect(repository.committedWrites).toBe(1);
     expect(["First", "Second"]).toContain(repository.records.get("racing-user")?.firstName);
+    await app.close();
+  });
+
+  it("synchronizes concurrent deletes into one 204, one 404, and one committed removal", async () => {
+    const repository = new DeterministicProfileRepository();
+    repository.records.set("racing-user", storedProfile("racing-user"));
+    const gate = Promise.withResolvers<void>();
+    repository.deleteGate = gate.promise;
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp({ profileRepository: repository });
+    const remove = () =>
+      app.inject({
+        method: "DELETE",
+        url: "/v1/profile",
+        headers: { authorization: "Bearer racing-user" },
+      });
+    const first = remove();
+    const second = remove();
+    await vi.waitFor(() => expect(repository.calls).toBe(2));
+    gate.resolve();
+    const responses = await Promise.all([first, second]);
+
+    expect(responses.map(({ statusCode }) => statusCode).toSorted()).toEqual([204, 404]);
+    expect(repository.records.has("racing-user")).toBe(false);
+    expect(repository.committedWrites).toBe(1);
+    await app.close();
+  });
+
+  it("does not resurrect a profile when a delayed patch loses a race with delete", async () => {
+    const repository = new DeterministicProfileRepository();
+    repository.records.set("racing-user", storedProfile("racing-user"));
+    const gate = Promise.withResolvers<void>();
+    repository.updateGate = gate.promise;
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp({ profileRepository: repository });
+    const update = app.inject({
+      method: "PATCH",
+      url: "/v1/profile",
+      headers: { authorization: "Bearer racing-user", "content-type": "application/json" },
+      payload: JSON.stringify({ firstName: "Grace" }),
+    });
+    await vi.waitFor(() => expect(repository.calls).toBe(1));
+    const remove = await app.inject({
+      method: "DELETE",
+      url: "/v1/profile",
+      headers: { authorization: "Bearer racing-user" },
+    });
+    expect(remove.statusCode).toBe(204);
+    expect(repository.records.has("racing-user")).toBe(false);
+
+    gate.resolve();
+    const updateResponse = await update;
+    expect(updateResponse.json()).toMatchObject({ status: 404, code: "profile_not_found" });
+    expect(repository.records.has("racing-user")).toBe(false);
+    expect(repository.committedWrites).toBe(1);
+    await app.close();
+  });
+
+  it("commits each synchronized patch as one complete mutation", async () => {
+    const repository = new DeterministicProfileRepository();
+    repository.records.set("racing-user", storedProfile("racing-user"));
+    const gate = Promise.withResolvers<void>();
+    repository.updateGate = gate.promise;
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp({
+      profileRepository: repository,
+      profileClock: () => new Date("2026-07-30T12:05:00.000Z"),
+    });
+    const patch = (payload: ProfileUpdate) =>
+      app.inject({
+        method: "PATCH",
+        url: "/v1/profile",
+        headers: { authorization: "Bearer racing-user", "content-type": "application/json" },
+        payload: JSON.stringify(payload),
+      });
+    const rename = patch({ firstName: "Grace" });
+    const optIn = patch({ marketingOptIn: true });
+    await vi.waitFor(() => expect(repository.calls).toBe(2));
+    gate.resolve();
+    const responses = await Promise.all([rename, optIn]);
+
+    expect(responses.map(({ statusCode }) => statusCode).toSorted()).toEqual([200, 200]);
+    expect(repository.records.get("racing-user")).toMatchObject({ firstName: "Grace", marketingOptIn: true });
+    expect(repository.committedWrites).toBe(2);
     await app.close();
   });
 

@@ -166,6 +166,8 @@ export class GitHubService {
       extra.length > 0 ||
       (direction !== "next" && direction !== "prev") ||
       !upstreamCursor ||
+      upstreamCursor.length > MAX_CURSOR_LENGTH ||
+      !/^[!-~]+$/.test(upstreamCursor) ||
       !Number.isSafeInteger(limit) ||
       limit !== expectedLimit ||
       !/^[1-9][0-9]*$/.test(pageValue ?? "") ||
@@ -175,6 +177,11 @@ export class GitHubService {
     ) {
       throw new InvalidCursorError("cursor does not match the requested collection or limit");
     }
+    const canonical = encodeCursor({
+      type: ACTIVITY_OPERATION,
+      value: `${direction}:${expectedLimit}:${encodeURIComponent(expectedScope)}:${page}:${encodeURIComponent(upstreamCursor)}`,
+    });
+    if (encodedCursor !== canonical) throw new InvalidCursorError("invalid cursor format");
 
     return {
       page,
@@ -230,12 +237,15 @@ export class GitHubService {
       !Number.isSafeInteger(limit) ||
       limit !== expectedLimit ||
       scope !== expectedScope ||
+      !/^[1-9][0-9]*$/.test(pageValue ?? "") ||
       !Number.isSafeInteger(page) ||
       page < 1 ||
       (direction === "next" && page === 1)
     ) {
       throw new InvalidCursorError("cursor does not match the requested collection or limit");
     }
+    const canonical = this.encodePageCursor(expectedType, direction, expectedScope, expectedLimit, page);
+    if (encodedCursor !== canonical) throw new InvalidCursorError("invalid cursor format");
     return page;
   }
 

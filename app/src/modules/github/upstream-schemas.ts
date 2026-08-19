@@ -3,14 +3,14 @@ import Type, { type StaticDecode } from "typebox";
 const SAFE_INTEGER_MAXIMUM = 9_007_199_254_740_991;
 const SafeInteger = Type.Integer({ minimum: 0, maximum: SAFE_INTEGER_MAXIMUM });
 const NonEmptyString = Type.String({ minLength: 1 });
-const NullableString = Type.Union([NonEmptyString, Type.Null()]);
+const NullableAnyString = Type.Union([Type.String(), Type.Null()]);
 const OptionalDisplayString = Type.Optional(Type.Union([Type.String(), Type.Null()]));
 const DateTimeString = Type.String({
   format: "date-time",
   pattern:
-    "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{3})?Z$",
+    "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.(?:[0-9]{1,3}|[0-9]{3}0+))?Z$",
 });
-const UriString = Type.String({ format: "uri", pattern: "^https?://" });
+const UriString = Type.String({ format: "uri", pattern: "^[Hh][Tt][Tt][Pp][Ss]?://" });
 
 const RepoSummaryProperties = {
   id: SafeInteger,
@@ -44,7 +44,7 @@ export const RawGitHubOwnerSchema = Type.Object({
 export const RawGitHubRepoSchema = Type.Object(RepoSummaryProperties);
 export const RawGitHubRepoDetailSchema = Type.Object({
   ...RepoSummaryProperties,
-  language: NullableString,
+  language: NullableAnyString,
   stargazers_count: SafeInteger,
   forks_count: SafeInteger,
   open_issues_count: SafeInteger,

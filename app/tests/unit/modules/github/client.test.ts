@@ -138,6 +138,21 @@ class RejectedBodyDispatcher extends Dispatcher {
   }
 }
 
+class RecordingDispatcher extends Dispatcher {
+  readonly delegate: Dispatcher;
+  options: Dispatcher.DispatchOptions | undefined;
+
+  constructor(delegate: Dispatcher) {
+    super();
+    this.delegate = delegate;
+  }
+
+  override dispatch(options: Dispatcher.DispatchOptions, handler: Dispatcher.DispatchHandler): boolean {
+    this.options = options;
+    return this.delegate.dispatch(options, handler);
+  }
+}
+
 describe("GitHubClient", () => {
   let agent: MockAgent;
   let pool: ReturnType<MockAgent["get"]>;
@@ -167,6 +182,15 @@ describe("GitHubClient", () => {
       .reply(200, OWNER, { headers: JSON_HEADERS });
 
     await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).resolves.toMatchObject({ id: 1 });
+  });
+
+  it("marks the provider GET as non-retryable at the native dispatcher boundary", async () => {
+    pool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, OWNER, { headers: JSON_HEADERS });
+    const dispatcher = new RecordingDispatcher(agent);
+
+    await new GitHubClient({ dispatcher }).getOwner("octocat");
+
+    expect(dispatcher.options?.idempotent).toBe(false);
   });
 
   it("permits an explicit token only at the direct-client boundary", async () => {
@@ -215,6 +239,34 @@ describe("GitHubClient", () => {
       pushedAt: "2024-01-03T00:00:00.000Z",
     });
     expect(activity.activities).toEqual([expect.objectContaining({ timestamp: "2024-01-03T00:00:00.000Z" })]);
+  });
+
+  it("accepts the case-insensitive HTTP scheme grammar without rewriting provider URLs", async () => {
+    const owner = { ...OWNER, avatar_url: "HTTPS://avatars.githubusercontent.com/u/1" };
+    pool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, owner, { headers: JSON_HEADERS });
+
+    await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).resolves.toMatchObject({
+      avatarUrl: owner.avatar_url,
+    });
+  });
+
+  it("normalizes millisecond-aligned provider fractions and preserves an empty nullable language", async () => {
+    pool.intercept({ path: "/repos/octocat/repo", method: "GET" }).reply(
+      200,
+      {
+        ...DETAIL,
+        language: "",
+        created_at: "2024-01-01T00:00:00.1Z",
+        updated_at: "2024-01-02T00:00:00.1200Z",
+      },
+      { headers: JSON_HEADERS },
+    );
+
+    await expect(new GitHubClient({ dispatcher: agent }).getRepo("octocat", "repo")).resolves.toMatchObject({
+      language: "",
+      createdAt: "2024-01-01T00:00:00.100Z",
+      updatedAt: "2024-01-02T00:00:00.120Z",
+    });
   });
 
   it("follows a same-origin numeric resource redirect without changing the query", async () => {
@@ -291,6 +343,8 @@ describe("GitHubClient", () => {
     '<https://attacker.invalid/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3>; rel="next"',
     '<https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=2>; rel="next"',
     '<https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3>; rel="next", <https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=4>; rel="next"',
+    '<https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3>; rel="next"; rel="next"',
+    '<https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3> garbage; rel="next"',
     '<https://api.github.com/repositories/1/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3>; rel="next"',
   ])("rejects unsafe or ambiguous numbered navigation", async (link) => {
     pool.intercept({ path: /\/users\/octocat\/repos/, method: "GET" }).reply(200, [SUMMARY], {
@@ -396,9 +450,10 @@ describe("GitHubClient", () => {
         ...JSON_HEADERS,
         link: [
           '<https://attacker.invalid/ignored>; rel="next"; anchor="https://example.test/a,b"',
-          '<https://api.github.com/repos/octocat/repo/activity?direction=desc&per_page=20&after=next>; rel=next; title="a,b"',
+          '<https://attacker.invalid/also-ignored>; rel="next"; anchor',
+          '<https://api.github.com/repos/octocat/repo/activity?direction=desc&per_page=20&after=next>; rel="ne\\xt"; title="a,b"',
           '<https://api.github.com/repos/octocat/repo/activity?direction=desc&per_page=20&before=previous>; rel="prev"',
-        ].join(", "),
+        ],
       },
     });
     await expect(
@@ -456,6 +511,21 @@ describe("GitHubClient", () => {
     const client = new GitHubClient({ dispatcher: agent });
     await expect(client.listRepoLanguages("octocat", "repo")).resolves.toEqual({ TypeScript: 42 });
     await expect(client.listRepoTags("octocat", "repo")).resolves.toMatchObject({ items: [TAG] });
+  });
+
+  it("rejects an empty provider language name", async () => {
+    pool.intercept({ path: "/repos/octocat/repo/languages", method: "GET" }).reply(
+      200,
+      { "": 1 },
+      {
+        headers: JSON_HEADERS,
+      },
+    );
+
+    await expect(new GitHubClient({ dispatcher: agent }).listRepoLanguages("octocat", "repo")).rejects.toMatchObject({
+      code: GITHUB_ERROR_UPSTREAM,
+      statusCode: 502,
+    });
   });
 
   it("validates tag pagination and rejects an over-limit or empty page with next navigation", async () => {
@@ -545,6 +615,24 @@ describe("GitHubClient", () => {
     });
   });
 
+  it("uses one clock snapshot for quota header validation and delay derivation", async () => {
+    pool.intercept({ path: "/users/limited-clock", method: "GET" }).reply(429, "", {
+      headers: { "x-ratelimit-reset": "102" },
+    });
+    const readings = [100_250, 200_000];
+    let calls = 0;
+    const client = new GitHubClient({
+      dispatcher: agent,
+      now: () => readings.at(calls++) ?? 200_000,
+    });
+
+    await expect(client.getOwner("limited-clock")).rejects.toMatchObject({
+      retryAfter: "2",
+      rateLimitReset: "102",
+    });
+    expect(calls).toBe(1);
+  });
+
   it.each([201, 401, 410, 422, 500])("maps unexpected provider status %i to 502", async (statusCode) => {
     pool.intercept({ path: "/users/octocat", method: "GET" }).reply(statusCode, "private body canary", {
       headers: { "content-encoding": "identity" },
@@ -603,6 +691,25 @@ describe("GitHubClient", () => {
       headers: { "content-type": 'application/vnd.github+json; charset="utf-8"; note="a,b"' },
     });
     await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).resolves.toMatchObject({ id: 1 });
+  });
+
+  it("enforces the decoded 4 MiB success-body boundary despite missing or misleading lengths", async () => {
+    const maximum = 4_194_304;
+    const source = JSON.stringify(OWNER);
+    const exact = `${source}${" ".repeat(maximum - Buffer.byteLength(source))}`;
+    const over = `${exact} `;
+    pool.intercept({ path: "/users/exact", method: "GET" }).reply(200, exact, {
+      headers: { ...JSON_HEADERS, "content-length": String(maximum) },
+    });
+    pool.intercept({ path: "/users/streamed-over", method: "GET" }).reply(200, over, { headers: JSON_HEADERS });
+    pool.intercept({ path: "/users/misleading-over", method: "GET" }).reply(200, over, {
+      headers: { ...JSON_HEADERS, "content-length": "1" },
+    });
+    const client = new GitHubClient({ dispatcher: agent });
+
+    await expect(client.getOwner("exact")).resolves.toMatchObject({ id: 1 });
+    await expect(client.getOwner("streamed-over")).rejects.toMatchObject({ code: GITHUB_ERROR_UPSTREAM });
+    await expect(client.getOwner("misleading-over")).rejects.toMatchObject({ code: GITHUB_ERROR_UPSTREAM });
   });
 
   it.each([

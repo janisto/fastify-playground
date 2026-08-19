@@ -16,6 +16,10 @@ export const BoundedNameSchema = Type.String({
 });
 export const PhoneNumberSchema = Type.String({ pattern: "^\\+[1-9][0-9]{6,14}$" });
 
+export function isOpaqueId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.isWellFormed() && [...value].length <= 128;
+}
+
 export const MoneySchema = Type.Object(
   {
     amountMinor: SafeIntegerSchema,

@@ -2,7 +2,7 @@ import { encode as cborEncode } from "cbor2";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { GitHubApiError } from "../modules/github/errors.js";
-import { CBOR_MEDIA_TYPE, negotiateProblemMediaType, PROBLEM_JSON_MEDIA_TYPE } from "../utils/content-negotiation.js";
+import { CBOR_MEDIA_TYPE, negotiateProblemMediaType } from "../utils/content-negotiation.js";
 import { addSchemaLinkHeader } from "../utils/link-header.js";
 import { InvalidCursorError } from "../utils/pagination.js";
 import { PORTABLE_ERRORS, PortableError, type PortableErrorCode } from "../utils/portable-error.js";
@@ -29,15 +29,19 @@ function sendProblemDetails(
   reply.header("Vary", ["Accept", "Origin"]);
   addSchemaLinkHeader(reply, "ErrorModel");
   const body = problem(code, errors);
+  const selectedMediaType = negotiateProblemMediaType(request.headers.accept ?? "");
 
-  if (negotiateProblemMediaType(request.headers.accept ?? "") === CBOR_MEDIA_TYPE) {
+  if (selectedMediaType === CBOR_MEDIA_TYPE) {
     reply
       .status(statusCode)
-      .type(CBOR_MEDIA_TYPE)
+      .header("Content-Type", CBOR_MEDIA_TYPE)
       .send(Buffer.from(cborEncode(body)));
     return;
   }
-  reply.status(statusCode).type(PROBLEM_JSON_MEDIA_TYPE).send(body);
+  reply
+    .status(statusCode)
+    .header("Content-Type", selectedMediaType)
+    .send(Buffer.from(JSON.stringify(body)));
 }
 
 function githubCode(code: string): PortableErrorCode {
