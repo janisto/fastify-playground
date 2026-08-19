@@ -370,12 +370,11 @@ export class GitHubClient {
     callerSignal?: AbortSignal,
   ): Promise<{ data: StaticDecode<Schema>; headers: ResponseHeaders }> {
     const { statusCode, headers, body, timeoutSignal } = await this.request(url, callerSignal);
-    this.validateContentEncoding(headers);
     if (statusCode !== 200) {
       await this.discardBody(body, callerSignal, timeoutSignal);
       throw this.mapError(statusCode, headers);
     }
-    this.validateContentType(headers);
+    await this.validateContentType(headers, body, callerSignal, timeoutSignal);
     const bytes = await this.readBoundedBody(body, headers, callerSignal, timeoutSignal);
     let value: unknown;
     try {
@@ -414,7 +413,7 @@ export class GitHubClient {
     } catch (error) {
       this.throwRequestFailure(error, callerSignal, timeoutSignal);
     }
-    this.validateContentEncoding(response.headers);
+    await this.validateContentEncoding(response.headers, response.body, callerSignal, timeoutSignal);
     if (!REDIRECT_STATUS_CODES.has(response.statusCode)) return response;
     await this.discardBody(response.body, callerSignal, timeoutSignal);
     if (redirectCount >= MAX_REDIRECTS) throw this.invalidResponse("GitHub redirect limit exceeded");
@@ -461,18 +460,33 @@ export class GitHubClient {
     if (!sameQuery(initialUrl, target)) throw this.invalidResponse("GitHub redirect query changed");
   }
 
-  private validateContentEncoding(headers: ResponseHeaders): void {
+  private async validateContentEncoding(
+    headers: ResponseHeaders,
+    body: Dispatcher.ResponseData["body"],
+    callerSignal: AbortSignal | undefined,
+    timeoutSignal: AbortSignal,
+  ): Promise<void> {
     const values = headerValues(headers, "content-encoding");
     if (values.length > 1 || (values.length === 1 && values[0]?.trim().toLowerCase() !== "identity")) {
+      await this.discardBody(body, callerSignal, timeoutSignal);
       throw this.invalidResponse("GitHub response used unsupported content encoding");
     }
   }
 
-  private validateContentType(headers: ResponseHeaders): void {
+  private async validateContentType(
+    headers: ResponseHeaders,
+    body: Dispatcher.ResponseData["body"],
+    callerSignal: AbortSignal | undefined,
+    timeoutSignal: AbortSignal,
+  ): Promise<void> {
     const values = headerValues(headers, "content-type");
-    if (values.length !== 1) throw this.invalidResponse("GitHub response omitted or repeated Content-Type");
+    if (values.length !== 1) {
+      await this.discardBody(body, callerSignal, timeoutSignal);
+      throw this.invalidResponse("GitHub response omitted or repeated Content-Type");
+    }
     const value = values[0] ?? "";
     if (!validJsonMediaType(value)) {
+      await this.discardBody(body, callerSignal, timeoutSignal);
       throw this.invalidResponse("GitHub response was not JSON");
     }
   }

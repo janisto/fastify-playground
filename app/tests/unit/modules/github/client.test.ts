@@ -96,6 +96,48 @@ class PartialBodyTimeoutDispatcher extends Dispatcher {
   }
 }
 
+class RejectedBodyDispatcher extends Dispatcher {
+  aborted = false;
+  private readonly responseHeaders: Record<string, string>;
+
+  constructor(responseHeaders: Record<string, string>) {
+    super();
+    this.responseHeaders = responseHeaders;
+  }
+
+  override dispatch(_options: Dispatcher.DispatchOptions, handler: Dispatcher.DispatchHandler): boolean {
+    let aborted = false;
+    let paused = false;
+    let reason: Error | null = null;
+    const controller: Dispatcher.DispatchController = {
+      get aborted() {
+        return aborted;
+      },
+      get paused() {
+        return paused;
+      },
+      get reason() {
+        return reason;
+      },
+      abort: (error) => {
+        aborted = true;
+        reason = error;
+        this.aborted = true;
+      },
+      pause() {
+        paused = true;
+      },
+      resume() {
+        paused = false;
+      },
+    };
+    handler.onRequestStart?.(controller, null);
+    handler.onResponseStart?.(controller, 200, this.responseHeaders, "OK");
+    handler.onResponseData?.(controller, Buffer.alloc(128 * 1024 + 1));
+    return true;
+  }
+}
+
 describe("GitHubClient", () => {
   let agent: MockAgent;
   let pool: ReturnType<MockAgent["get"]>;
@@ -542,6 +584,19 @@ describe("GitHubClient", () => {
       statusCode: 502,
     });
   });
+
+  it.each([{ "content-type": "text/html" }, { ...JSON_HEADERS, "content-encoding": "gzip" }])(
+    "cancels a rejected response body before reporting invalid headers",
+    async (headers) => {
+      const dispatcher = new RejectedBodyDispatcher(headers);
+
+      await expect(new GitHubClient({ dispatcher }).getOwner("octocat")).rejects.toMatchObject({
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
+      expect(dispatcher.aborted).toBe(true);
+    },
+  );
 
   it("accepts syntactically valid JSON media parameters including quoted commas", async () => {
     pool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, OWNER, {
