@@ -36,4 +36,13 @@ describe("parseStrictJson", () => {
   it("rejects invalid UTF-8 before interpreting JSON", () => {
     expect(() => parseStrictJson(Buffer.from([0xc3, 0x28]))).toThrow(TypeError);
   });
+
+  it("preserves __proto__ as an own JSON member without changing the parsed object's prototype", () => {
+    const value = parse('{"__proto__":{"marketingOptIn":true}}');
+    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("expected object");
+
+    expect(Object.keys(value)).toEqual(["__proto__"]);
+    expect(Object.hasOwn(value, "__proto__")).toBe(true);
+    expect((value as Record<string, unknown>)["marketingOptIn"]).toBeUndefined();
+  });
 });

@@ -70,7 +70,12 @@ class JsonParser {
       if (this.current() !== ":") throw new SyntaxError("missing object separator");
       this.offset += 1;
       this.skipWhitespace();
-      result[key] = this.parseValue();
+      Object.defineProperty(result, key, {
+        value: this.parseValue(),
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
       this.skipWhitespace();
       const delimiter = this.current();
       if (delimiter === "}") {

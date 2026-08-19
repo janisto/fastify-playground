@@ -189,6 +189,21 @@ describe("GitHubClient", () => {
     });
   });
 
+  it("accepts a lower non-adjacent previous page on a later empty page", async () => {
+    pool.intercept({ path: /page=4/, method: "GET" }).reply(200, [], {
+      headers: {
+        ...JSON_HEADERS,
+        link: '<https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=1>; rel="prev"',
+      },
+    });
+
+    await expect(new GitHubClient({ dispatcher: agent }).listOwnerRepos("octocat", 5, 4)).resolves.toMatchObject({
+      items: [],
+      nextPage: null,
+      prevPage: 1,
+    });
+  });
+
   it.each([
     '<https://attacker.invalid/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3>; rel="next"',
     '<https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=2>; rel="next"',

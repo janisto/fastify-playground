@@ -1,6 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { describe, expect, it, vi } from "vitest";
-import { FirestoreProfileRepository } from "../../../../src/modules/profile/repository.js";
+import {
+  createLazyFirestoreProfileRepository,
+  FirestoreProfileRepository,
+} from "../../../../src/modules/profile/repository.js";
 
 const INPUT = {
   firstName: "Ada",
@@ -99,5 +102,23 @@ describe("FirestoreProfileRepository", () => {
     ).rejects.toMatchObject({
       code: "dependency_unavailable",
     });
+  });
+
+  it("maps lazy Firestore initialization failure and retries without poisoning the repository", async () => {
+    const fixture = firestoreDouble();
+    const factory = vi
+      .fn<() => Firestore>()
+      .mockImplementationOnce(() => {
+        throw new Error("private initialization canary");
+      })
+      .mockReturnValueOnce(fixture.firestore);
+    const repository = createLazyFirestoreProfileRepository(factory);
+
+    await expect(Promise.resolve().then(() => repository.get("principal"))).rejects.toMatchObject({
+      code: "dependency_unavailable",
+      statusCode: 503,
+    });
+    await expect(repository.get("principal")).resolves.toBeNull();
+    expect(factory).toHaveBeenCalledTimes(2);
   });
 });

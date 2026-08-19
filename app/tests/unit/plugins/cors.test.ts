@@ -14,6 +14,8 @@ describe("CORS policy", () => {
     apps.push(app);
     app.register(cors, { origins });
     app.get("/resource", async () => ({ ok: true }));
+    app.patch("/resource", async () => ({ ok: true }));
+    app.delete("/resource", async (_request, reply) => reply.status(204).send());
     return app;
   }
 
@@ -35,6 +37,26 @@ describe("CORS policy", () => {
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(response.headers["access-control-allow-headers"]).toContain("traceparent");
     expect(response.headers["access-control-allow-headers"]).toContain("tracestate");
+  });
+
+  it.each(["PATCH", "DELETE"] as const)("authorizes %s preflight for an exact configured origin", async (method) => {
+    const app = build(["https://app.example.com"]);
+
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: "/resource",
+      headers: {
+        origin: "https://app.example.com",
+        "access-control-request-method": method,
+        "access-control-request-headers": "authorization,content-type",
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe("https://app.example.com");
+    expect(response.headers["access-control-allow-methods"]?.split(",").map((value) => value.trim())).toContain(method);
+    expect(response.headers["access-control-allow-headers"]).toContain("Authorization");
+    expect(response.headers["access-control-allow-headers"]).toContain("Content-Type");
   });
 
   it.each([

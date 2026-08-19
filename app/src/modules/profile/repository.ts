@@ -150,8 +150,12 @@ export class FirestoreProfileRepository implements ProfileRepository {
 export function createLazyFirestoreProfileRepository(factory: () => Firestore): ProfileRepository {
   let repository: FirestoreProfileRepository | undefined;
   const current = () => {
-    repository ??= new FirestoreProfileRepository(factory());
-    return repository;
+    try {
+      repository ??= new FirestoreProfileRepository(factory());
+      return repository;
+    } catch (error) {
+      throw dependencyError(error);
+    }
   };
   return {
     create: (...arguments_) => current().create(...arguments_),

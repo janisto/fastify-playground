@@ -264,6 +264,7 @@ Trace correlation requires only a valid incoming W3C `traceparent`; no Google Cl
 | GET | `/v1/github/owners/:owner` | GitHub user profile |
 | GET | `/v1/github/owners/:owner/repos` | User repositories (paginated) |
 | GET | `/v1/github/repos/:owner/:repo` | Repository details |
+| GET | `/v1/github/repos/:owner/:repo/activity` | Repository activity (paginated) |
 | GET | `/v1/github/repos/:owner/:repo/languages` | Repository languages |
 | GET | `/v1/github/repos/:owner/:repo/tags` | Repository tags (paginated) |
 | GET | `/schemas/:schemaName.json` | Standalone JSON Schema discovery |

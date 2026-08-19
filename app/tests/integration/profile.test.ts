@@ -225,6 +225,16 @@ describe("GCP current-principal profile", () => {
     });
     expect(semantic.json()).toMatchObject({ status: 422, code: "validation_failed" });
     expect(repository.calls).toBe(0);
+
+    const prototypeMember = await app.inject({
+      method: "POST",
+      url: "/v1/profile",
+      headers: { authorization: "Bearer user-one", "content-type": "application/json" },
+      payload:
+        '{"firstName":"Ada","lastName":"Lovelace","contactEmail":"Ada@example.com","phoneNumber":"+358401234567","termsAccepted":true,"__proto__":{"marketingOptIn":true}}',
+    });
+    expect(prototypeMember.json()).toMatchObject({ status: 422, code: "validation_failed" });
+    expect(repository.calls).toBe(0);
     await app.close();
   });
 
