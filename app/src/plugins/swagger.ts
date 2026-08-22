@@ -139,8 +139,10 @@ const PAGINATED_OPERATION_IDS = new Set([
   "listGitHubRepositoryTags",
 ]);
 
-const PORTABLE_OPERATION_IDS = new Set([
+const CLOSED_QUERY_OPERATION_IDS = new Set([
   "getHealth",
+  "getReadiness",
+  "getAuthenticatedUser",
   "getHello",
   "createHello",
   "listItems",
@@ -157,7 +159,7 @@ const PORTABLE_OPERATION_IDS = new Set([
 ]);
 
 function alignClosedQueryDescription(operation: OpenAPIV3_1.OperationObject): void {
-  if (!operation.operationId || !PORTABLE_OPERATION_IDS.has(operation.operationId)) return;
+  if (!operation.operationId || !CLOSED_QUERY_OPERATION_IDS.has(operation.operationId)) return;
   const sentence = PAGINATED_OPERATION_IDS.has(operation.operationId)
     ? "Only the documented query parameters are accepted; unknown, repeated, or malformed query input is rejected."
     : "No query parameters are accepted; unknown, repeated, or malformed query input is rejected.";

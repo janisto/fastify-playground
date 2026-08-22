@@ -858,12 +858,21 @@ describe("App Integration", () => {
       ["get", "/v1/github/repos/{owner}/{repo}/languages", "listGitHubRepositoryLanguages"],
       ["get", "/v1/github/repos/{owner}/{repo}/tags", "listGitHubRepositoryTags"],
     ] as const;
-    const actual = expected.map(([method, path]) => [method, path, document.paths[path]?.[method]?.operationId]);
-    expect(actual).toEqual(expected);
-    expect(new Set(expected.map(([, , operationId]) => operationId)).size).toBe(14);
+    const extensions = [
+      ["get", "/status", "getReadiness"],
+      ["get", "/v1/auth/me", "getAuthenticatedUser"],
+    ] as const;
+    const documented = [...expected, ...extensions];
+    const actual = documented.map(([method, path]) => [method, path, document.paths[path]?.[method]?.operationId]);
+    expect(actual).toEqual(documented);
+    expect(new Set(documented.map(([, , operationId]) => operationId)).size).toBe(documented.length);
     expect(document.paths["/openapi.json"]).toBeUndefined();
     expect(document.openapi).toMatch(/^3\.1\./);
     expect(JSON.stringify(document)).not.toContain("application/problem+cbor");
+
+    for (const [method, path, operationId] of extensions) {
+      expect(document.paths[path][method].description).toContain(closedQueryDescription(operationId));
+    }
 
     const expectedStatuses: Record<string, string[]> = {
       getHealth: ["200", "400", "406", "500"],
