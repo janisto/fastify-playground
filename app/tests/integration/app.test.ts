@@ -351,6 +351,7 @@ describe("App Integration", () => {
     const fastify = await buildApp({
       profileRepository: repository,
       profileClock: () => new Date("2026-03-10T12:00:00.000Z"),
+      underPressure: { maxEventLoopDelay: 0, maxEventLoopUtilization: 0 },
     });
     const address = await fastify.listen({ host: "127.0.0.1", port: 0 });
 

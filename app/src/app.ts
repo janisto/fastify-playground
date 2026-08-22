@@ -24,7 +24,7 @@ import schemaDiscoveryPlugin from "./plugins/schema-discovery.js";
 import schemaRegistryPlugin from "./plugins/schema-registry.js";
 import sensiblePlugin from "./plugins/sensible.js";
 import swaggerPlugin from "./plugins/swagger.js";
-import underPressurePlugin from "./plugins/under-pressure.js";
+import underPressurePlugin, { type UnderPressurePluginOptions } from "./plugins/under-pressure.js";
 import varyHeaderPlugin from "./plugins/vary-header.js";
 import healthRoutes from "./routes/health.js";
 import schemasRoutes from "./routes/schemas.js";
@@ -56,6 +56,7 @@ export interface BuildAppOptions {
   readonly loggerLevel?: ObservabilityLoggerOptions["level"];
   readonly profileClock?: ProfileClock;
   readonly profileRepository?: ProfileRepository;
+  readonly underPressure?: UnderPressurePluginOptions;
 }
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -107,7 +108,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     await fastify.register(firebasePlugin);
     await fastify.register(lifecyclePlugin);
     await fastify.register(swaggerPlugin);
-    await fastify.register(underPressurePlugin);
+    await fastify.register(underPressurePlugin, options.underPressure ?? {});
 
     // Layer 5: Application plugins
     await fastify.register(authPlugin);
