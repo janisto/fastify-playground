@@ -1,11 +1,12 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-
+import { registerMissingMediaTypeParser } from "../../plugins/request-body.js";
 import { ErrorModelSchema } from "../../schemas/index.js";
 import { API_MEDIA_TYPES } from "../../utils/content-negotiation.js";
 import { HelloInputSchema, HelloResponseSchema } from "./schemas.js";
 import { HelloService } from "./service.js";
 
 const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
+  registerMissingMediaTypeParser(fastify);
   const service = new HelloService();
 
   fastify.addSchema(HelloResponseSchema);
@@ -26,6 +27,7 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           400: ErrorModelSchema,
           406: ErrorModelSchema,
           500: ErrorModelSchema,
+          503: ErrorModelSchema,
         },
       },
     },
@@ -55,6 +57,7 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           415: ErrorModelSchema,
           422: ErrorModelSchema,
           500: ErrorModelSchema,
+          503: ErrorModelSchema,
         },
       },
     },

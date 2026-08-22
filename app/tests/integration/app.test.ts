@@ -26,6 +26,35 @@ interface LogRecord {
   readonly message?: string;
 }
 
+const QUERY_OPERATION_IDS = new Set([
+  "listItems",
+  "listGitHubOwnerRepositories",
+  "listGitHubRepositoryActivity",
+  "listGitHubRepositoryTags",
+]);
+
+function closedQueryDescription(operationId: string): string {
+  return QUERY_OPERATION_IDS.has(operationId)
+    ? "Only the documented query parameters are accepted; unknown, repeated, or malformed query input is rejected."
+    : "No query parameters are accepted; unknown, repeated, or malformed query input is rejected.";
+}
+
+interface DocumentedParameter {
+  readonly $ref?: unknown;
+  readonly explode?: unknown;
+  readonly in?: unknown;
+  readonly style?: unknown;
+}
+
+function expectParameterSerialization(parameter: DocumentedParameter): void {
+  if (parameter.$ref !== undefined) return;
+  if (parameter.in === "query") {
+    expect(parameter).toMatchObject({ style: "form", explode: true });
+  } else if (parameter.in === "path" || parameter.in === "header") {
+    expect(parameter).toMatchObject({ style: "simple", explode: false });
+  }
+}
+
 class JsonLineStream extends Writable {
   readonly lines: string[] = [];
   readonly records: LogRecord[] = [];
@@ -89,18 +118,72 @@ describe("App Integration", () => {
     await fastify.close();
   });
 
+  it("keeps OpenAPI discovery failures inside the portable error profile", async () => {
+    const { buildApp } = await import("../../src/app.js");
+    const fastify = await buildApp();
+
+    const invalidQuery = await fastify.inject({
+      method: "GET",
+      url: "/openapi.json?unknown=1",
+      headers: { accept: "application/cbor", "x-request-id": "openapi-query" },
+    });
+    const unacceptable = await fastify.inject({
+      method: "GET",
+      url: "/openapi.json",
+      headers: { accept: "text/html", "x-request-id": "openapi-accept" },
+    });
+    fastify.isShuttingDown = true;
+    const unavailable = await fastify.inject({
+      method: "GET",
+      url: "/openapi.json",
+      headers: { accept: "application/json", "x-request-id": "openapi-shutdown" },
+    });
+
+    expect(invalidQuery.statusCode).toBe(400);
+    expect(invalidQuery.headers["content-type"]).toBe("application/cbor");
+    expect(invalidQuery.headers["x-request-id"]).toBe("openapi-query");
+    expect(cborDecode(invalidQuery.rawPayload)).toEqual({
+      title: "Bad Request",
+      status: 400,
+      detail: "Request is malformed",
+      code: "invalid_request",
+    });
+    expect(unacceptable.statusCode).toBe(406);
+    expect(unacceptable.headers["content-type"]).toContain("application/problem+json");
+    expect(unacceptable.headers["x-request-id"]).toBe("openapi-accept");
+    expect(unacceptable.json()).toMatchObject({ status: 406, code: "not_acceptable" });
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.headers["content-type"]).toContain("application/problem+json");
+    expect(unavailable.headers["retry-after"]).toBe("10");
+    expect(unavailable.headers["x-request-id"]).toBe("openapi-shutdown");
+    expect(unavailable.headers.link).toBe('</schemas/ErrorModel.json>; rel="describedby"');
+    expect(unavailable.headers.vary).toEqual(["Accept", "Origin"]);
+    expect(unavailable.json()).toMatchObject({ status: 503, code: "dependency_unavailable" });
+    expect(mockAuth.verifyIdToken).not.toHaveBeenCalled();
+    await fastify.close();
+  });
+
   it("derives truthful 405 responses from every registered application route", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
     const cases = [
       ["POST", "/status", "GET, OPTIONS"],
+      ["POST", "/openapi.json", "GET, OPTIONS"],
       ["POST", "/v1/auth/me", "GET, OPTIONS"],
+      ["PUT", "/v1/hello", "GET, POST, OPTIONS"],
       ["PUT", "/v1/profile", "GET, POST, PATCH, DELETE, OPTIONS"],
       ["POST", "/schemas/Profile.json", "GET, OPTIONS"],
     ] as const;
 
     const responses = await Promise.all(
-      cases.map(async ([method, url, allow]) => ({ allow, response: await fastify.inject({ method, url }) })),
+      cases.map(async ([method, url, allow]) => ({
+        allow,
+        response: await fastify.inject({
+          method,
+          url,
+          ...(method === "PUT" ? { payload: Buffer.from("unconsumed body") } : {}),
+        }),
+      })),
     );
     for (const { allow, response } of responses) {
       expect(response.statusCode).toBe(405);
@@ -268,6 +351,7 @@ describe("App Integration", () => {
     const fastify = await buildApp({
       profileRepository: repository,
       profileClock: () => new Date("2026-03-10T12:00:00.000Z"),
+      underPressure: { maxEventLoopDelay: 0, maxEventLoopUtilization: 0 },
     });
     const address = await fastify.listen({ host: "127.0.0.1", port: 0 });
 
@@ -742,13 +826,21 @@ describe("App Integration", () => {
     expect(createProfile.security).toEqual([{ bearerAuth: [] }]);
     expect(createProfile.responses["201"].headers).toHaveProperty("Location");
     expect(createProfile.responses["401"].headers).toHaveProperty("WWW-Authenticate");
-    expect(createProfile.responses["503"].headers).not.toHaveProperty("Retry-After");
+    expect(createProfile.responses["503"].headers).toHaveProperty("Retry-After");
     expect(createProfile.requestBody.required).toBe(true);
-    expect(createProfile.requestBody.content["application/json"].schema).toMatchObject({
+    const profileCreateSchema = createProfile.requestBody.content["application/json"].schema;
+    expect(profileCreateSchema).toMatchObject({
       type: "object",
       additionalProperties: false,
       required: ["firstName", "lastName", "contactEmail", "phoneNumber", "termsAccepted"],
     });
+    const inputEmailPattern = profileCreateSchema.properties.contactEmail.pattern;
+    const inputPhonePattern = profileCreateSchema.properties.phoneNumber.pattern;
+    const outputEmailPattern = document.components.schemas.Profile.properties.contactEmail.pattern;
+    expect(new RegExp(inputEmailPattern).test("\tAda@EXAMPLE.COM \r")).toBe(true);
+    expect(new RegExp(inputPhonePattern).test("\n+358401234567 ")).toBe(true);
+    expect(new RegExp(outputEmailPattern).test("Ada@example.com")).toBe(true);
+    expect(new RegExp(outputEmailPattern).test("Ada@EXAMPLE.COM")).toBe(false);
     expect(document.servers).toEqual([{ url: "/", description: "Current server" }]);
 
     const expected = [
@@ -767,28 +859,37 @@ describe("App Integration", () => {
       ["get", "/v1/github/repos/{owner}/{repo}/languages", "listGitHubRepositoryLanguages"],
       ["get", "/v1/github/repos/{owner}/{repo}/tags", "listGitHubRepositoryTags"],
     ] as const;
-    const actual = expected.map(([method, path]) => [method, path, document.paths[path]?.[method]?.operationId]);
-    expect(actual).toEqual(expected);
-    expect(new Set(expected.map(([, , operationId]) => operationId)).size).toBe(14);
+    const extensions = [
+      ["get", "/status", "getReadiness"],
+      ["get", "/v1/auth/me", "getAuthenticatedUser"],
+    ] as const;
+    const documented = [...expected, ...extensions];
+    const actual = documented.map(([method, path]) => [method, path, document.paths[path]?.[method]?.operationId]);
+    expect(actual).toEqual(documented);
+    expect(new Set(documented.map(([, , operationId]) => operationId)).size).toBe(documented.length);
     expect(document.paths["/openapi.json"]).toBeUndefined();
     expect(document.openapi).toMatch(/^3\.1\./);
     expect(JSON.stringify(document)).not.toContain("application/problem+cbor");
 
+    for (const [method, path, operationId] of extensions) {
+      expect(document.paths[path][method].description).toContain(closedQueryDescription(operationId));
+    }
+
     const expectedStatuses: Record<string, string[]> = {
       getHealth: ["200", "400", "406", "500"],
-      getHello: ["200", "400", "406", "500"],
-      createHello: ["200", "400", "406", "413", "415", "422", "500"],
-      listItems: ["200", "400", "406", "422", "500"],
+      getHello: ["200", "400", "406", "500", "503"],
+      createHello: ["200", "400", "406", "413", "415", "422", "500", "503"],
+      listItems: ["200", "400", "406", "422", "500", "503"],
       createProfile: ["201", "400", "401", "406", "409", "413", "415", "422", "500", "503"],
       getProfile: ["200", "400", "401", "404", "406", "500", "503"],
       updateProfile: ["200", "400", "401", "404", "406", "413", "415", "422", "500", "503"],
       deleteProfile: ["204", "400", "401", "404", "500", "503"],
-      getGitHubOwner: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
-      listGitHubOwnerRepositories: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
-      getGitHubRepository: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
-      listGitHubRepositoryActivity: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
-      listGitHubRepositoryLanguages: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
-      listGitHubRepositoryTags: ["200", "400", "404", "406", "422", "429", "500", "502", "504"],
+      getGitHubOwner: ["200", "400", "404", "406", "422", "429", "500", "502", "503", "504"],
+      listGitHubOwnerRepositories: ["200", "400", "404", "406", "422", "429", "500", "502", "503", "504"],
+      getGitHubRepository: ["200", "400", "404", "406", "422", "429", "500", "502", "503", "504"],
+      listGitHubRepositoryActivity: ["200", "400", "404", "406", "422", "429", "500", "502", "503", "504"],
+      listGitHubRepositoryLanguages: ["200", "400", "404", "406", "422", "429", "500", "502", "503", "504"],
+      listGitHubRepositoryTags: ["200", "400", "404", "406", "422", "429", "500", "502", "503", "504"],
     };
     const requiredHeaders = [
       "Vary",
@@ -821,14 +922,20 @@ describe("App Integration", () => {
         expect(operation).not.toHaveProperty("requestBody");
       }
       expect(Object.keys(operation.responses).toSorted()).toEqual(expectedStatuses[operationId]);
+      expect(operation.description).toContain(closedQueryDescription(operationId));
       expect(operation.parameters).toContainEqual(
         expect.objectContaining({
           name: "X-Request-ID",
           in: "header",
           required: false,
+          style: "simple",
+          explode: false,
           schema: expect.objectContaining({ maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }),
         }),
       );
+      for (const parameter of operation.parameters) {
+        expectParameterSerialization(parameter);
+      }
       for (const [status, projectedResponse] of Object.entries(operation.responses) as Array<
         [string, Record<string, unknown>]
       >) {
@@ -840,6 +947,7 @@ describe("App Integration", () => {
         } else {
           expect(projectedResponse["headers"]).toHaveProperty("Link");
         }
+        if (status === "503") expect(projectedResponse["headers"]).toHaveProperty("Retry-After");
       }
     }
 
@@ -877,25 +985,55 @@ describe("App Integration", () => {
           name: "limit",
           in: "query",
           required: false,
+          style: "form",
+          explode: true,
           schema: expect.objectContaining({ default: 20, minimum: 1, maximum: 100 }),
         }),
         expect.objectContaining({
           name: "cursor",
           in: "query",
           required: false,
+          style: "form",
+          explode: true,
           schema: expect.objectContaining({ maxLength: 2048 }),
         }),
       ]),
     );
-    expect(document.components.schemas.ItemsResponse.properties.items.items.properties.price).toMatchObject({
-      type: "object",
-      additionalProperties: false,
-      required: ["amountMinor", "currency"],
-      properties: {
-        amountMinor: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
-        currency: { type: "string", enum: ["USD"] },
-      },
-    });
+    const itemVariants = document.components.schemas.ItemsResponse.properties.items.items.anyOf;
+    expect(itemVariants).toHaveLength(30);
+    for (const itemSchema of itemVariants) {
+      expect(itemSchema).toMatchObject({
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "name", "category", "price", "inStock", "createdAt", "description"],
+        properties: {
+          price: {
+            type: "object",
+            additionalProperties: false,
+            required: ["amountMinor", "currency"],
+          },
+        },
+      });
+    }
+    const documentedCatalog: unknown[] = [];
+    for (const itemSchema of itemVariants) {
+      documentedCatalog.push({
+        id: itemSchema.properties.id.enum.at(0),
+        name: itemSchema.properties.name.enum.at(0),
+        category: itemSchema.properties.category.enum.at(0),
+        price: {
+          amountMinor: itemSchema.properties.price.properties.amountMinor.enum.at(0),
+          currency: itemSchema.properties.price.properties.currency.enum.at(0),
+        },
+        inStock: itemSchema.properties.inStock.enum.at(0),
+        createdAt: itemSchema.properties.createdAt.enum.at(0),
+        description: itemSchema.properties.description.enum.at(0),
+      });
+    }
+    const runtimeCatalog = await fastify
+      .inject({ method: "GET", url: "/v1/items?limit=100" })
+      .then((catalogResponse) => catalogResponse.json().items);
+    expect(documentedCatalog).toEqual(runtimeCatalog);
     expect(document.components.schemas.ItemsResponse.properties.items.maxItems).toBe(100);
     await fastify.close();
   });

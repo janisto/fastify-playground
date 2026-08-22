@@ -14,6 +14,19 @@ describe("parseStrictJson", () => {
     expect(parseStrictJson(Buffer.alloc(0))).toBeUndefined();
   });
 
+  it("exposes each exact numeric lexeme before binary conversion can hide precision", () => {
+    const numbers: Array<[string, number, readonly (string | number)[]]> = [];
+    const value = parseStrictJson(Buffer.from("[1.0000000000000001,-1e-324]"), {
+      validateNumber: (source, number, path) => numbers.push([source, number, [...path]]),
+    });
+
+    expect(value).toEqual([1, -0]);
+    expect(numbers).toEqual([
+      ["1.0000000000000001", 1, [0]],
+      ["-1e-324", -0, [1]],
+    ]);
+  });
+
   it.each([
     ["trailing input", "null x"],
     ["non-string key", "{1:2}"],

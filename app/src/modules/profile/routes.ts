@@ -1,5 +1,6 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 import { getFirestore } from "firebase-admin/firestore";
+import { registerMissingMediaTypeParser } from "../../plugins/request-body.js";
 import { ErrorModelSchema } from "../../schemas/index.js";
 import { isOpaqueId } from "../../schemas/portable.js";
 import { API_MEDIA_TYPES } from "../../utils/content-negotiation.js";
@@ -21,6 +22,7 @@ function principalId(user: { uid?: unknown } | null): string {
 }
 
 const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fastify, options) => {
+  registerMissingMediaTypeParser(fastify);
   const repository =
     options.repository ?? createLazyFirestoreProfileRepository(() => getFirestore(fastify.firebaseAuth.app));
   const service =

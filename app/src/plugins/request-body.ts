@@ -1,6 +1,7 @@
 import { decode as cborDecode } from "cbor2";
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
+import { PortableError } from "../utils/portable-error.js";
 import { parseStrictJson } from "../utils/strict-json.js";
 
 export const MAX_REQUEST_BODY_BYTES = 1_000_000;
@@ -26,7 +27,17 @@ async function parseCbor(_request: FastifyRequest, payload: Buffer): Promise<unk
   }
 }
 
+async function parseMissingMediaType(_request: FastifyRequest, payload: Buffer): Promise<undefined> {
+  if (payload.length > 0) throw new PortableError("unsupported_media_type");
+  return undefined;
+}
+
+export function registerMissingMediaTypeParser(fastify: FastifyInstance): void {
+  fastify.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: MAX_REQUEST_BODY_BYTES }, parseMissingMediaType);
+}
+
 const requestBodyPlugin: FastifyPluginAsync = async (fastify) => {
+  fastify.removeContentTypeParser("text/plain");
   fastify.removeContentTypeParser("application/json");
   fastify.addContentTypeParser("application/json", { parseAs: "buffer", bodyLimit: MAX_REQUEST_BODY_BYTES }, parseJson);
   fastify.addContentTypeParser("application/cbor", { parseAs: "buffer", bodyLimit: MAX_REQUEST_BODY_BYTES }, parseCbor);

@@ -3,7 +3,14 @@ import type { Firestore } from "firebase-admin/firestore";
 import Value from "typebox/value";
 import { isOpaqueId, TIMESTAMP_PATTERN } from "../../schemas/portable.js";
 import { PortableError } from "../../utils/portable-error.js";
-import { type Profile, type ProfileCreate, ProfileSchema, type ProfileUpdate } from "./schemas.js";
+import {
+  normalizeContactEmail,
+  normalizePhoneNumber,
+  type Profile,
+  type ProfileCreate,
+  ProfileSchema,
+  type ProfileUpdate,
+} from "./schemas.js";
 
 const PROFILE_COLLECTION = "profiles";
 const TIMESTAMP_REGEX = new RegExp(TIMESTAMP_PATTERN);
@@ -35,6 +42,10 @@ function isProfile(value: unknown, expectedId: string): value is Profile {
     record["firstName"].isWellFormed() &&
     typeof record["lastName"] === "string" &&
     record["lastName"].isWellFormed() &&
+    typeof record["contactEmail"] === "string" &&
+    normalizeContactEmail(record["contactEmail"]) === record["contactEmail"] &&
+    typeof record["phoneNumber"] === "string" &&
+    normalizePhoneNumber(record["phoneNumber"]) === record["phoneNumber"] &&
     isCanonicalTimestamp(record["createdAt"]) &&
     isCanonicalTimestamp(record["updatedAt"]) &&
     record["updatedAt"] >= record["createdAt"]
@@ -94,7 +105,6 @@ export class FirestoreProfileRepository implements ProfileRepository {
         transaction.create(reference, profile);
         return profile;
       });
-      signal?.throwIfAborted();
       return result;
     } catch (error) {
       throw dependencyError(error, signal);
@@ -127,7 +137,6 @@ export class FirestoreProfileRepository implements ProfileRepository {
         transaction.set(reference, updated);
         return updated;
       });
-      signal?.throwIfAborted();
       return result;
     } catch (error) {
       throw dependencyError(error, signal);
@@ -146,7 +155,6 @@ export class FirestoreProfileRepository implements ProfileRepository {
         transaction.delete(reference);
         return true;
       });
-      signal?.throwIfAborted();
       return result;
     } catch (error) {
       throw dependencyError(error, signal);

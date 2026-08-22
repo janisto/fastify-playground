@@ -43,6 +43,36 @@ async function streamedHelloRequest(
   });
 }
 
+async function chunkedHelloRequest(
+  address: string,
+  payload: Buffer,
+  requestId: string,
+): Promise<{ body: string; headers: IncomingHttpHeaders; statusCode: number }> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      new URL("/v1/hello", address),
+      {
+        method: "POST",
+        headers: { "transfer-encoding": "chunked", "x-request-id": requestId },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () =>
+          resolve({
+            body: Buffer.concat(chunks).toString("utf8"),
+            headers: response.headers,
+            statusCode: response.statusCode ?? 0,
+          }),
+        );
+      },
+    );
+    request.on("error", reject);
+    if (payload.length > 0) request.write(payload);
+    request.end();
+  });
+}
+
 vi.mock("firebase-admin/app", () => ({
   deleteApp: vi.fn().mockResolvedValue(undefined),
   getApps: vi.fn(() => [firebaseApp]),
@@ -207,6 +237,31 @@ describe("portable raw HTTP boundary", () => {
     expect(empty.json()).toMatchObject({ status: 400, code: "invalid_request" });
     expect(nonEmpty.json()).toMatchObject({ status: 415, code: "unsupported_media_type" });
     await app.close();
+  });
+
+  it("classifies chunked content by received bytes rather than the transfer header", async () => {
+    const { HelloService } = await import("../../src/modules/hello/service.js");
+    const greet = vi.spyOn(HelloService.prototype, "greet");
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp();
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+
+    try {
+      const [empty, nonEmpty] = await Promise.all([
+        chunkedHelloRequest(address, Buffer.alloc(0), "chunked-empty"),
+        chunkedHelloRequest(address, Buffer.from("{}"), "chunked-content"),
+      ]);
+
+      expect(empty.statusCode).toBe(400);
+      expect(empty.headers["x-request-id"]).toBe("chunked-empty");
+      expect(JSON.parse(empty.body)).toMatchObject({ status: 400, code: "invalid_request" });
+      expect(nonEmpty.statusCode).toBe(415);
+      expect(nonEmpty.headers["x-request-id"]).toBe("chunked-content");
+      expect(JSON.parse(nonEmpty.body)).toMatchObject({ status: 415, code: "unsupported_media_type" });
+      expect(greet).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
   });
 
   it("enforces the exact declared request-body boundary before the handler", async () => {

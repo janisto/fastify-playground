@@ -3,6 +3,10 @@ import { TextDecoder } from "node:util";
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const NUMBER_PATTERN = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
 
+export interface StrictJsonOptions {
+  readonly validateNumber?: (source: string, value: number, path: readonly (string | number)[]) => void;
+}
+
 function assertValidSurrogates(value: string): void {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
@@ -18,10 +22,13 @@ function assertValidSurrogates(value: string): void {
 
 class JsonParser {
   private offset = 0;
+  private readonly path: Array<string | number> = [];
   private readonly source: string;
+  private readonly validateNumber: StrictJsonOptions["validateNumber"];
 
-  constructor(source: string) {
+  constructor(source: string, options: StrictJsonOptions) {
     this.source = source;
+    this.validateNumber = options.validateNumber;
   }
 
   parse(): unknown {
@@ -70,8 +77,11 @@ class JsonParser {
       if (this.current() !== ":") throw new SyntaxError("missing object separator");
       this.offset += 1;
       this.skipWhitespace();
+      this.path.push(key);
+      const value = this.parseValue();
+      this.path.pop();
       Object.defineProperty(result, key, {
-        value: this.parseValue(),
+        value,
         writable: true,
         enumerable: true,
         configurable: true,
@@ -98,7 +108,9 @@ class JsonParser {
     }
 
     while (true) {
+      this.path.push(result.length);
       result.push(this.parseValue());
+      this.path.pop();
       this.skipWhitespace();
       const delimiter = this.current();
       if (delimiter === "]") {
@@ -148,15 +160,17 @@ class JsonParser {
     const match = NUMBER_PATTERN.exec(this.source);
     if (!match) throw new SyntaxError("invalid JSON value");
     this.offset = NUMBER_PATTERN.lastIndex;
-    const value = Number(match[0]);
+    const source = match[0];
+    const value = Number(source);
     if (!Number.isFinite(value)) throw new SyntaxError("non-finite JSON number");
+    this.validateNumber?.(source, value, this.path);
     return value;
   }
 }
 
-export function parseStrictJson(bytes: Buffer): unknown {
+export function parseStrictJson(bytes: Buffer, options: StrictJsonOptions = {}): unknown {
   if (bytes.length === 0) return undefined;
   const source = UTF8_DECODER.decode(bytes);
   if (source.startsWith("\uFEFF")) throw new SyntaxError("JSON byte-order mark is not supported");
-  return new JsonParser(source).parse();
+  return new JsonParser(source, options).parse();
 }

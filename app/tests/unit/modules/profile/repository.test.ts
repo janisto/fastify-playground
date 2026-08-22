@@ -172,6 +172,7 @@ describe("FirestoreProfileRepository", () => {
     ["first name with an unpaired surrogate", "firstName", String.fromCharCode(0xd800)],
     ["name with surrounding whitespace", "lastName", "Lovelace "],
     ["malformed contact email", "contactEmail", "not-an-email"],
+    ["noncanonical contact email domain", "contactEmail", "Ada@EXAMPLE.COM"],
     ["non-E.164 phone number", "phoneNumber", "0401234567"],
   ] as const)("classifies a persisted profile with %s as corrupt", async (_case, field, value) => {
     const fixture = firestoreDouble();
@@ -243,6 +244,49 @@ describe("FirestoreProfileRepository", () => {
       expect(fixture.transaction.create).not.toHaveBeenCalled();
       expect(fixture.transaction.set).not.toHaveBeenCalled();
       expect(fixture.transaction.delete).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["create", "update", "delete"] as const)(
+    "returns the definitive %s result when cancellation arrives after the provider commits",
+    async (operation) => {
+      const controller = new AbortController();
+      const cancellation = new Error("request canceled after commit");
+      const stored = {
+        id: "principal",
+        ...INPUT,
+        marketingOptIn: false,
+        createdAt: NOW,
+        updatedAt: NOW,
+      };
+      const transaction = {
+        get: vi.fn(async () => ({ exists: operation !== "create", data: () => stored })),
+        create: vi.fn(),
+        set: vi.fn(),
+        delete: vi.fn(),
+      };
+      const firestore = {
+        collection: vi.fn(() => ({ doc: vi.fn(() => ({})) })),
+        runTransaction: vi.fn(async (callback: (value: typeof transaction) => unknown) => {
+          const result = await callback(transaction);
+          controller.abort(cancellation);
+          return result;
+        }),
+      } as unknown as Firestore;
+      const repository = new FirestoreProfileRepository(firestore);
+      const result =
+        operation === "create"
+          ? await repository.create("principal", INPUT, NOW, controller.signal)
+          : operation === "update"
+            ? await repository.update("principal", { firstName: "Grace" }, NOW, controller.signal)
+            : await repository.delete("principal", controller.signal);
+
+      if (operation === "create") expect(result).toMatchObject({ id: "principal", firstName: "Ada" });
+      if (operation === "update") expect(result).toMatchObject({ id: "principal", firstName: "Grace" });
+      if (operation === "delete") expect(result).toBe(true);
+      expect(transaction.create).toHaveBeenCalledTimes(operation === "create" ? 1 : 0);
+      expect(transaction.set).toHaveBeenCalledTimes(operation === "update" ? 1 : 0);
+      expect(transaction.delete).toHaveBeenCalledTimes(operation === "delete" ? 1 : 0);
     },
   );
 

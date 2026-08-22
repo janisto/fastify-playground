@@ -29,6 +29,7 @@ const itemsRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
           406: ErrorModelSchema,
           422: ErrorModelSchema,
           500: ErrorModelSchema,
+          503: ErrorModelSchema,
         },
       },
     },

@@ -1,13 +1,8 @@
 import { type Static, Type } from "@fastify/type-provider-typebox";
 
-import {
-  BoundedNameSchema,
-  MoneySchema,
-  OpaqueIdSchema,
-  SafeIntegerSchema,
-  TimestampSchema,
-} from "../../schemas/portable.js";
+import { SafeIntegerSchema } from "../../schemas/portable.js";
 import { MAX_CURSOR_LENGTH } from "../../utils/pagination.js";
+import { ITEM_CATALOG } from "./catalog.js";
 
 export const CategoryEnum = Type.Union([
   Type.Literal("electronics"),
@@ -20,18 +15,31 @@ export const CategoryEnum = Type.Union([
 
 export type Category = Static<typeof CategoryEnum>;
 
-const ItemSchema = Type.Object(
-  {
-    id: OpaqueIdSchema,
-    name: BoundedNameSchema,
-    category: CategoryEnum,
-    price: MoneySchema,
-    inStock: Type.Boolean(),
-    createdAt: TimestampSchema,
-    description: Type.String({ minLength: 1, maxLength: 500 }),
-  },
-  { additionalProperties: false },
-);
+function exactItemSchema(item: (typeof ITEM_CATALOG)[number]) {
+  return Type.Object(
+    {
+      id: Type.Literal(item.id),
+      name: Type.Literal(item.name),
+      category: Type.Literal(item.category),
+      price: Type.Object(
+        {
+          amountMinor: Type.Literal(item.price.amountMinor),
+          currency: Type.Literal(item.price.currency),
+        },
+        { additionalProperties: false },
+      ),
+      inStock: Type.Literal(item.inStock),
+      createdAt: Type.Literal(item.createdAt),
+      description: Type.Literal(item.description),
+    },
+    { additionalProperties: false },
+  );
+}
+
+const ItemSchema = Type.Union([
+  exactItemSchema(ITEM_CATALOG[0]),
+  ...ITEM_CATALOG.slice(1).map((item) => exactItemSchema(item)),
+]);
 
 export type Item = Static<typeof ItemSchema>;
 
