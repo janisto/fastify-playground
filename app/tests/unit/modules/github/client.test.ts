@@ -311,11 +311,11 @@ describe("GitHubClient", () => {
     expect(result.items.map(({ name }) => name)).toEqual(["repo", "z"]);
   });
 
-  it("validates numbered links without following them", async () => {
+  it("validates case-insensitive numbered link relations without following them", async () => {
     pool.intercept({ path: /\/users\/octocat\/repos/, method: "GET" }).reply(200, [SUMMARY], {
       headers: {
         ...JSON_HEADERS,
-        link: '<https://api.github.com/user/1/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3>; rel="next", <https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=1>; rel="prev"',
+        link: '<https://api.github.com/user/1/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=3>; rel="NEXT", <https://api.github.com/users/octocat/repos?type=owner&sort=full_name&direction=asc&per_page=5&page=1>; rel="Prev"',
       },
     });
     await expect(new GitHubClient({ dispatcher: agent }).listOwnerRepos("octocat", 5, 2)).resolves.toMatchObject({
@@ -720,6 +720,65 @@ describe("GitHubClient", () => {
     await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).rejects.toMatchObject({
       code: GITHUB_ERROR_UPSTREAM,
     });
+  });
+
+  it.each(["1.0000000000000001", "9007199254740990.9", "-1e-324"])(
+    "rejects provider integer lexeme %s when binary parsing would hide its domain error",
+    async (lexeme) => {
+      const body = JSON.stringify(OWNER).replace('"id":1', `"id":${lexeme}`);
+      pool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, body, { headers: JSON_HEADERS });
+
+      await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).rejects.toMatchObject({
+        code: GITHUB_ERROR_UPSTREAM,
+        statusCode: 502,
+      });
+    },
+  );
+
+  it.each([
+    ["1.0", 1],
+    ["1e0", 1],
+    ["100e-2", 1],
+    ["900719925474099100e-2", Number.MAX_SAFE_INTEGER],
+  ] as const)("accepts exact safe provider integer lexeme %s", async (lexeme, expected) => {
+    const body = JSON.stringify(OWNER).replace('"id":1', `"id":${lexeme}`);
+    pool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, body, { headers: JSON_HEADERS });
+
+    await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).resolves.toMatchObject({ id: expected });
+  });
+
+  it("ignores an unrelated additive provider number even when its lexeme is not an integer", async () => {
+    const body = JSON.stringify(OWNER).replace(/}$/, ',"ignored_metric":1.0000000000000001}');
+    pool.intercept({ path: "/users/octocat", method: "GET" }).reply(200, body, { headers: JSON_HEADERS });
+
+    await expect(new GitHubClient({ dispatcher: agent }).getOwner("octocat")).resolves.toMatchObject({ id: 1 });
+  });
+
+  it("enforces exact integer lexemes at collection, detail, activity, and map projection paths", async () => {
+    pool
+      .intercept({ path: /\/users\/octocat\/repos/, method: "GET" })
+      .reply(200, JSON.stringify([SUMMARY]).replace('"id":2', '"id":2.0000000000000001'), {
+        headers: JSON_HEADERS,
+      });
+    pool
+      .intercept({ path: "/repos/octocat/repo", method: "GET" })
+      .reply(200, JSON.stringify(DETAIL).replace('"stargazers_count":4', '"stargazers_count":4.0000000000000001'), {
+        headers: JSON_HEADERS,
+      });
+    pool
+      .intercept({ path: /\/repos\/octocat\/repo\/activity/, method: "GET" })
+      .reply(200, JSON.stringify([ACTIVITY]).replace('"id":3', '"id":3.0000000000000001'), {
+        headers: JSON_HEADERS,
+      });
+    pool
+      .intercept({ path: "/repos/octocat/repo/languages", method: "GET" })
+      .reply(200, '{"TypeScript":42.0000000000000001}', { headers: JSON_HEADERS });
+    const client = new GitHubClient({ dispatcher: agent });
+
+    await expect(client.listOwnerRepos("octocat")).rejects.toMatchObject({ code: GITHUB_ERROR_UPSTREAM });
+    await expect(client.getRepo("octocat", "repo")).rejects.toMatchObject({ code: GITHUB_ERROR_UPSTREAM });
+    await expect(client.listRepoActivity("octocat", "repo")).rejects.toMatchObject({ code: GITHUB_ERROR_UPSTREAM });
+    await expect(client.listRepoLanguages("octocat", "repo")).rejects.toMatchObject({ code: GITHUB_ERROR_UPSTREAM });
   });
 
   it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])("rejects invalid timeout %s", (timeoutMs) => {

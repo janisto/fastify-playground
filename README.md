@@ -14,7 +14,7 @@ A production-oriented reference REST API built with Fastify, TypeScript, and Nod
 
 ## Features
 
-- Layered plugin architecture with production HSTS, an exact CORS origin allowlist, and [fastify-observability](https://www.npmjs.com/package/fastify-observability)
+- Layered plugin architecture with application security headers, TLS-terminator-owned HSTS, an exact CORS origin allowlist, and [fastify-observability](https://www.npmjs.com/package/fastify-observability)
 - Validated request IDs, strict [W3C Trace Context](https://www.w3.org/TR/trace-context/), request-scoped Pino fields, and exactly one structured terminal access record
 - Firebase Authentication with revocation-aware ID token verification, a `request.user` decorator, and current-principal profile CRUD backed by Firestore transactions
 - TypeBox schema validation with compile-time TypeScript types and runtime JSON Schema validation
@@ -33,7 +33,7 @@ it does not claim resource-creation semantics.
 
 ### Error Responses (RFC 9457)
 
-Application-owned errors, including `/status` failures, use [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457). Documentation routes retain their Fastify plugin-owned error formats.
+Application-owned errors, including `/status` and `/openapi.json` failures, use [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457).
 
 ```json
 {
@@ -245,7 +245,7 @@ gcloud run deploy fastify-playground \
 
 This repository builds a complete distroless application image. Cloud Run's [automatic base-image updates](https://docs.cloud.google.com/run/docs/configuring/services/automatic-base-image-updates) apply to services deployed from a scratch application image or compatible source/buildpacks flow, not to this image. Rebuild and redeploy the checked-in image to pick up Node.js or distroless security updates. The runtime remains non-root and does not enable source maps because the image does not ship source files and no source-map-dependent operational workflow is configured.
 
-Trace correlation requires only a valid incoming W3C `traceparent`; no Google Cloud project setting is needed for the package's bare trace-ID contract.
+Trace correlation requires only a valid incoming W3C `traceparent`; no Google Cloud project setting is needed for the package's bare trace-ID contract. HSTS belongs at the TLS-terminating deployment boundary and is deliberately not emitted by the application on its plaintext local origin.
 
 ## API Endpoints
 
@@ -305,10 +305,10 @@ Plugins are registered explicitly in `app.ts` with layered dependencies:
 | Layer | Plugins |
 |-------|---------|
 | 1. Observability | fastify-observability |
-| 2. Core | sensible, helmet, cors |
+| 2. Core | sensible, error-handler, helmet, cors |
 | 3. HTTP Lifecycle | portable request validation, strict JSON/CBOR parsing, content negotiation |
 | 4. Infrastructure | Firebase Admin, lifecycle, Swagger, process-pressure protection |
-| 5. Application | auth, error-handler |
+| 5. Application | auth |
 | 6. Response Metadata | schema-registry, schema-discovery |
 | 7. Routes | health, schemas, v1 modules |
 

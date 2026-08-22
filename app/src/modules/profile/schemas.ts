@@ -1,17 +1,26 @@
 import { type Static, Type } from "@fastify/type-provider-typebox";
 import { BoundedNameSchema, OpaqueIdSchema, PhoneNumberSchema, TimestampSchema } from "../../schemas/portable.js";
 
-const EMAIL_PATTERN =
-  "^(?!\\.)(?![^@]*\\.\\.)(?![^@]*\\.@)[A-Za-z0-9!#$%&'*+/=?^_{|}~.-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$";
+const ASCII_EDGE_WHITESPACE = "[\\u0009-\\u000D\\u0020]*";
+const EMAIL_LOCAL_PART = "(?!\\.)(?![^@]*\\.\\.)(?![^@]*\\.@)[A-Za-z0-9!#$%&'*+/=?^_{|}~.-]{1,64}";
+const CANONICAL_DOMAIN_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const INPUT_DOMAIN_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+const EMAIL_PATTERN = `^${EMAIL_LOCAL_PART}@${CANONICAL_DOMAIN_LABEL}(?:\\.${CANONICAL_DOMAIN_LABEL})+$`;
+const EMAIL_INPUT_PATTERN =
+  `^${ASCII_EDGE_WHITESPACE}(?=[^\\u0009-\\u000D\\u0020]{3,254}${ASCII_EDGE_WHITESPACE}$)` +
+  `${EMAIL_LOCAL_PART}@${INPUT_DOMAIN_LABEL}(?:\\.${INPUT_DOMAIN_LABEL})+${ASCII_EDGE_WHITESPACE}$`;
+const PHONE_INPUT_PATTERN = `^${ASCII_EDGE_WHITESPACE}\\+[1-9][0-9]{6,14}${ASCII_EDGE_WHITESPACE}$`;
 
 export const ContactEmailSchema = Type.String({ minLength: 3, maxLength: 254, pattern: EMAIL_PATTERN });
+export const ContactEmailInputSchema = Type.String({ pattern: EMAIL_INPUT_PATTERN });
+export const PhoneNumberInputSchema = Type.String({ pattern: PHONE_INPUT_PATTERN });
 
 export const ProfileCreateSchema = Type.Object(
   {
     firstName: BoundedNameSchema,
     lastName: BoundedNameSchema,
-    contactEmail: ContactEmailSchema,
-    phoneNumber: PhoneNumberSchema,
+    contactEmail: ContactEmailInputSchema,
+    phoneNumber: PhoneNumberInputSchema,
     marketingOptIn: Type.Optional(Type.Boolean({ default: false })),
     termsAccepted: Type.Literal(true),
   },
@@ -22,8 +31,8 @@ export const ProfileUpdateSchema = Type.Object(
   {
     firstName: Type.Optional(BoundedNameSchema),
     lastName: Type.Optional(BoundedNameSchema),
-    contactEmail: Type.Optional(ContactEmailSchema),
-    phoneNumber: Type.Optional(PhoneNumberSchema),
+    contactEmail: Type.Optional(ContactEmailInputSchema),
+    phoneNumber: Type.Optional(PhoneNumberInputSchema),
     marketingOptIn: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false, minProperties: 1 },

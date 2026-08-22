@@ -53,7 +53,7 @@ function alignResponseHeaders(status: string, response: OpenAPIV3_1.ResponseObje
       schema: { type: "string" },
     };
   }
-  if (status === "429") {
+  if (status === "429" || status === "503") {
     response.headers["Retry-After"] = RETRY_AFTER_HEADER;
   }
 }
@@ -139,8 +139,47 @@ const PAGINATED_OPERATION_IDS = new Set([
   "listGitHubRepositoryTags",
 ]);
 
+const PORTABLE_OPERATION_IDS = new Set([
+  "getHealth",
+  "getHello",
+  "createHello",
+  "listItems",
+  "createProfile",
+  "getProfile",
+  "updateProfile",
+  "deleteProfile",
+  "getGitHubOwner",
+  "listGitHubOwnerRepositories",
+  "getGitHubRepository",
+  "listGitHubRepositoryActivity",
+  "listGitHubRepositoryLanguages",
+  "listGitHubRepositoryTags",
+]);
+
+function alignClosedQueryDescription(operation: OpenAPIV3_1.OperationObject): void {
+  if (!operation.operationId || !PORTABLE_OPERATION_IDS.has(operation.operationId)) return;
+  const sentence = PAGINATED_OPERATION_IDS.has(operation.operationId)
+    ? "Only the documented query parameters are accepted; unknown, repeated, or malformed query input is rejected."
+    : "No query parameters are accepted; unknown, repeated, or malformed query input is rejected.";
+  if (operation.description?.endsWith(sentence)) return;
+  const description = operation.description?.trim();
+  const separator = description && !/[.!?]$/.test(description) ? ". " : " ";
+  operation.description = description ? `${description}${separator}${sentence}` : sentence;
+}
+
+function alignParameterSerialization(parameter: OpenAPIV3_1.ParameterObject): void {
+  if (parameter.in === "query") {
+    parameter.style = "form";
+    parameter.explode = true;
+  } else if (parameter.in === "path" || parameter.in === "header") {
+    parameter.style = "simple";
+    parameter.explode = false;
+  }
+}
+
 function alignOperation(operation: OpenAPIV3_1.OperationObject): void {
   alignOperationResponses(operation);
+  alignClosedQueryDescription(operation);
   operation.parameters ??= [];
   operation.parameters.push({
     name: "X-Request-ID",
@@ -149,6 +188,9 @@ function alignOperation(operation: OpenAPIV3_1.OperationObject): void {
     description: "A missing, invalid, repeated, or comma-combined candidate is replaced rather than rejected.",
     schema: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
   });
+  for (const parameter of operation.parameters) {
+    if (!("$ref" in parameter)) alignParameterSerialization(parameter);
+  }
 
   const success = operation.responses?.["200"];
   if (operation.operationId && PAGINATED_OPERATION_IDS.has(operation.operationId) && success && !("$ref" in success)) {
@@ -186,10 +228,6 @@ function alignOperation(operation: OpenAPIV3_1.OperationObject): void {
         schema: { type: "integer", minimum: 0, maximum: 9_007_199_254_740_991 },
       },
     };
-  }
-  const unavailable = operation.responses?.["503"];
-  if (operation.operationId === "getReadiness" && unavailable && !("$ref" in unavailable)) {
-    unavailable.headers = { ...unavailable.headers, "Retry-After": RETRY_AFTER_HEADER };
   }
   const empty = operation.responses?.["204"];
   if (empty && !("$ref" in empty)) delete empty.content;

@@ -133,9 +133,8 @@ function validateBodyFields(request: FastifyRequest): void {
 
   const contentTypes = rawHeaderValues(request, "content-type");
   const contentLength = Number(request.headers["content-length"] ?? "0");
-  const hasTransferEncoding = request.headers["transfer-encoding"] !== undefined;
   if (contentTypes.length === 0) {
-    if (contentLength > 0 || hasTransferEncoding) throw new PortableError("unsupported_media_type");
+    if (contentLength > 0) throw new PortableError("unsupported_media_type");
     return;
   }
   if (contentTypes.length !== 1 || parseContentType(contentTypes[0] ?? "") === null) {

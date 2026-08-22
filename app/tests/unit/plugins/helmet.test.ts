@@ -9,10 +9,10 @@ describe("HTTP security headers", () => {
     await Promise.all(apps.splice(0).map((app) => app.close()));
   });
 
-  async function request(hsts = false) {
+  async function request() {
     const app = Fastify();
     apps.push(app);
-    app.register(helmet, { hsts });
+    app.register(helmet);
     app.get("/resource", async () => ({ ok: true }));
     return app.inject({ method: "GET", url: "/resource" });
   }
@@ -35,15 +35,9 @@ describe("HTTP security headers", () => {
     );
   });
 
-  it("omits HSTS for local HTTP development", async () => {
+  it("leaves HSTS to the TLS-terminating deployment boundary", async () => {
     const response = await request();
 
     expect(response.headers["strict-transport-security"]).toBeUndefined();
-  });
-
-  it("enables HSTS for the production application configuration", async () => {
-    const response = await request(true);
-
-    expect(response.headers["strict-transport-security"]).toBe("max-age=31536000; includeSubDomains");
   });
 });

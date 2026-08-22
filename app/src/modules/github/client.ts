@@ -31,6 +31,7 @@ const SAFE_INTEGER_MAXIMUM = 9_007_199_254_740_991;
 const GITHUB_API_VERSION = "2026-03-10";
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const CANONICAL_DECIMAL = /^(?:0|[1-9][0-9]*)$/;
+const JSON_NUMBER_COMPONENTS = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/;
 const HTTP_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export interface GitHubClientOptions {
@@ -76,6 +77,21 @@ interface ActivityLinkContext {
   readonly limit: number;
 }
 
+type NumberPathPolicy = (path: readonly (string | number)[]) => boolean;
+
+const OWNER_NUMBER_FIELDS = new Set(["id", "public_repos", "followers", "following"]);
+const REPOSITORY_NUMBER_FIELDS = new Set(["id", "stargazers_count", "forks_count", "open_issues_count"]);
+
+function topLevelNumberPath(fields: ReadonlySet<string>): NumberPathPolicy {
+  return (path) => path.length === 1 && typeof path[0] === "string" && fields.has(path[0]);
+}
+
+const OWNER_NUMBER_PATH = topLevelNumberPath(OWNER_NUMBER_FIELDS);
+const REPOSITORY_NUMBER_PATH = topLevelNumberPath(REPOSITORY_NUMBER_FIELDS);
+const COLLECTION_ID_NUMBER_PATH: NumberPathPolicy = (path) =>
+  path.length === 2 && typeof path[0] === "number" && path[1] === "id";
+const LANGUAGE_BYTES_NUMBER_PATH: NumberPathPolicy = (path) => path.length === 1 && typeof path[0] === "string";
+
 function headerValues(headers: ResponseHeaders, name: string): string[] {
   const value = headers[name];
   if (value === undefined) return [];
@@ -91,6 +107,30 @@ function canonicalSafeInteger(value: string): number | null {
   if (!CANONICAL_DECIMAL.test(value)) return null;
   const number = Number(value);
   return Number.isSafeInteger(number) && number >= 0 && number <= SAFE_INTEGER_MAXIMUM ? number : null;
+}
+
+function isExactSafeIntegerJsonNumber(source: string): boolean {
+  const match = JSON_NUMBER_COMPONENTS.exec(source);
+  if (!match) return false;
+  const fraction = match[3] ?? "";
+  const coefficient = `${match[2] ?? ""}${fraction}`.replace(/^0+/, "");
+  if (coefficient.length === 0) return true;
+  if (match[1] === "-") return false;
+
+  const exponent = Number(match[4] ?? "0");
+  let integer: string;
+  if (exponent >= fraction.length) {
+    const trailingZeros = exponent - fraction.length;
+    if (coefficient.length + trailingZeros > String(SAFE_INTEGER_MAXIMUM).length) return false;
+    integer = `${coefficient}${"0".repeat(trailingZeros)}`;
+  } else {
+    const removedDigits = fraction.length - exponent;
+    if (removedDigits >= coefficient.length || !/^0+$/.test(coefficient.slice(-removedDigits))) return false;
+    integer = coefficient.slice(0, -removedDigits);
+  }
+
+  const maximum = String(SAFE_INTEGER_MAXIMUM);
+  return integer.length < maximum.length || (integer.length === maximum.length && integer <= maximum);
 }
 
 function splitMediaType(value: string): string[] | null {
@@ -294,9 +334,11 @@ function parseRelevantLinkValue(value: string): RelevantLinkValue | null {
   const rawParameters = parameters.slice(1);
   if (rawParameters.some((parameter) => linkParameterName(parameter) === "anchor")) return null;
 
-  const relevant = linkRelations(rawParameters).filter(
-    (relation): relation is LinkRelation => relation === "next" || relation === "prev",
-  );
+  const relevant: LinkRelation[] = [];
+  for (const relation of linkRelations(rawParameters)) {
+    const normalized = relation.toLowerCase();
+    if (normalized === "next" || normalized === "prev") relevant.push(normalized);
+  }
   if (relevant.length === 0) return null;
   const target = /^<([^>]*)>$/.exec(parameters[0] ?? "")?.[1];
   if (target === undefined || new Set(relevant).size !== relevant.length) {
@@ -340,7 +382,7 @@ export class GitHubClient {
 
   async getOwner(owner: string, signal?: AbortSignal): Promise<GitHubOwner> {
     const url = new URL(`${this.baseUrl}/users/${encodeURIComponent(owner)}`);
-    const { data } = await this.getJson(url, RawGitHubOwnerSchema, signal);
+    const { data } = await this.getJson(url, RawGitHubOwnerSchema, signal, OWNER_NUMBER_PATH);
     return this.toGitHubOwner(data);
   }
 
@@ -351,7 +393,7 @@ export class GitHubClient {
     url.searchParams.set("direction", "asc");
     url.searchParams.set("per_page", String(limit));
     if (page !== 1) url.searchParams.set("page", String(page));
-    const { data, headers } = await this.getJson(url, RawGitHubOwnerReposSchema, signal);
+    const { data, headers } = await this.getJson(url, RawGitHubOwnerReposSchema, signal, COLLECTION_ID_NUMBER_PATH);
     if (data.length > limit) throw this.invalidResponse("GitHub repository page exceeded the requested limit");
     const links = this.numberedLinks(headers, {
       currentPage: page,
@@ -367,7 +409,7 @@ export class GitHubClient {
   async getRepo(owner: string, repo: string, signal?: AbortSignal): Promise<GitHubRepoDetail> {
     if (/^\.+$/.test(repo)) throw this.invalidResponse("dot-only repository reached URL construction");
     const url = new URL(`${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
-    const { data } = await this.getJson(url, RawGitHubRepoDetailSchema, signal);
+    const { data } = await this.getJson(url, RawGitHubRepoDetailSchema, signal, REPOSITORY_NUMBER_PATH);
     return this.toGitHubRepoDetail(data);
   }
 
@@ -383,7 +425,7 @@ export class GitHubClient {
     url.searchParams.set("direction", "desc");
     url.searchParams.set("per_page", String(limit));
     if (cursor) url.searchParams.set(cursor.direction, cursor.value);
-    const { data, headers } = await this.getJson(url, RawGitHubActivityListSchema, signal);
+    const { data, headers } = await this.getJson(url, RawGitHubActivityListSchema, signal, COLLECTION_ID_NUMBER_PATH);
     if (data.length > limit) throw this.invalidResponse("GitHub activity page exceeded the requested limit");
     const links = this.activityLinks(headers, {
       expectedPath: url.pathname,
@@ -397,7 +439,7 @@ export class GitHubClient {
   async listRepoLanguages(owner: string, repo: string, signal?: AbortSignal): Promise<Record<string, number>> {
     if (/^\.+$/.test(repo)) throw this.invalidResponse("dot-only repository reached URL construction");
     const url = new URL(`${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/languages`);
-    const data = (await this.getJson(url, RawGitHubLanguagesSchema, signal)).data;
+    const data = (await this.getJson(url, RawGitHubLanguagesSchema, signal, LANGUAGE_BYTES_NUMBER_PATH)).data;
     if (Object.keys(data).some((name) => name.length === 0)) {
       throw this.invalidResponse("GitHub language name was empty");
     }
@@ -458,6 +500,7 @@ export class GitHubClient {
     url: URL,
     schema: Schema,
     callerSignal?: AbortSignal,
+    exactNumberPath?: NumberPathPolicy,
   ): Promise<{ data: StaticDecode<Schema>; headers: ResponseHeaders }> {
     const { statusCode, headers, body, timeoutSignal } = await this.request(url, callerSignal);
     if (statusCode !== 200) {
@@ -468,7 +511,13 @@ export class GitHubClient {
     const bytes = await this.readBoundedBody(body, headers, callerSignal, timeoutSignal);
     let value: unknown;
     try {
-      value = parseStrictJson(bytes);
+      value = parseStrictJson(bytes, {
+        validateNumber: (source, _number, path) => {
+          if (exactNumberPath?.(path) && !isExactSafeIntegerJsonNumber(source)) {
+            throw new SyntaxError("GitHub number is not an exact safe integer");
+          }
+        },
+      });
       Value.Assert(schema, value);
       return { data: Value.Decode(schema, value), headers };
     } catch (error) {

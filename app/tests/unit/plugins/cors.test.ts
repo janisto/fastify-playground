@@ -35,8 +35,20 @@ describe("CORS policy", () => {
     expect(response.statusCode).toBe(204);
     expect(response.headers["access-control-allow-origin"]).toBe("https://app.example.com");
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
-    expect(response.headers["access-control-allow-headers"]).toContain("traceparent");
-    expect(response.headers["access-control-allow-headers"]).toContain("tracestate");
+    expect(response.headers["access-control-allow-methods"]?.split(",").map((value) => value.trim())).toEqual([
+      "GET",
+      "POST",
+      "PATCH",
+      "DELETE",
+    ]);
+    expect(response.headers["access-control-allow-headers"]?.split(",").map((value) => value.trim())).toEqual([
+      "Accept",
+      "Authorization",
+      "Content-Type",
+      "X-Request-Id",
+      "traceparent",
+      "tracestate",
+    ]);
   });
 
   it.each(["PATCH", "DELETE"] as const)("authorizes %s preflight for an exact configured origin", async (method) => {

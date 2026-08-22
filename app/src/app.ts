@@ -44,10 +44,10 @@ const OBSERVABILITY_OPTIONS = {
  *
  * Plugins are registered in dependency order:
  * 1. Observability: canonical logger, request ID, trace context, access record
- * 2. Core: sensible, helmet, cors (no dependencies)
+ * 2. Core: sensible, portable error handling, helmet, cors
  * 3. HTTP lifecycle: Vary, CBOR parsing, content negotiation
  * 4. Infrastructure: Firebase Auth, lifecycle, Swagger, process pressure
- * 5. Application: auth, error-handler
+ * 5. Application: auth
  * 6. Response metadata: schema registry and discovery
  * 7. Routes: health, schemas, and versioned modules
  */
@@ -87,15 +87,14 @@ export async function buildApp(options: BuildAppOptions = {}) {
     .setValidatorCompiler(TypeBoxValidatorCompiler)
     .withTypeProvider<TypeBoxTypeProvider>();
 
-  fastify.removeContentTypeParser("text/plain");
-
   try {
     // Layer 1: Observability must precede every application hook and route.
     await fastify.register(fastifyObservability, OBSERVABILITY_OPTIONS);
 
-    // Layer 2: Core plugins (no dependencies)
+    // Layer 2: Core plugins
     await fastify.register(sensiblePlugin);
-    await fastify.register(helmetPlugin, { hsts: env.NODE_ENV === "production" });
+    await fastify.register(errorHandlerPlugin);
+    await fastify.register(helmetPlugin);
     await fastify.register(corsPlugin, { origins: env.CORS_ORIGINS });
 
     // Layer 3: HTTP lifecycle and content negotiation plugins
@@ -112,7 +111,6 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
     // Layer 5: Application plugins
     await fastify.register(authPlugin);
-    await fastify.register(errorHandlerPlugin);
 
     // Layer 6: Response transformation plugins
     await fastify.register(schemaRegistryPlugin);
