@@ -2,11 +2,11 @@
 
 [![Application CI](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-ci.yml?branch=main&label=application%20CI&logo=githubactions&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-ci.yml)
 [![Code quality](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-lint.yml?branch=main&label=code%20quality&logo=biome&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-lint.yml)
-[![Node.js 24.18.0](https://img.shields.io/badge/Node.js-24.18.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![pnpm 11.17.0](https://img.shields.io/badge/pnpm-11.17.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Node.js 24.22.0](https://img.shields.io/badge/Node.js-24.22.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![pnpm 12.14.0](https://img.shields.io/badge/pnpm-12.14.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![MIT license](https://img.shields.io/github/license/janisto/fastify-playground)](LICENSE)
 
-A production-oriented reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates generated OpenAPI, Firebase Authentication and Firestore-backed current-principal profiles, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
+A reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates generated OpenAPI, Firebase Authentication and Firestore-backed current-principal profiles, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
 
 <img src="assets/ts.svg" alt="TypeScript logo" width="200">
 
@@ -139,10 +139,10 @@ functions/              # Firebase Cloud Functions (placeholder)
 
 ## Requirements
 
-- Node.js 24.18.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
-- pnpm 11.17.0 through Corepack
+- Node.js 24.22.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
+- pnpm 12.14.0 through Corepack
 - [just](https://github.com/casey/just) for repository workflows
-- [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.28.0](https://docs.zizmor.sh/) for local workflow checks
+- [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.31.1](https://docs.zizmor.sh/) for local workflow checks
 - Firebase project with Authentication and Firestore, or their emulators, when exercising authenticated identity and profile routes
 
 ## Quick Start
@@ -164,10 +164,10 @@ The root `Justfile` loads `.env` for its recipes. Direct runtime commands such a
 
 | Category | Technology |
 |----------|------------|
-| Runtime | Node.js 24.18.0 (ES2024) |
+| Runtime | Node.js 24.22.0 (ES2024) |
 | Framework | Fastify 5.x with TypeScript 7 |
 | Observability | fastify-observability 2 with Pino 10 |
-| Package manager | pnpm 11.17.0 |
+| Package manager | pnpm 12.14.0 |
 | Authentication and persistence | Firebase Admin SDK Authentication and Firestore |
 | Schema Validation | TypeBox with @fastify/type-provider-typebox |
 | Testing | Vitest with V8 coverage (90% minimum) |
@@ -184,8 +184,8 @@ just lint             # Check Biome formatting and lint rules
 just typing           # Type-check source and tests
 just test             # Run unit and integration tests
 just cov              # Run the full suite with coverage
-just qa               # Apply safe fixes, then type-check and test
-just check            # Run workflow, code, type, test, coverage, and production-audit gates
+just qa               # Apply safe fixes, then run all non-mutating checks
+just check            # Run workflow, code, type, coverage, and production-audit gates
 just workflow-check   # Check workflow syntax and security
 just fuzz             # Run the property suite with FUZZ_RUNS (default 1000)
 just audit            # Report production advisories; fail on unignored high/critical findings
@@ -207,10 +207,7 @@ corepack pnpm typecheck     # Type check source and tests
 corepack pnpm start         # Start the compiled server
 ```
 
-The audit gate deliberately reports lower-severity advisories instead of hiding them. The workspace contains one
-narrow GHSA exception reached through rimraf/glob packages that the Firebase Admin Firestore runtime chain does not
-import; its parent range cannot accept the fixed `brace-expansion` major. Remove the exception as soon as the parent
-dependency resolves the advisory.
+The audit gate reports lower-severity advisories and fails on high or critical production advisories. No advisory exceptions are configured.
 
 ## Container
 
@@ -228,6 +225,8 @@ docker run --rm -p 8080:8080 --env-file .env fastify-playground:latest
 ```
 
 ## Deployment
+
+This application is not currently deployed. Google Cloud Run is a possible future deployment target; the commands below are manual setup examples for your own project.
 
 ### Google Cloud Run
 
@@ -385,12 +384,13 @@ GitHub Actions workflows in `.github/workflows/`:
 
 | Workflow | Description |
 |----------|-------------|
-| `app-ci.yml` | Pinned-runtime build, production audit, tests, isolated coverage reporting, digest-pinned image build, runtime assertions, probes, and graceful-shutdown smoke |
-| `app-lint.yml` | Code quality (Biome) |
+| `app-ci.yml` | Quality prerequisite, build and coverage, container smoke, independent actionlint/zizmor scans, and required `ci` aggregate |
+| `app-lint.yml` | Independent formatting and lint checks with Biome; required `lint` |
 | `labeler.yml` | Automatic PR labeling |
 | `labeler-manual.yml` | Manual labeling for historical PRs |
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
-| `workflow-security.yml` | Read-only zizmor workflow security scanning |
+
+Coverage stays in the test job and its downloadable artifact; no pull-request write token is granted to application code or coverage reporting. Zizmor runs in enforcing plain mode, with separate SARIF reporting for trusted repository events. Both required checks run on every PR, including higher stack layers.
 
 Dependabot checks application and GitHub Actions dependencies quarterly. The auto-merge workflow intentionally
 maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication;

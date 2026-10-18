@@ -1,13 +1,13 @@
-# syntax=docker/dockerfile:1.19.0
+# syntax=docker/dockerfile:1.28.0
 # Dockerfile for a Node.js Fastify application
 #
 # Uses multi-stage build with official Node.js and distroless images.
 # See: https://docs.docker.com/language/nodejs/build-images/
 
 # Builder image: includes Node.js toolchain for compilation
-ARG NODE_IMAGE=node:24.18.0-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573
+ARG NODE_IMAGE=node:24.22.0-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315
 # Runtime image: minimal distroless Node.js image (no shell, no package manager)
-ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot@sha256:af85d11ce7ef10172855a6e3649e3e8125b1b9e3ca41849ec2918036f05cb212
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot@sha256:59c479c9b8c123e66047315c968aa2d35e31ae5149c856e4110a79c8b3563f0b
 # Build arguments for version injection
 ARG VERSION=dev
 
@@ -16,7 +16,7 @@ FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 # Install dependencies first for layer caching.
-RUN corepack enable && corepack install --global pnpm@11.17.0
+RUN corepack enable && corepack install --global pnpm@12.14.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
@@ -34,7 +34,7 @@ FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
 # Install production dependencies only
-RUN corepack enable && corepack install --global pnpm@11.17.0
+RUN corepack enable && corepack install --global pnpm@12.14.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \

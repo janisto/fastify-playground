@@ -12,6 +12,7 @@ Instructions for coding agents working in this repository.
 - Reuse existing local patterns and utilities, refactoring them when needed, instead of creating parallel abstractions or adding dependencies.
 - State the failure mode before architectural, security, persistence, or production-impacting changes.
 - Do not declare completion until implementation, validation, and remaining risks are reported.
+- Keep comments, documentation, commit messages, and pull requests self-contained within this repository.
 - Keep source comments and documentation concise. Do not add progress narration, generated banners, emojis, or speculative TODOs.
 
 ## Pull requests
@@ -31,6 +32,9 @@ Instructions for coding agents working in this repository.
 
 ## GitHub automation
 
+- Keep required `lint` and `ci` checks. Pure lint runs independently with minimal setup; `ci` fails unless quality, tests, container validation, actionlint, and zizmor all succeed. Workflow scanners run independently of language quality.
+- Before workflow changes, inspect required checks in GitHub Settings > Rules > Rulesets using Chrome. Verify both check names and GitHub App sources. Keep the enforcing `zizmor` check from GitHub Actions until the protected trunk contains the replacement `ci` aggregate; the same-named SARIF check from GitHub Advanced Security is not a substitute. Update equivalent required-check mappings in Chrome when needed, and verify the ruleset against actual PR checks before completion.
+- Local workflow checks use actionlint 1.7.12 and zizmor 1.31.1 offline with the pedantic persona, matching CI. Enforce zizmor findings in plain mode; SARIF reporting alone does not fail on findings.
 - Reference GitHub Actions by explicit full release tags such as
   `owner/action@v1.2.3`, not full commit SHAs or floating major-version tags.
   Dependabot updates those release tags.
@@ -49,7 +53,7 @@ Instructions for coding agents working in this repository.
 - `functions/`: placeholder only; it is not currently a Node.js package.
 - `plans/`: durable implementation and migration logs.
 
-Node.js 24 and pnpm 11.17.0 through Corepack are required. The repository pins Node.js 24.18.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, strict peer dependencies, one-day release quarantine, no trust downgrades, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
+Support only the latest Node.js LTS line and latest stable TypeScript. Node.js 24 and pnpm 12.14.0 through Corepack are required. The repository pins Node.js 24.22.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.19.2`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, strict peer dependencies, one-day release quarantine, no trust downgrades, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
 
 Run package scripts from `app/`, or use the root `Justfile`:
 
@@ -63,7 +67,7 @@ just workflow-check
 just container-build
 ```
 
-`just qa` applies safe Biome fixes before checking types and running tests. Use `just check` when a non-mutating validation run is required.
+`just qa` applies safe Biome fixes, then runs the complete `just check` gate, including workflow scanners, lint, types, coverage, and the production audit. Use `just check` when a non-mutating validation run is required.
 
 ## TypeScript and modules
 
@@ -118,7 +122,7 @@ just container-build
 - Keep production 5xx response details generic while retaining structured server-side terminal failure metadata.
 - Treat upstream response bodies and transport errors as untrusted. Preserve internal error chaining without serializing it into terminal logs, and expose controlled public details for upstream failures.
 - Use **API `GITHUB_TOKEN`** for the optional application/test environment variable. Public GitHub proxy routes are deliberately unauthenticated upstream; the API `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly, and the running application must never read or attach it to caller-selected owner or repository paths.
-- Use **Merge `GITHUB_TOKEN`** for GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`. Keep `.github/workflows/dependabot-auto-merge.yml` unchanged: its metadata input and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` mapping intentionally authenticate Dependabot labeling, approval, and squash auto-merge without a personal access token or manually configured secret.
+- Use **Merge `GITHUB_TOKEN`** for GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`. Preserve the authentication mapping in `.github/workflows/dependabot-auto-merge.yml`: its metadata input and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` mapping intentionally authenticate Dependabot labeling, approval, and squash auto-merge without a personal access token or manually configured secret.
 - Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
@@ -137,9 +141,13 @@ just container-build
 - Global V8 coverage thresholds are 90% for lines, functions, branches, and statements across `src/**/*.ts`.
 - Coverage exceptions require a narrow `/* v8 ignore ... -- @preserve */` comment and a genuinely untestable boundary.
 
+## Dependency modernization
+
+Update implementations, tests, and documentation with dependency upgrades; retain a below-latest version only for a verified compatibility or tooling constraint. Keep the one-day release quarantine.
+
 ## Biome
 
-Biome 2.5.5 is the formatter and linter. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
+Biome 2.5.12 is the formatter and linter. Versions 2.5.13 through 2.5.15 incorrectly flag Fastify promise overloads with `useAwaitThenable` and `noMisusedPromises`; keep this pin until the analyzer regression is fixed rather than suppressing these rules. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
 
 - Do not add suppression comments to avoid fixing actionable diagnostics.
 - `pnpm check:fix` applies safe fixes only. Review unsafe suggestions individually.

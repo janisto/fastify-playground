@@ -47,11 +47,11 @@ describe("application lifecycle state", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("marks the application as shutting down for every close path", async () => {
+  it("marks the application as shutting down before resource cleanup", async () => {
     const app = build();
     let observedState = false;
-    app.addHook("preClose", async () => {
-      observedState = app.isShuttingDown;
+    app.addHook("onClose", async (instance) => {
+      observedState = instance.isShuttingDown;
     });
     await app.ready();
 
