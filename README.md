@@ -2,11 +2,11 @@
 
 [![Application CI](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-ci.yml?branch=main&label=application%20CI&logo=githubactions&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-ci.yml)
 [![Code quality](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-lint.yml?branch=main&label=code%20quality&logo=biome&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-lint.yml)
-[![Node.js 24.18.0](https://img.shields.io/badge/Node.js-24.18.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![pnpm 11.17.0](https://img.shields.io/badge/pnpm-11.17.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Node.js 24.22.0](https://img.shields.io/badge/Node.js-24.22.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![pnpm 12.14.0](https://img.shields.io/badge/pnpm-12.14.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![MIT license](https://img.shields.io/github/license/janisto/fastify-playground)](LICENSE)
 
-A production-oriented reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates generated OpenAPI, Firebase Authentication and Firestore-backed current-principal profiles, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
+A reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates generated OpenAPI, Firebase Authentication and Firestore-backed current-principal profiles, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
 
 <img src="assets/ts.svg" alt="TypeScript logo" width="200">
 
@@ -139,8 +139,8 @@ functions/              # Firebase Cloud Functions (placeholder)
 
 ## Requirements
 
-- Node.js 24.18.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
-- pnpm 11.17.0 through Corepack
+- Node.js 24.22.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
+- pnpm 12.14.0 through Corepack
 - [just](https://github.com/casey/just) for repository workflows
 - [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.28.0](https://docs.zizmor.sh/) for local workflow checks
 - Firebase project with Authentication and Firestore, or their emulators, when exercising authenticated identity and profile routes
@@ -164,10 +164,10 @@ The root `Justfile` loads `.env` for its recipes. Direct runtime commands such a
 
 | Category | Technology |
 |----------|------------|
-| Runtime | Node.js 24.18.0 (ES2024) |
+| Runtime | Node.js 24.22.0 (ES2024) |
 | Framework | Fastify 5.x with TypeScript 7 |
 | Observability | fastify-observability 2 with Pino 10 |
-| Package manager | pnpm 11.17.0 |
+| Package manager | pnpm 12.14.0 |
 | Authentication and persistence | Firebase Admin SDK Authentication and Firestore |
 | Schema Validation | TypeBox with @fastify/type-provider-typebox |
 | Testing | Vitest with V8 coverage (90% minimum) |
@@ -207,10 +207,7 @@ corepack pnpm typecheck     # Type check source and tests
 corepack pnpm start         # Start the compiled server
 ```
 
-The audit gate deliberately reports lower-severity advisories instead of hiding them. The workspace contains one
-narrow GHSA exception reached through rimraf/glob packages that the Firebase Admin Firestore runtime chain does not
-import; its parent range cannot accept the fixed `brace-expansion` major. Remove the exception as soon as the parent
-dependency resolves the advisory.
+The audit gate reports lower-severity advisories and fails on high or critical production advisories. No advisory exceptions are configured.
 
 ## Container
 
@@ -228,6 +225,8 @@ docker run --rm -p 8080:8080 --env-file .env fastify-playground:latest
 ```
 
 ## Deployment
+
+This application is not currently deployed. Google Cloud Run is a possible future deployment target; the commands below are manual setup examples for your own project.
 
 ### Google Cloud Run
 

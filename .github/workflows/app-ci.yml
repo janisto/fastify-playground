@@ -31,7 +31,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6.0.9
         with:
-          version: 11.17.0
+          version: 12.14.0
 
       - name: Use pinned Node.js
         uses: actions/setup-node@v7.0.0
@@ -112,7 +112,7 @@ jobs:
 
       - name: Verify runtime version and user
         run: |
-          test "$(docker run --rm fastify-playground:ci --version)" = "v24.18.0"
+          test "$(docker run --rm fastify-playground:ci --version)" = "v24.22.0"
           test "$(docker image inspect --format '{{.Config.User}}' fastify-playground:ci)" = "65532:65532"
 
       - name: Smoke startup, probes, and graceful shutdown

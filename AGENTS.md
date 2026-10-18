@@ -12,6 +12,7 @@ Instructions for coding agents working in this repository.
 - Reuse existing local patterns and utilities, refactoring them when needed, instead of creating parallel abstractions or adding dependencies.
 - State the failure mode before architectural, security, persistence, or production-impacting changes.
 - Do not declare completion until implementation, validation, and remaining risks are reported.
+- Keep comments, documentation, commit messages, and pull requests self-contained within this repository.
 - Keep source comments and documentation concise. Do not add progress narration, generated banners, emojis, or speculative TODOs.
 
 ## Pull requests
@@ -49,7 +50,7 @@ Instructions for coding agents working in this repository.
 - `functions/`: placeholder only; it is not currently a Node.js package.
 - `plans/`: durable implementation and migration logs.
 
-Node.js 24 and pnpm 11.17.0 through Corepack are required. The repository pins Node.js 24.18.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.13.3`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, strict peer dependencies, one-day release quarantine, no trust downgrades, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
+Support only the latest Node.js LTS line and latest stable TypeScript. Node.js 24 and pnpm 12.14.0 through Corepack are required. The repository pins Node.js 24.22.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.19.2`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, strict peer dependencies, one-day release quarantine, no trust downgrades, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
 
 Run package scripts from `app/`, or use the root `Justfile`:
 
@@ -137,9 +138,13 @@ just container-build
 - Global V8 coverage thresholds are 90% for lines, functions, branches, and statements across `src/**/*.ts`.
 - Coverage exceptions require a narrow `/* v8 ignore ... -- @preserve */` comment and a genuinely untestable boundary.
 
+## Dependency modernization
+
+Update implementations, tests, and documentation with dependency upgrades; retain a below-latest version only for a verified compatibility or tooling constraint. Keep the one-day release quarantine.
+
 ## Biome
 
-Biome 2.5.5 is the formatter and linter. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
+Biome 2.5.12 is the formatter and linter. Versions 2.5.13 through 2.5.15 incorrectly flag Fastify promise overloads with `useAwaitThenable` and `noMisusedPromises`; keep this pin until the analyzer regression is fixed rather than suppressing these rules. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
 
 - Do not add suppression comments to avoid fixing actionable diagnostics.
 - `pnpm check:fix` applies safe fixes only. Review unsafe suggestions individually.
