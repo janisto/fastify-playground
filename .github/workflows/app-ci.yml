@@ -1,22 +1,22 @@
-name: App typing, tests, coverage and container
+name: App validation
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  app:
+  quality:
+    name: TypeScript quality
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    permissions:
-      contents: read
+    timeout-minutes: 10
 
     defaults:
       run:
@@ -29,48 +29,38 @@ jobs:
           persist-credentials: false
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v6.0.9
+        uses: pnpm/action-setup@v6.1.0
         with:
           version: 12.14.0
 
       - name: Use pinned Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7.1.0
         with:
-          cache-dependency-path: "app/pnpm-lock.yaml"
-          node-version-file: ".node-version"
-          cache: "pnpm"
+          cache-dependency-path: app/pnpm-lock.yaml
+          node-version-file: .node-version
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Audit production dependencies
-        run: pnpm audit --prod --audit-level high
+      - name: Check formatting and lint rules
+        run: pnpm check
 
       - name: Typecheck source and tests
         run: pnpm typecheck
 
-      - name: Build application
-        run: pnpm build
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
 
-      - name: Run test coverage
-        id: test-coverage
-        run: pnpm test:coverage
-
-      - name: Upload coverage report
-        if: ${{ !cancelled() && steps.test-coverage.outcome != 'skipped' }}
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: app-coverage
-          path: app/coverage
-
-  coverage:
-    needs: app
+  tests:
+    name: App build and tests
+    needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
-    permissions:
-      contents: read
-      pull-requests: write
+    defaults:
+      run:
+        working-directory: app
 
     steps:
       - name: Checkout
@@ -78,24 +68,39 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download coverage report
-        uses: actions/download-artifact@v8.0.1
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 12.14.0
+
+      - name: Use pinned Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          cache-dependency-path: app/pnpm-lock.yaml
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: pnpm build
+
+      - name: Run test coverage
+        run: pnpm test:coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: app-coverage
           path: app/coverage
-
-      - name: Report coverage summary
-        uses: davelosert/vitest-coverage-report-action@v2.12.2
-        with:
-          working-directory: app
-          name: app
+          if-no-files-found: error
 
   container:
+    name: Container build and smoke
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
-    permissions:
-      contents: read
 
     defaults:
       run:
@@ -147,25 +152,76 @@ jobs:
           docker rm "$container_id" >/dev/null
           trap - EXIT
 
-  ci:
-    if: ${{ always() }}
-    needs:
-      - app
-      - coverage
-      - container
+  actionlint:
+    name: Workflow syntax
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+
+  zizmor:
+    name: Workflow security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+      security-events: write # Upload SARIF for trusted repository events.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@v0.7.1
+        env:
+          ZIZMOR_OFFLINE: 'true'
+        with:
+          version: '1.31.1'
+          persona: pedantic
+          online-audits: false
+          advanced-security: false
+
+      - name: Upload zizmor SARIF
+        if: ${{ !cancelled() && (github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) }}
+        uses: zizmorcore/zizmor-action@v0.7.1
+        env:
+          ZIZMOR_OFFLINE: 'true'
+        with:
+          version: '1.31.1'
+          persona: pedantic
+          online-audits: false
+          advanced-security: true
+
+  ci:
+    name: ci
+    if: always()
+    needs: [quality, tests, container, actionlint, zizmor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: {}
 
     steps:
-      - name: Require application and container success
-        env:
-          APP_RESULT: ${{ needs.app.result }}
-          COVERAGE_RESULT: ${{ needs.coverage.result }}
-          CONTAINER_RESULT: ${{ needs.container.result }}
+      - name: Require every validation job to succeed
         run: |
-          if [[ "$APP_RESULT" != "success" || "$COVERAGE_RESULT" != "success" || "$CONTAINER_RESULT" != "success" ]]; then
-            echo "Required job failed: app=$APP_RESULT coverage=$COVERAGE_RESULT container=$CONTAINER_RESULT" >&2
+          if [[ "$QUALITY_RESULT" != success || "$TESTS_RESULT" != success ||
+                "$CONTAINER_RESULT" != success || "$ACTIONLINT_RESULT" != success ||
+                "$ZIZMOR_RESULT" != success ]]; then
+            printf '%s\n' 'A required validation job failed, was cancelled, or was skipped.' >&2
             exit 1
           fi
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+          ACTIONLINT_RESULT: ${{ needs.actionlint.result }}
+          ZIZMOR_RESULT: ${{ needs.zizmor.result }}

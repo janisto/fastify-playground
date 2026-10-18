@@ -142,7 +142,7 @@ functions/              # Firebase Cloud Functions (placeholder)
 - Node.js 24.22.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
 - pnpm 12.14.0 through Corepack
 - [just](https://github.com/casey/just) for repository workflows
-- [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.28.0](https://docs.zizmor.sh/) for local workflow checks
+- [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.31.1](https://docs.zizmor.sh/) for local workflow checks
 - Firebase project with Authentication and Firestore, or their emulators, when exercising authenticated identity and profile routes
 
 ## Quick Start
@@ -184,8 +184,8 @@ just lint             # Check Biome formatting and lint rules
 just typing           # Type-check source and tests
 just test             # Run unit and integration tests
 just cov              # Run the full suite with coverage
-just qa               # Apply safe fixes, then type-check and test
-just check            # Run workflow, code, type, test, coverage, and production-audit gates
+just qa               # Apply safe fixes, then run all non-mutating checks
+just check            # Run workflow, code, type, coverage, and production-audit gates
 just workflow-check   # Check workflow syntax and security
 just fuzz             # Run the property suite with FUZZ_RUNS (default 1000)
 just audit            # Report production advisories; fail on unignored high/critical findings
@@ -384,12 +384,13 @@ GitHub Actions workflows in `.github/workflows/`:
 
 | Workflow | Description |
 |----------|-------------|
-| `app-ci.yml` | Pinned-runtime build, production audit, tests, isolated coverage reporting, digest-pinned image build, runtime assertions, probes, and graceful-shutdown smoke |
-| `app-lint.yml` | Code quality (Biome) |
+| `app-ci.yml` | Quality prerequisite, build and coverage, container smoke, independent actionlint/zizmor scans, and required `ci` aggregate |
+| `app-lint.yml` | Independent formatting and lint checks with Biome; required `lint` |
 | `labeler.yml` | Automatic PR labeling |
 | `labeler-manual.yml` | Manual labeling for historical PRs |
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
-| `workflow-security.yml` | Read-only zizmor workflow security scanning |
+
+Coverage stays in the test job and its downloadable artifact; no pull-request write token is granted to application code or coverage reporting. Zizmor runs in enforcing plain mode, with separate SARIF reporting for trusted repository events. Both required checks run on every PR, including higher stack layers.
 
 Dependabot checks application and GitHub Actions dependencies quarterly. The auto-merge workflow intentionally
 maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication;

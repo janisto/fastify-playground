@@ -32,6 +32,9 @@ Instructions for coding agents working in this repository.
 
 ## GitHub automation
 
+- Keep required `lint` and `ci` checks. Pure lint runs independently with minimal setup; `ci` fails unless quality, tests, container validation, actionlint, and zizmor all succeed. Workflow scanners run independently of language quality.
+- Before workflow changes, inspect required checks in GitHub Settings > Rules > Rulesets using Chrome. Update equivalent required-check mappings in Chrome when needed, and verify the ruleset against actual PR checks before completion.
+- Local workflow checks use actionlint 1.7.12 and zizmor 1.31.1 offline with the pedantic persona, matching CI. Enforce zizmor findings in plain mode; SARIF reporting alone does not fail on findings.
 - Reference GitHub Actions by explicit full release tags such as
   `owner/action@v1.2.3`, not full commit SHAs or floating major-version tags.
   Dependabot updates those release tags.
@@ -64,7 +67,7 @@ just workflow-check
 just container-build
 ```
 
-`just qa` applies safe Biome fixes before checking types and running tests. Use `just check` when a non-mutating validation run is required.
+`just qa` applies safe Biome fixes, then runs the complete `just check` gate, including workflow scanners, lint, types, coverage, and the production audit. Use `just check` when a non-mutating validation run is required.
 
 ## TypeScript and modules
 
@@ -119,7 +122,7 @@ just container-build
 - Keep production 5xx response details generic while retaining structured server-side terminal failure metadata.
 - Treat upstream response bodies and transport errors as untrusted. Preserve internal error chaining without serializing it into terminal logs, and expose controlled public details for upstream failures.
 - Use **API `GITHUB_TOKEN`** for the optional application/test environment variable. Public GitHub proxy routes are deliberately unauthenticated upstream; the API `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly, and the running application must never read or attach it to caller-selected owner or repository paths.
-- Use **Merge `GITHUB_TOKEN`** for GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`. Keep `.github/workflows/dependabot-auto-merge.yml` unchanged: its metadata input and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` mapping intentionally authenticate Dependabot labeling, approval, and squash auto-merge without a personal access token or manually configured secret.
+- Use **Merge `GITHUB_TOKEN`** for GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`. Preserve the authentication mapping in `.github/workflows/dependabot-auto-merge.yml`: its metadata input and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` mapping intentionally authenticate Dependabot labeling, approval, and squash auto-merge without a personal access token or manually configured secret.
 - Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.

@@ -62,19 +62,19 @@ lint:
 typing:
     corepack pnpm typecheck
 
-# Quality assurance: fix, type check, and test
+# Quality assurance: safe fixes, then every non-mutating check
 [group('qa')]
-qa: fix typing test
+qa: fix check
 
 # Perform all non-mutating checks, including the production dependency audit
 [group('qa')]
-check: workflow-check lint typing test cov audit
+check: workflow-check lint typing cov audit
 
 # Check GitHub Actions syntax and security
 [group('qa')]
 workflow-check:
     actionlint
-    zizmor --offline .
+    zizmor --offline --persona=pedantic .
 
 # Audit production dependencies against registry advisories
 [group('qa')]

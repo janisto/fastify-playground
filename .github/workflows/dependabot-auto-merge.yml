@@ -3,14 +3,21 @@ name: Dependabot auto-merge
 
 on: pull_request
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   dependabot:
+    name: Dependabot approval and auto-merge
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: write # Enable squash auto-merge for eligible dependency updates.
+      pull-requests: write # Label and approve eligible Dependabot pull requests.
 
     if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'janisto/fastify-playground'
 
