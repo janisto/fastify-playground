@@ -194,6 +194,7 @@ jobs:
           advanced-security: false
 
       - name: Upload zizmor SARIF
+        continue-on-error: true # Reporting cannot override the enforcing scan.
         if: ${{ !cancelled() && (github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) }}
         uses: zizmorcore/zizmor-action@v0.7.1
         env:
