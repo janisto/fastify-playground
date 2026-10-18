@@ -2,7 +2,7 @@
 
 Instructions for coding agents working in this repository.
 
-`README.md` is for human users and contributors: setup, capabilities, architecture, operations, and contribution entry points. `AGENTS.md` is for coding agents: execution rules, implementation constraints, and validation policy. Do not duplicate agent instructions into the README or turn this file into human onboarding documentation.
+Keep reader setup and usage in `README.md`; keep agent execution rules here.
 
 ## Engineering priorities
 
@@ -10,10 +10,11 @@ Instructions for coding agents working in this repository.
 - Inspect the relevant implementation, callers, and existing tests before changing behavior.
 - Prefer the smallest safe change that solves the problem.
 - Reuse existing local patterns and utilities, refactoring them when needed, instead of creating parallel abstractions or adding dependencies.
+- Validate review findings against actual requirements and reproducible behavior. Simplify unnecessary behavior instead of adding machinery to defend it.
 - State the failure mode before architectural, security, persistence, or production-impacting changes.
 - Do not declare completion until implementation, validation, and remaining risks are reported.
 - Keep comments, documentation, commit messages, and pull requests self-contained within this repository.
-- Keep source comments and documentation concise. Do not add progress narration, generated banners, emojis, or speculative TODOs.
+- Keep instructions, comments, and documentation concise. Remove obsolete rules, completed-task narration, and duplicated guidance.
 
 ## Pull requests
 
@@ -32,6 +33,9 @@ Instructions for coding agents working in this repository.
 
 ## GitHub automation
 
+- Keep auto-merge limited to verified Dependabot minor/patch updates behind required checks. Handle old excluded-tool
+  PRs once; do not duplicate Dependabot ignore rules with package filters, enablement triggers, state queries, or
+  revocation steps.
 - Keep required `lint` and `ci` checks. Pure lint runs independently with minimal setup; `ci` fails unless quality, tests, container validation, actionlint, and zizmor all succeed. Workflow scanners run independently of language quality.
 - Before workflow changes, inspect required checks in GitHub Settings > Rules > Rulesets using Chrome. Verify both check names and GitHub App sources. The required `ci` and `lint` checks are bound to GitHub Actions; a same-named result from another app does not satisfy that binding. An `any source` rule has no app restriction. Preserve required contexts and sources until replacement enforcement reaches the protected trunk. Update equivalent mappings in Chrome when needed, and verify the final ruleset against actual PR checks before completion.
 - Local workflow checks use actionlint 1.7.12 and zizmor 1.31.1 offline with the pedantic persona, matching CI. Run one enforcing plain-mode zizmor CI scan with read-only permissions; do not add duplicate SARIF uploads or security-event write permissions.
@@ -122,7 +126,6 @@ just container-build
 - Keep production 5xx response details generic while retaining structured server-side terminal failure metadata.
 - Treat upstream response bodies and transport errors as untrusted. Preserve internal error chaining without serializing it into terminal logs, and expose controlled public details for upstream failures.
 - Use **API `GITHUB_TOKEN`** for the optional application/test environment variable. Public GitHub proxy routes are deliberately unauthenticated upstream; the API `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly, and the running application must never read or attach it to caller-selected owner or repository paths.
-- Use **Merge `GITHUB_TOKEN`** for GitHub Actions' automatic `${{ secrets.GITHUB_TOKEN }}`. Preserve the authentication mapping in `.github/workflows/dependabot-auto-merge.yml`: its metadata input and `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` mapping intentionally authenticate Dependabot labeling, approval, and squash auto-merge without a personal access token or manually configured secret.
 - Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
@@ -145,13 +148,10 @@ just container-build
 
 Update implementations, tests, and documentation with dependency upgrades; retain a below-latest version only for a verified compatibility or tooling constraint. Keep the one-day release quarantine.
 
-Biome upgrades are a separate agent-owned process. Dependabot must ignore every `@biomejs/biome` version, and its
-auto-merge workflow must reject any update group containing Biome and disable any already-enabled auto-merge.
-Handle auto-merge enablement events as well as ordinary PR updates. Even patch releases can change diagnostics,
-configuration, and fixes, blocking otherwise routine dependency groups. In a dedicated Biome PR, review official
-release notes, update the package/lockfile and standalone CI pin together, run `biome migrate`, review rules and any
-scoped analyzer exceptions, apply safe fixes, and run `just qa` plus the build. Keep other eligible dependency updates
-in their existing scheduled and auto-merge flow.
+Dependabot ignores every `@biomejs/biome` version. Agents upgrade Biome separately because even patch releases can
+change diagnostics, configuration, and fixes. Review official release notes, update the package/lockfile and
+standalone CI pin together, run `biome migrate`, review rules and scoped analyzer exceptions, apply safe fixes, and
+run `just qa` plus the build. Apply the same review when upgrading Biome during a general modernization.
 
 ## Biome
 
