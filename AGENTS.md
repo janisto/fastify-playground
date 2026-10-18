@@ -145,9 +145,22 @@ just container-build
 
 Update implementations, tests, and documentation with dependency upgrades; retain a below-latest version only for a verified compatibility or tooling constraint. Keep the one-day release quarantine.
 
+Biome upgrades are a separate agent-owned process. Dependabot must ignore every `@biomejs/biome` version, and its
+auto-merge workflow must reject any update group containing Biome and disable any already-enabled auto-merge.
+Handle auto-merge enablement events as well as ordinary PR updates. Even patch releases can change diagnostics,
+configuration, and fixes, blocking otherwise routine dependency groups. In a dedicated Biome PR, review official
+release notes, update the package/lockfile and standalone CI pin together, run `biome migrate`, review rules and any
+scoped analyzer exceptions, apply safe fixes, and run `just qa` plus the build. Keep other eligible dependency updates
+in their existing scheduled and auto-merge flow.
+
 ## Biome
 
-Biome 2.5.12 is the formatter and linter. Versions 2.5.13 through 2.5.15 incorrectly flag Fastify promise overloads with `useAwaitThenable` and `noMisusedPromises`; keep this pin until the analyzer regression is fixed rather than suppressing these rules. The root configuration enables recommended project, test, and type-aware domains plus strict correctness, security, promise, and import rules.
+Biome 2.5.15 is the formatter and linter. The root configuration enables recommended project, test, and type-aware
+domains plus strict correctness, security, promise, and import rules. Its overload inference incorrectly reports
+Fastify's promise-returning `inject` and `listen` calls as synchronous, and async plugins as void callbacks. Disable
+`useAwaitThenable` only in the server entry point and tests, and `noMisusedPromises` only in the two affected auth test
+fixtures. Keep these rules enabled elsewhere, retain `noFloatingPromises`, and recheck the scoped exceptions on each
+Biome upgrade. Do not remove valid awaits or wrap framework calls merely to appease inference.
 
 - Do not add suppression comments to avoid fixing actionable diagnostics.
 - `pnpm check:fix` applies safe fixes only. Review unsafe suggestions individually.

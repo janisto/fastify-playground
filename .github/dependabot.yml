@@ -17,6 +17,8 @@ updates:
     labels:
       - "dependencies"
     ignore:
+      # Biome upgrades require a separate agent-led configuration and diagnostic review.
+      - dependency-name: "@biomejs/biome"
       - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"
