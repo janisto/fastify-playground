@@ -87,9 +87,11 @@ jobs:
         run: pnpm build
 
       - name: Run test coverage
+        id: test-coverage
         run: pnpm test:coverage
 
       - name: Upload coverage report
+        if: ${{ !cancelled() && steps.test-coverage.outcome != 'skipped' }}
         uses: actions/upload-artifact@v7.0.2
         with:
           name: app-coverage
