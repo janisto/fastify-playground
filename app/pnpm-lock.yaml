@@ -183,7 +183,7 @@ importers:
         version: 6.1.2
       '@fastify/type-provider-typebox':
         specifier: ^6.3.0
-        version: 6.3.0(ajv-formats@3.0.1)(typebox@1.4.1)
+        version: 6.3.0(ajv-formats@3.0.1)(typebox@1.4.2)
       '@fastify/under-pressure':
         specifier: ^9.2.1
         version: 9.2.1
@@ -207,7 +207,7 @@ importers:
         version: 14.5.0
       typebox:
         specifier: ^1.4.1
-        version: 1.4.1
+        version: 1.4.2
       undici:
         specifier: ^8.12.2
         version: 8.12.2
@@ -1802,8 +1802,8 @@ packages:
     resolution: {integrity: sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA==}
     engines: {node: '>= 18'}
 
-  typebox@1.4.1:
-    resolution: {integrity: sha512-t3PeLDn0qJkwg0x6r9s6EuaOG7wivByLlst62TI7r6fy7eXHu/5LF/cRIeRcrT9qhJZ5VRFM6efHt1/bc7LMCg==}
+  typebox@1.4.2:
+    resolution: {integrity: sha512-eSoZzgSIyOKDtTH9MI7XMAxMaiXq7UiSFWarysN1ka66baTLDxAVdQ6WkWn6qDqsJFVrcjzvuP+CqHo9yrlQpg==}
 
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
@@ -2188,10 +2188,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@fastify/type-provider-typebox@6.3.0(ajv-formats@3.0.1)(typebox@1.4.1)':
+  '@fastify/type-provider-typebox@6.3.0(ajv-formats@3.0.1)(typebox@1.4.2)':
     dependencies:
       ajv-formats: 3.0.1
-      typebox: 1.4.1
+      typebox: 1.4.2
 
   '@fastify/under-pressure@9.2.1':
     dependencies:
@@ -3525,7 +3525,7 @@ snapshots:
       media-typer: 1.1.1
       mime-types: 3.0.2
 
-  typebox@1.4.1: {}
+  typebox@1.4.2: {}
 
   typescript@7.0.2:
     optionalDependencies:
