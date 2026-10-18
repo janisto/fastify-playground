@@ -381,8 +381,8 @@ Biome enforces formatting, imports, project and test rules, and type-aware promi
 Biome 2.5.15 is pinned in the application and the standalone lint workflow. Its experimental overload inference needs
 scoped exceptions for Fastify injection/listening and two async auth fixtures; the remaining promise checks stay
 enabled. Biome is maintained separately because patch releases can change diagnostics, configuration, and fixes.
-Dependabot excludes Biome and auto-merge rejects groups containing it. Other eligible dependency updates retain their
-automatic path.
+Dependabot excludes Biome from version updates. Other eligible minor/patch dependency updates can auto-merge after
+required checks pass.
 
 ## CI/CD
 
