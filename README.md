@@ -390,7 +390,7 @@ GitHub Actions workflows in `.github/workflows/`:
 | `labeler-manual.yml` | Manual labeling for historical PRs |
 | `dependabot-auto-merge.yml` | Auto-merge Dependabot minor/patch updates |
 
-Coverage stays in the test job and its downloadable artifact; no pull-request write token is granted to application code or coverage reporting. Zizmor runs in enforcing plain mode, with separate SARIF reporting for trusted repository events. Both required checks run on every PR, including higher stack layers.
+Coverage stays in the test job and its downloadable artifact; no pull-request write token is granted to application code or coverage reporting. Zizmor runs once in enforcing plain mode with read-only permissions on every validation event, including fork and Dependabot PRs. Findings fail the required `ci` check. Both required checks run on every PR, including higher stack layers.
 
 Dependabot checks application and GitHub Actions dependencies quarterly. The auto-merge workflow intentionally
 maps the Merge `GITHUB_TOKEN`, exposed as `${{ secrets.GITHUB_TOKEN }}`, to `GH_TOKEN` for GitHub CLI authentication;
