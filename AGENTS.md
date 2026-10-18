@@ -33,8 +33,8 @@ Instructions for coding agents working in this repository.
 ## GitHub automation
 
 - Keep required `lint` and `ci` checks. Pure lint runs independently with minimal setup; `ci` fails unless quality, tests, container validation, actionlint, and zizmor all succeed. Workflow scanners run independently of language quality.
-- Before workflow changes, inspect required checks in GitHub Settings > Rules > Rulesets using Chrome. Verify both check names and GitHub App sources. Keep the enforcing `zizmor` check from GitHub Actions until the protected trunk contains the replacement `ci` aggregate; the same-named SARIF check from GitHub Advanced Security is not a substitute. Update equivalent required-check mappings in Chrome when needed, and verify the ruleset against actual PR checks before completion.
-- Local workflow checks use actionlint 1.7.12 and zizmor 1.31.1 offline with the pedantic persona, matching CI. Enforce zizmor findings in plain mode; SARIF reporting alone does not fail on findings.
+- Before workflow changes, inspect required checks in GitHub Settings > Rules > Rulesets using Chrome. Verify both check names and GitHub App sources. The required `ci` and `lint` checks are bound to GitHub Actions; a same-named result from another app does not satisfy that binding. An `any source` rule has no app restriction. Preserve required contexts and sources until replacement enforcement reaches the protected trunk. Update equivalent mappings in Chrome when needed, and verify the final ruleset against actual PR checks before completion.
+- Local workflow checks use actionlint 1.7.12 and zizmor 1.31.1 offline with the pedantic persona, matching CI. Run one enforcing plain-mode zizmor CI scan with read-only permissions; do not add duplicate SARIF uploads or security-event write permissions.
 - Reference GitHub Actions by explicit full release tags such as
   `owner/action@v1.2.3`, not full commit SHAs or floating major-version tags.
   Dependabot updates those release tags.
