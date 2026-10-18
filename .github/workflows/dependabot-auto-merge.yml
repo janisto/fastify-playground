@@ -30,8 +30,11 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Disable auto-merge for separately maintained tools
-        if: contains(fromJSON(steps.metadata.outputs.updated-dependencies-json).*.dependencyName, '@biomejs/biome')
+      - name: Disable auto-merge for separately maintained or unverified updates
+        if: >-
+          !cancelled() &&
+          (steps.metadata.outcome != 'success' ||
+           contains(fromJSON(steps.metadata.outputs.updated-dependencies-json).*.dependencyName, '@biomejs/biome'))
         run: |
           auto_merge_enabled="$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')"
           if [[ "$auto_merge_enabled" == true ]]; then
