@@ -378,6 +378,12 @@ not commit random corpora.
 
 Biome enforces formatting, imports, project and test rules, and type-aware promise and correctness checks. TypeScript separately checks production and test code with exact optional properties and unchecked indexed access. `pnpm check:fix` applies safe fixes; `just check` runs all non-mutating quality gates.
 
+Biome 2.5.15 is pinned in the application and the standalone lint workflow. Its experimental overload inference needs
+scoped exceptions for Fastify injection/listening and two async auth fixtures; the remaining promise checks stay
+enabled. Biome upgrades use dedicated agent-led PRs that review release notes, configuration, diagnostics, and fixes
+before full validation. Patch releases can change these behaviors, so Dependabot excludes Biome and auto-merge rejects
+groups containing it. Other eligible dependency updates retain their automatic path.
+
 ## CI/CD
 
 GitHub Actions workflows in `.github/workflows/`:

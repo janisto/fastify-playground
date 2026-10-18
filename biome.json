@@ -100,5 +100,27 @@
     "formatter": {
       "trailingCommas": "none"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/src/server.ts", "**/tests/**/*.ts"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "useAwaitThenable": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/tests/unit/plugins/auth.test.ts", "**/tests/property/auth.property.test.ts"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noMisusedPromises": "off"
+          }
+        }
+      }
+    }
+  ]
 }

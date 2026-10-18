@@ -16,7 +16,7 @@ const shutdownOperations = new WeakMap<ServerLifecycle, Promise<void>>();
 
 export function shutdown(app: ServerLifecycle, signal: ShutdownSignal): Promise<void> {
   const existingOperation = shutdownOperations.get(app);
-  if (existingOperation) return existingOperation;
+  if (existingOperation !== undefined) return existingOperation;
 
   app.isShuttingDown = true;
   app.log.info({ signal }, "Shutdown requested");
