@@ -41,7 +41,8 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
         operationId: "createProfile",
         security: [{ bearerAuth: [] }],
         summary: "Create current profile",
-        description: "Atomically creates the authenticated principal's profile",
+        description:
+          "Create the Firebase-authenticated principal's sole profile atomically if absent; callers cannot select another owner. Returns 201 and Location, or 409 profile_exists. After an uncertain outcome, read and reconcile before retrying; an existing profile does not prove this creation succeeded.",
         tags: ["Profiles"],
         consumes: API_MEDIA_TYPES,
         produces: API_MEDIA_TYPES,
@@ -75,7 +76,8 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
         operationId: "getProfile",
         security: [{ bearerAuth: [] }],
         summary: "Get current profile",
-        description: "Returns the authenticated principal's profile",
+        description:
+          "Read only the Firebase-authenticated principal's profile; callers cannot select another owner. A missing profile returns 404 profile_not_found. This operation does not change stored data.",
         tags: ["Profiles"],
         produces: API_MEDIA_TYPES,
         response: {
@@ -102,7 +104,8 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
         operationId: "updateProfile",
         security: [{ bearerAuth: [] }],
         summary: "Update current profile",
-        description: "Atomically updates supplied mutable profile fields",
+        description:
+          "Apply a non-empty partial update to the Firebase-authenticated principal's profile. Omitted fields are preserved; an unchanged update performs no write and preserves updatedAt. Read and reassess an uncertain outcome before retrying, because replay can overwrite intervening changes.",
         tags: ["Profiles"],
         consumes: API_MEDIA_TYPES,
         produces: API_MEDIA_TYPES,
@@ -133,7 +136,8 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
         operationId: "deleteProfile",
         security: [{ bearerAuth: [] }],
         summary: "Delete current profile",
-        description: "Atomically deletes the authenticated principal's profile",
+        description:
+          "Delete the Firebase-authenticated principal's profile atomically. Success is an empty 204; a missing profile returns 404 profile_not_found. Repeated effects are idempotent, but another DELETE can remove a later recreation and does not replay the original response.",
         tags: ["Profiles"],
         response: {
           204: Type.Null(),

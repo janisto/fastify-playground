@@ -2,8 +2,8 @@ import { encode as cborEncode } from "cbor2";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { GitHubApiError } from "../modules/github/errors.js";
-import { CBOR_MEDIA_TYPE, negotiateProblemMediaType } from "../utils/content-negotiation.js";
-import { addSchemaLinkHeader } from "../utils/link-header.js";
+import { CBOR_MEDIA_TYPE, negotiateProblemMediaType, PROBLEM_JSON_MEDIA_TYPE } from "../utils/content-negotiation.js";
+import { addSchemaLinkHeader, CONSUMER_DOCUMENTATION_PATHS } from "../utils/link-header.js";
 import { InvalidCursorError } from "../utils/pagination.js";
 import { PORTABLE_ERRORS, PortableError, type PortableErrorCode } from "../utils/portable-error.js";
 import type { SchemaValidationError } from "../utils/schema-error-formatter.js";
@@ -29,19 +29,19 @@ function sendProblemDetails(
   reply.header("Vary", ["Accept", "Origin"]);
   addSchemaLinkHeader(reply, "ErrorModel");
   const body = problem(code, errors);
-  const selectedMediaType = negotiateProblemMediaType(request.headers.accept ?? "");
+  const path = (request.raw.url ?? "").split("?", 1)[0] ?? "";
+  const selectedMediaType = CONSUMER_DOCUMENTATION_PATHS.has(path)
+    ? PROBLEM_JSON_MEDIA_TYPE
+    : negotiateProblemMediaType(request.headers.accept ?? "");
 
-  if (selectedMediaType === CBOR_MEDIA_TYPE) {
-    reply
-      .status(statusCode)
-      .header("Content-Type", CBOR_MEDIA_TYPE)
-      .send(Buffer.from(cborEncode(body)));
+  const encoded =
+    selectedMediaType === CBOR_MEDIA_TYPE ? Buffer.from(cborEncode(body)) : Buffer.from(JSON.stringify(body));
+  reply.status(statusCode).header("Content-Type", selectedMediaType);
+  if (request.method === "HEAD") {
+    reply.header("Content-Length", encoded.byteLength).send();
     return;
   }
-  reply
-    .status(statusCode)
-    .header("Content-Type", selectedMediaType)
-    .send(Buffer.from(JSON.stringify(body)));
+  reply.send(encoded);
 }
 
 function githubCode(code: string): PortableErrorCode {
@@ -94,6 +94,16 @@ function allowedMethods(fastify: FastifyInstance, path: string): readonly string
 
 export default fp(
   async (fastify) => {
+    fastify.addHook("onRequest", async (request, reply) => {
+      const path = (request.raw.url ?? "").split("?", 1)[0] ?? "";
+      if (!CONSUMER_DOCUMENTATION_PATHS.has(path)) return;
+      const methods = allowedMethods(fastify, path);
+      if (methods !== undefined && !methods.includes(request.method)) {
+        reply.header("Allow", methods.join(", "));
+        sendProblemDetails(request, reply, "method_not_allowed");
+      }
+    });
+
     fastify.setErrorHandler((error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
       if (error instanceof GitHubApiError) {
         if (error.retryAfter) reply.header("Retry-After", error.retryAfter);

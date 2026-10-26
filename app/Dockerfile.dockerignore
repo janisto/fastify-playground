@@ -1,0 +1,15 @@
+# Send only application build inputs and the two public usage guides.
+**
+!app/
+!app/package.json
+!app/pnpm-lock.yaml
+!app/pnpm-workspace.yaml
+!app/patches/
+!app/patches/**
+!app/tsconfig.json
+!app/src/
+!app/src/**
+!app/scripts/
+!app/scripts/clean-dist.mjs
+!llms.txt
+!llms-full.txt

@@ -141,6 +141,12 @@ just container-build
 
 `just qa` applies safe Biome fixes, then runs the complete `just check` gate, including workflow scanners, lint, types, coverage, and the production audit. Use `just check` when a non-mutating validation run is required.
 
+Local development uses root `.env` copied from `.env.example`. `just serve`
+selects `demo-test` and paired loopback emulators; `just emulators` starts them.
+No cloud account or ADC is needed. `just qa` remains isolated; run
+`just test-e2e` for real Firebase SDK/profile changes with emulators running,
+or `just test-all` for both suites. Direct package scripts do not load `.env`.
+
 ## TypeScript and modules
 
 - TypeScript 7, strict mode, NodeNext ESM, and ES2024 are required.
@@ -178,12 +184,25 @@ just container-build
 - Pagination uses canonical unpadded Base64URL cursors, a 2,048-character maximum, and RFC 8288 `Link` headers. Previous links must return the preceding page without repeating the current page; link to the first page by omitting `cursor`.
 - Shared response schemas have `$id` values. Response instances receive an RFC 8288 `Link` with `rel="describedby"`; do not inject the JSON Schema `$schema` keyword into API data. Standalone `/schemas/*.json` documents declare Draft 2020-12 and rewrite component references into local `$defs`.
 
+Maintain root `llms.txt` and `llms-full.txt` with API usage changes. The public
+catalog and guide routes serve same-build local bytes through explicit paths;
+never expose the repository directory or fetch discovery targets per request.
+Preserve catalog/OpenAPI health links and the `/llms.txt` index links alongside
+schema and navigation links. Catalog and guide errors are JSON Problem Details,
+and HEAD responses are bodyless. Keep operation IDs stable while improving
+consumer-facing descriptions. Build containers from the repository root with
+`app/Dockerfile` and its explicit context allowlist.
+
 ## Authentication, security, and logging
 
 - Verify Firebase ID tokens with Firebase Admin SDK. Do not add application-managed JWT verification.
 - The Firebase plugin owns the Admin app and exposes Authentication. Reuse an existing default Firebase app; otherwise initialize a uniquely named app per Fastify instance. Delete only the named app owned by that instance. The profile module obtains Firestore lazily from that app and keeps profile writes transactional and cancellation-aware.
 - Never commit, log, or include credentials, tokens, authorization headers, cookies, or PII in fixtures.
 - Use Application Default Credentials in production and emulators or `GOOGLE_APPLICATION_CREDENTIALS` locally.
+- Normal local development uses paired loopback Auth/Firestore emulators and an
+  explicit `demo-` project without ADC. Reject production, remote, or incomplete
+  emulator configuration and a conflicting existing default app. Preserve SDK
+  verification and revocation checks; do not add fake credentials.
 - Validate `CORS_ORIGINS` at startup as exact HTTP(S) origins. The secure default is empty; never trust localhost implicitly, use wildcard origins with credentials, or turn a denied origin into a 5xx response.
 - Parse bearer authorization as case-insensitive `Bearer`, one or more ASCII spaces, and exactly one token68 credential. Reject repeated fields, extra fields, tabs, or other whitespace before calling Firebase, and always verify revocation.
 - `fastify-observability` owns the Pino instance, validated request IDs, W3C trace context, request correlation, response request-ID header, and the single terminal access record. Do not add parallel request-ID, request-context, trace-parsing, or access-log plugins.
@@ -197,6 +216,11 @@ just container-build
 - Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
+
+The pnpm-managed Fastify patch corrects normal request completion being treated
+as cancellation. On Fastify upgrades, verify real HTTP completion, deadlines,
+and client-disconnect cancellation before changing the patch. Preserve native
+`request.signal` propagation; do not bypass cancellation to make requests pass.
 
 ## Dependency modernization
 

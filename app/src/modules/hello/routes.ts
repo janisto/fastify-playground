@@ -18,7 +18,7 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       schema: {
         operationId: "getHello",
         security: [],
-        description: "Get a greeting message",
+        description: "Return a fixed public greeting without authentication, storage, or external requests.",
         summary: "Hello World",
         tags: ["Hello"],
         produces: API_MEDIA_TYPES,
@@ -43,7 +43,8 @@ const helloRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       schema: {
         operationId: "createHello",
         security: [],
-        description: "Returns a personalized greeting without creating a resource",
+        description:
+          "Return a greeting using the valid name verbatim. No resource is created or stored; repeating the same input has no persisted side effect.",
         summary: "Personalize greeting",
         tags: ["Hello"],
         consumes: API_MEDIA_TYPES,

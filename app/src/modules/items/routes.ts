@@ -18,7 +18,8 @@ const itemsRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       schema: {
         operationId: "listItems",
         security: [],
-        description: "Returns a paginated list of items",
+        description:
+          "Read the fixed public catalog with optional category filtering. Follow next/prev Link targets without constructing or changing opaque cursors, filters, or page size. No data is changed.",
         summary: "List items",
         tags: ["Items"],
         produces: API_MEDIA_TYPES,

@@ -27,7 +27,13 @@ Read `AGENTS.md`, `app/tests/AGENTS.md`, the affected authentication or Firebase
 
 - Distinguish the `[DEFAULT]` app from unrelated named apps.
 - Prove reuse without deletion, zero-argument initialization through Application Default Credentials, deletion only when the plugin owns the app, and cleanup failure propagation.
-- Do not add service-account parsing, Firestore, production test flags, fake credentials, environment backdoors, sleeps, or catch-all mocks.
+- Do not add service-account parsing, eager Firestore initialization to the Auth plugin, production test flags, fake credentials, environment backdoors, sleeps, or catch-all mocks.
 - Use an emulator only when the task requires real SDK semantics and the emulator environment is explicitly available.
+- Local initialization uses the explicit demo project and native SDK emulator
+  variables. Reject partial, non-loopback, production, and conflicting-default-app
+  configurations before SDK use; keep the no-emulator ADC initialization path.
+- For real SDK semantics, run `just emulators` and `just test-e2e`. Use the
+  production initialization and repository, forbid ADC, and clean up only the
+  test-created identities and profiles. `just qa` excludes this separate suite.
 
 Run the focused test first, then `just check` and `pnpm --dir app build`.

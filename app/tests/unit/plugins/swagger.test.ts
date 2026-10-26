@@ -83,4 +83,20 @@ describe("OpenAPI documentation", () => {
       properties: { id: { type: "string" } },
     });
   });
+  it("preserves unrelated and other describedby links beside the usage index", async () => {
+    const app = build();
+    const existing = ['</other-guide>; rel="describedby"; type="text/plain"', '</reference>; rel="alternate"'];
+    app.addHook("onRequest", async (_request, reply) => {
+      reply.header("Link", existing);
+    });
+    const responses = await Promise.all(
+      ["/api-docs", "/openapi.json"].map(async (url) => app.inject({ method: "GET", url })),
+    );
+    for (const response of responses) {
+      expect(response.statusCode).toBe(200);
+      expect(response.headers.link).toEqual(
+        expect.arrayContaining([...existing, '</llms.txt>; rel="describedby"; type="text/plain"']),
+      );
+    }
+  });
 });

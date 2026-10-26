@@ -21,12 +21,16 @@ Read `AGENTS.md`, the affected module, `app/src/routes/v1.ts`, and neighboring r
 - Use `FastifyPluginAsyncTypebox` and schema every request input and reachable response.
 - Define a stable unique `operationId`, accurate summary, description, tags, constraints, success response, and reachable `ErrorModelSchema` statuses.
 - Declare the formats the route implements with `schema.consumes` and `schema.produces`; do not advertise media types supplied only by a serializer or parser elsewhere.
-- Protect authenticated routes with `preHandler: [fastify.authenticate]` and derive identity from `request.user`.
+- Protect routes with `fastify.authenticate` (`onRequest` for profiles, `preHandler` for identity) and derive identity from `request.user`.
 - Use the existing content-negotiation, pagination, and link-header utilities. Do not implement route-local variants.
 - Add `$id` only to reusable response schemas and register them when OpenAPI components or `/schemas/<Name>.json` must expose them.
 - Preserve controlled upstream errors and generic production 5xx details.
 
 For a public contract change, also apply `$openapi-contract` and verify generated documentation, schema discovery when applicable, runtime media types, and response headers.
+
+Update the root API usage guides with consumer-visible changes. Keep catalog and
+guide routes public, local, and hidden from the domain operation inventory.
+Preserve typed discovery links alongside existing schema and navigation links.
 
 ## Verification
 

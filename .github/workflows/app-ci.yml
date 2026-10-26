@@ -115,11 +115,11 @@ jobs:
           persist-credentials: false
 
       - name: Build production image
-        run: docker build --tag fastify-playground:ci .
+        run: docker build --tag fastify-playground:ci --file Dockerfile ..
 
       - name: Verify runtime version and user
         run: |
-          test "$(docker run --rm fastify-playground:ci --version)" = "v24.22.0"
+          test "$(docker run --rm fastify-playground:ci --version)" = "v24.22.1"
           test "$(docker image inspect --format '{{.Config.User}}' fastify-playground:ci)" = "65532:65532"
 
       - name: Smoke startup, probes, and graceful shutdown
@@ -148,6 +148,9 @@ jobs:
 
           curl --fail --silent "http://127.0.0.1:${port}/health" | jq --exit-status '.status == "healthy"'
           curl --fail --silent "http://127.0.0.1:${port}/status" | jq --exit-status '.status == "ready"'
+          curl --fail --silent "http://127.0.0.1:${port}/.well-known/api-catalog" | jq --exit-status '.linkset[0]["service-desc"][0].href == "/openapi.json"'
+          curl --fail --silent "http://127.0.0.1:${port}/llms.txt" | cmp ../llms.txt
+          curl --fail --silent "http://127.0.0.1:${port}/llms-full.txt" | cmp ../llms-full.txt
 
           docker stop --time 10 "$container_id" >/dev/null
           test "$(docker inspect --format '{{.State.ExitCode}}' "$container_id")" -eq 0

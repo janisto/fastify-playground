@@ -2,7 +2,7 @@
 
 [![Application CI](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-ci.yml?branch=main&label=application%20CI&logo=githubactions&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-ci.yml)
 [![Code quality](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-lint.yml?branch=main&label=code%20quality&logo=biome&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-lint.yml)
-[![Node.js 24.22.0](https://img.shields.io/badge/Node.js-24.22.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Node.js 24.22.1](https://img.shields.io/badge/Node.js-24.22.1-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![pnpm 12.14.0](https://img.shields.io/badge/pnpm-12.14.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![MIT license](https://img.shields.io/github/license/janisto/fastify-playground)](LICENSE)
 
@@ -22,6 +22,7 @@ A reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstr
 - Content negotiation supporting [JSON (RFC 8259)](https://datatracker.ietf.org/doc/html/rfc8259) and [CBOR (RFC 8949)](https://datatracker.ietf.org/doc/html/rfc8949) formats via `Accept` header
 - Cursor-based pagination with [RFC 8288 Link](https://datatracker.ietf.org/doc/html/rfc8288) headers
 - [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) at `/openapi.json`, with Swagger UI and schemas generated from TypeBox route metadata
+- Public RFC 9727 API catalog and same-build [`llms.txt`](llms.txt) / [`llms-full.txt`](llms-full.txt) API usage guides
 - Graceful SIGTERM/SIGINT shutdown owned by the executable server boundary; fatal Node.js errors are not treated as recoverable application events
 - Health check endpoints (`/health` for process liveness and `/status` for shutdown/load readiness)
 
@@ -65,9 +66,14 @@ returns 406 before parsing the request body or running the handler. A 204 or 205
 | `/v1` success | `application/json`, `application/cbor` | Strict negotiation; JSON is the default and tie preference |
 | `/health` | `application/json`, `application/cbor` | Strict negotiation; JSON is the default and tie preference |
 | `/status` | `application/json` | Strict JSON-only readiness response; unavailable responses use negotiated Problem Details |
+| `/openapi.json` | `application/json` | Strict JSON-only generated contract |
+| `/.well-known/api-catalog` | `application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"` | Public GET and bodyless HEAD |
+| `/llms.txt`, `/llms-full.txt` | `text/plain; charset=utf-8` | Exact UTF-8 files from the running build |
 | `/schemas/*.json` | `application/schema+json` | Strict JSON Schema representation |
 | Problem Details | `application/problem+json`, `application/cbor` | Best effort; explicit CBOR preference wins, otherwise JSON preserves the original error status |
 | `/api-docs` assets | Fastify-owned JSON, YAML, HTML, CSS, or JavaScript | Fixed formats outside application negotiation |
+
+Catalog and guide failures always use JSON Problem Details. Other application errors retain JSON/CBOR negotiation.
 
 JSON and CBOR request bodies are selected independently with `Content-Type`. Modeled request bodies accept
 `application/json`, optionally with the single parameter `charset=utf-8`, and exact parameterless `application/cbor`.
@@ -78,6 +84,13 @@ registered `application/concise-problem-details+cbor` uses a different compact d
 Negotiated responses include `Vary: Accept, Origin`. Successful modeled responses and Problem Details use an RFC 8288
 `Link` header for schema discovery. Response instances do not contain the JSON Schema `$schema` keyword; standalone
 schema documents include the Draft 2020-12 dialect and local `$defs` for referenced components.
+
+Fastify 5.12.7 currently treats completion of an incoming HTTP request as a
+client disconnect when `handlerTimeout` is enabled. The native pnpm patch in
+`app/patches/` listens for response closure instead and cleans up that listener.
+This keeps normal profile/GitHub requests active while preserving deadlines and
+real disconnect cancellation. Recheck the patch and transport tests when
+upgrading Fastify.
 
 ### Pagination
 
@@ -139,11 +152,13 @@ functions/              # Firebase Cloud Functions (placeholder)
 
 ## Requirements
 
-- Node.js 24.22.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
+- Node.js 24.22.1 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
 - pnpm 12.14.0 through Corepack
 - [just](https://github.com/casey/just) for repository workflows
 - [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.31.1](https://docs.zizmor.sh/) for local workflow checks
-- Firebase project with Authentication and Firestore, or their emulators, when exercising authenticated identity and profile routes
+- Java suitable for the [Firebase Emulator Suite](https://firebase.google.com/docs/emulator-suite/install_and_configure) when exercising local identity and profiles
+
+Local application routes and tests need no Google account, Firebase project, ADC, or cloud access. Local profile development uses the synthetic `demo-test` project and Auth/Firestore emulators. Public GitHub proxy requests need outbound access to GitHub.
 
 ## Quick Start
 
@@ -156,15 +171,25 @@ just install
 just serve
 ```
 
-Access the API at http://localhost:3000 and Swagger UI at http://localhost:3000/api-docs
+Access the API at http://127.0.0.1:3000 and Swagger UI at http://127.0.0.1:3000/api-docs.
 
-The root `Justfile` loads `.env` for its recipes. Direct runtime commands such as `pnpm dev` and `pnpm start` consume variables already exported by your shell.
+`just serve` selects development mode, `demo-test`, Auth at `127.0.0.1:7010`, and Firestore at `127.0.0.1:7030`. Public routes start without running Firebase. To use authenticated identity and profiles, start the emulators in a second terminal:
+
+```bash
+just emulators
+```
+
+This uses a pinned Firebase CLI and requires no Firebase login. See the [API usage guide](llms-full.txt#local-identity-and-profile-crud) for obtaining a local token and performing profile CRUD.
+
+Start discovery from `GET /.well-known/api-catalog`, or retrieve `GET /openapi.json` directly. Resolve catalog links against its retrieval URL. Health responses advertise the catalog and OpenAPI; the catalog, OpenAPI, full guide, and Swagger UI link to the concise index. Existing schema links are preserved.
+
+The root `Justfile` loads `.env` for its recipes. Direct runtime commands such as `pnpm dev` and `pnpm start` consume variables already exported by your shell; they do not load root `.env` or `app/.env` automatically.
 
 ## Tech Stack
 
 | Category | Technology |
 |----------|------------|
-| Runtime | Node.js 24.22.0 (ES2024) |
+| Runtime | Node.js 24.22.1 (ES2024) |
 | Framework | Fastify 5.x with TypeScript 7 |
 | Observability | fastify-observability 2 with Pino 10 |
 | Package manager | pnpm 12.14.0 |
@@ -182,13 +207,16 @@ Use the root `Justfile` for normal development:
 ```bash
 just lint             # Check Biome formatting and lint rules
 just typing           # Type-check source and tests
-just test             # Run unit and integration tests
+just test             # Run isolated unit, integration, and property tests
+just test-e2e         # Real Firebase SDK/profile test; requires running emulators
+just test-all         # Isolated suite followed by real emulator coverage
 just cov              # Run the full suite with coverage
 just qa               # Apply safe fixes, then run all non-mutating checks
 just check            # Run workflow, code, type, coverage, and production-audit gates
 just workflow-check   # Check workflow syntax and security
 just fuzz             # Run the property suite with FUZZ_RUNS (default 1000)
 just audit            # Report production advisories; fail on unignored high/critical findings
+just emulators        # Start Auth and Firestore locally with demo-test
 just install          # Install exactly from the lockfile
 just fresh            # Reinstall from a clean node_modules and dist
 just update           # Update dependencies within declared ranges
@@ -207,6 +235,8 @@ corepack pnpm typecheck     # Type check source and tests
 corepack pnpm start         # Start the compiled server
 ```
 
+`just qa` and `just check` run the isolated suite; they do not start emulators or run `test-e2e`. `just test-e2e` fails if the local emulators are unavailable.
+
 The audit gate reports lower-severity advisories and fails on high or critical production advisories. No advisory exceptions are configured.
 
 ## Container
@@ -220,9 +250,11 @@ just container-down       # Stop container
 Or with Docker/Podman CLI:
 
 ```bash
-docker build -t fastify-playground:latest ./app
-docker run --rm -p 8080:8080 --env-file .env fastify-playground:latest
+docker build -f app/Dockerfile -t fastify-playground:latest .
+docker run --rm -p 8080:8080 fastify-playground:latest
 ```
+
+The repository root is the build context so the two root usage guides enter the same image as the application. `app/Dockerfile.dockerignore` allows only the build inputs and those guides; local environment files, agent instructions, and tests are excluded. The runtime remains non-root. `just container-up` uses port 8080 and binds all container interfaces even when local `.env` sets another port or host. Loopback emulator endpoints refer to the container itself; use the native local server for the documented emulator workflow.
 
 ## Deployment
 
@@ -231,8 +263,11 @@ This application is not currently deployed. Google Cloud Run is a possible futur
 ### Google Cloud Run
 
 ```bash
-# Build and push to Artifact Registry
-gcloud builds submit --tag REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest ./app
+# Authenticate to your own registry, then build and push from the repository root
+gcloud auth configure-docker REGION-docker.pkg.dev
+docker build -f app/Dockerfile \
+  -t REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest .
+docker push REGION-docker.pkg.dev/PROJECT_ID/REPO/fastify-playground:latest
 
 # Deploy the checked-in complete container image
 gcloud run deploy fastify-playground \
@@ -267,9 +302,13 @@ Trace correlation requires only a valid incoming W3C `traceparent`; no Google Cl
 | GET | `/v1/github/repos/:owner/:repo/languages` | Repository languages |
 | GET | `/v1/github/repos/:owner/:repo/tags` | Repository tags (paginated) |
 | GET | `/schemas/:schemaName.json` | Standalone JSON Schema discovery |
-| GET | `/openapi.json` | Accepted generated OpenAPI 3.1.0 document |
+| GET | `/openapi.json` | Generated OpenAPI 3.1.0 document |
+| GET, HEAD | `/.well-known/api-catalog` | Public RFC 9727 links to schema, usage guides, and health |
+| GET | `/llms.txt` | Concise API usage index |
+| GET | `/llms-full.txt` | Complete curated API usage guide |
 | GET | `/api-docs` | Swagger UI |
-| GET | `/api-docs/json` | Legacy generated OpenAPI JSON alias |
+| GET | `/api-docs/json` | Swagger plugin's generated OpenAPI JSON |
+| GET | `/api-docs/yaml` | Swagger plugin's generated OpenAPI YAML |
 
 ## Environment Variables
 
@@ -291,9 +330,12 @@ Firebase Authentication and Firestore configuration:
 
 | Variable | Description |
 |----------|-------------|
-| `GOOGLE_APPLICATION_CREDENTIALS` | Local path used directly by Application Default Credentials; the application does not read the key file |
-| `FIREBASE_AUTH_EMULATOR_HOST` | Auth emulator address (e.g., `localhost:9099`) |
-| `FIRESTORE_EMULATOR_HOST` | Firestore emulator address (e.g., `localhost:8080`) |
+| `FIREBASE_PROJECT_ID` | Local emulator project; `.env.example` and `just serve` select `demo-test` |
+| `FIREBASE_AUTH_EMULATOR_HOST` | Local Auth endpoint; `127.0.0.1:7010` |
+| `FIRESTORE_EMULATOR_HOST` | Local Firestore endpoint; `127.0.0.1:7030` |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Optional ADC file for a separately configured future hosted setup; not needed for local emulators |
+
+Emulator use requires both endpoints, loopback hosts with explicit valid ports, a `demo-` project, and non-production mode. Startup rejects incomplete, remote, or production emulator configuration. For future hosted use, unset both emulator variables and configure that project's ADC separately. Firestore stays lazy; public requests do not access it. The local Firestore rules deny direct client access; the authenticated application uses the Admin SDK.
 
 The **API `GITHUB_TOKEN`** in `.env.example` is test-only. It raises the limit for opt-in tests that instantiate `GitHubClient` directly; the running API deliberately does not decode or forward it. Prefer a fine-grained token without private-repository access. It is separate from the **Merge `GITHUB_TOKEN`**, GitHub Actions' automatic token for repository workflows.
 
@@ -350,6 +392,7 @@ GitHub's [unauthenticated primary rate limit](https://docs.github.com/en/rest/us
 - **Coverage scope**: Full unit and integration suite across all `src/**/*.ts` files
 - **Unit tests**: `tests/unit/` with mocked external dependencies
 - **Integration tests**: `tests/integration/`; local transport/startup tests run normally, while direct real-GitHub client tests require the API `GITHUB_TOKEN` and otherwise skip
+- **Real emulator tests**: `tests/e2e/`, run separately with `just test-e2e`; production Firebase initialization, revocation-aware token verification, and profile CRUD are exercised without ADC
 - **Property tests**: `tests/property/`; routine runs use 100 successful cases per property
 
 Run a longer property-only campaign with `just fuzz`. Set `FUZZ_RUNS` to change the successful-case budget. Reproduce
@@ -405,6 +448,8 @@ as `actions/checkout@v7.0.1`, rather than full commit SHAs or floating major tag
 version updates.
 
 ## Contributing
+
+Resolve review conversations before merging.
 
 The README is the human-facing project guide. Portable coding-agent workflows live under [`.agents/skills/`](.agents/skills/), and agent execution rules live in [AGENTS.md](AGENTS.md).
 

@@ -14,6 +14,7 @@ Read `AGENTS.md`, then verify every affected `README.md` claim against the curre
 - configuration: `app/src/env.ts` and `.env.example`;
 - commands: `Justfile` and `app/package.json`;
 - dependencies and versions: `app/package.json`, `app/pnpm-lock.yaml`, and `app/tsconfig.json`;
+- API usage guides and discovery: root `llms.txt`, `llms-full.txt`, and `app/src/routes/documentation.ts`;
 - containers and deployment: `app/Dockerfile` and the documented Cloud Run commands;
 - automation: `.github/workflows/` and `.github/dependabot.yml`.
 

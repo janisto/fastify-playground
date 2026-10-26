@@ -10,7 +10,7 @@ export default defineConfig({
 
     // Test file patterns per guidelines
     include: ["tests/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/.{git,cache,output,temp}/**"],
+    exclude: ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/.{git,cache,output,temp}/**", "tests/e2e/**"],
 
     // Mock behavior
     clearMocks: true,

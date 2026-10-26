@@ -37,6 +37,7 @@ describe("CORS policy", () => {
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(response.headers["access-control-allow-methods"]?.split(",").map((value) => value.trim())).toEqual([
       "GET",
+      "HEAD",
       "POST",
       "PATCH",
       "DELETE",
