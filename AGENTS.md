@@ -1,38 +1,104 @@
 # AGENTS.md
 
-Instructions for coding agents working in this repository.
-
-Keep reader setup and usage in `README.md`; keep agent execution rules here.
+Instructions for coding agents. Keep execution rules here; `README.md` serves
+human users and contributors. Do not duplicate agent instructions into it.
 
 ## Engineering priorities
 
-- Correctness first, then readability and maintainability, then performance.
-- Inspect the relevant implementation, callers, and existing tests before changing behavior.
-- Prefer the smallest safe change that solves the problem.
-- Reuse existing local patterns and utilities, refactoring them when needed, instead of creating parallel abstractions or adding dependencies.
-- Validate review findings against actual requirements and reproducible behavior. Simplify unnecessary behavior instead of adding machinery to defend it.
-- State the failure mode before architectural, security, persistence, or production-impacting changes.
-- Do not declare completion until implementation, validation, and remaining risks are reported.
-- Keep comments, documentation, commit messages, and pull requests self-contained within this repository.
-- Keep instructions, comments, and documentation concise. Remove obsolete rules, completed-task narration, and duplicated guidance.
+- Prioritize correctness, readability, maintainability, then performance.
+- Inspect the implementation, callers, and tests before changing behavior.
+- Prefer the smallest safe change; reuse or refactor local patterns and utilities
+  before adding abstractions or dependencies.
+- Validate review findings against requirements and reproducible behavior.
+  Simplify unnecessary behavior instead of adding machinery to defend it.
+- State the failure mode before architectural, security, persistence, or
+  production-impacting changes.
+- Report implementation, validation, and remaining risks before completion.
+- Keep instructions, comments, and documentation concise. Explain and obtain
+  explicit approval before removing, merging, or relocating guidance, including
+  obsolete rules, completed-task narration, and duplicates.
+- Keep public code, instructions, comments, documentation, commits, and PR text
+  self-contained. Do not disclose private coordination repositories, paths,
+  revisions, or discussions.
 
-## Pull requests
+## Epistemic honesty and scope discipline
 
-- Format titles as `type[optional scope]: description`. Prefer no scope; include one only when it materially improves clarity.
-- Use `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, or `revert` as the type. Example: `feat: add response size field`.
-- Keep each pull request focused. In the body, explain why the change is needed, what changed, how it was validated, and any remaining risk.
-- Keep the title suitable for the final squash or merge commit.
-- This repository does not maintain a `CHANGELOG.md`; do not create one or require changelog entries in pull requests.
+- Report defects, corrupted data, unmet requirements, and unfinished work plainly.
+  Never conceal them in justifications or relabel them as simplifications,
+  provisional scope, or expected limitations. If a problem is deeper than
+  expected, stop at a safe boundary and report the exact failure, affected
+  behavior or records, and remaining work.
+- Counts, checksums, and passing tests show consistency, not semantic correctness.
+  Before claiming body parsing, TypeBox decoding, or Firestore transformations work,
+  inspect accepted inputs, decoded values, and resulting profiles using synthetic
+  fixtures or
+  authorized data. Hunt for false positives; report the worst counterexamples,
+  or describe the sample when none were found.
+- Fix the bug class behind cited failures: correct the grammar, validation, query,
+  or logic and audit all affected paths or records within the authorized scope.
+  Do not hardcode cited values into exceptions or blocklists, or patch only named
+  IDs.
+- Do not weaken specifications, `AGENTS.md`, or active plans to excuse defects or
+  shortcuts. Follow current task scope and stop gates. For review-only or
+  report-only work, edit only an explicitly requested report.
+- After the final code, schema, or generator change, regenerate affected OpenAPI,
+  schema, and fixture artifacts, rebuild affected test data, and rerun relevant
+  checks. Earlier passing results do not validate later edits.
 
-## Commits
+## Commits and pull requests
 
-- Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
-- Prefer no scope; include one only when it materially improves clarity. Write a short, imperative description. Example: `fix: preserve request ID`.
-- Mark breaking changes with `!` and explain them in a `BREAKING CHANGE:` footer.
-- Before committing, run `just qa` and `git diff --check`.
+- Use [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+  `type: imperative description`. Add a scope only when it materially improves
+  clarity. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`,
+  `ci`, `chore`, and `revert`.
+- Use the same format for PR titles, suitable for the final merge commit. Keep PRs
+  focused; describe the problem, resulting behavior, validation, and remaining
+  risks.
+- Mark breaking changes with `!` and a `BREAKING CHANGE:` footer explaining the
+  impact.
+- Work on task branches; never commit directly to the default branch.
+- Before committing, always run `just qa` and `git diff --check`.
+- Use one atomic PR when layers would require manual settings changes between
+  merges. A stack must be mergeable as a whole.
+- This repository has no `CHANGELOG.md`; do not create one or require entries.
+
+## Skills and validation
+
+### Required guidance
+
+- Use `.agents/skills/edit-agent-instructions/SKILL.md` when reviewing or editing
+  root or nested agent instructions.
+- Use `.agents/skills/adversarial-testing/SKILL.md` whenever planning, creating,
+  modifying, reviewing, debugging, or evaluating tests. Apply relevant language,
+  framework, and infrastructure testing guidance alongside it.
+- Use `.agents/skills/readme-maintenance/SKILL.md` for README audits and edits.
+  Assess README impact when API behavior/contracts, persistence, configuration,
+  setup, commands, architecture, tooling, deployment, CI, or supported versions
+  change. Edit the README only for stale or missing reader-facing claims.
+
+### Validation
+
+Before changing tests or application behavior requiring tests, read
+[app/tests/AGENTS.md](app/tests/AGENTS.md). Apply `adversarial-testing` alongside
+framework-specific guidance; test observable behavior and forbidden side effects.
+
+For changes affecting the application, run the narrowest relevant test first, then:
+
+```bash
+just check
+(cd app && corepack pnpm build)
+```
+
+Run `just container-build` when package installation, build output, runtime startup, or Docker configuration changes. Update `README.md`, this file, test guidance, and the relevant plan log when commands or contracts change.
 
 ## GitHub automation
 
+This example is not deployed; GCP is a possible future target. Keep deployment
+manual and project-agnostic. Pushes, PRs, and merges must not deploy it.
+
+- Keep Dependabot security alerts and automated security updates disabled.
+  Preserve scheduled version updates and native audits; do not add replacement
+  alert bots or repeatedly triage unchanged upstream constraints.
 - Keep auto-merge limited to verified Dependabot minor/patch updates behind required checks. Handle old excluded-tool
   PRs once; do not duplicate Dependabot ignore rules with package filters, enablement triggers, state queries, or
   revocation steps.
@@ -43,11 +109,6 @@ Keep reader setup and usage in `README.md`; keep agent execution rules here.
   `owner/action@v1.2.3`, not full commit SHAs or floating major-version tags.
   Dependabot updates those release tags.
 
-## Mandatory skills
-
-- Use `.agents/skills/adversarial-testing/SKILL.md` for every task that plans, creates, modifies, reviews, debugs, or evaluates tests. Apply it alongside any more specific framework or infrastructure testing skill.
-- Use `.agents/skills/readme-maintenance/SKILL.md` for every README audit or change. Also use it to assess README impact whenever public behavior, configuration, setup, commands, architecture, deployment, CI, or supported versions change. A README edit is required only when the audit finds a stale or missing reader-facing claim.
-
 ## Repository layout
 
 - `app/`: the active Fastify application.
@@ -57,7 +118,14 @@ Keep reader setup and usage in `README.md`; keep agent execution rules here.
 - `functions/`: placeholder only; it is not currently a Node.js package.
 - `plans/`: durable implementation and migration logs.
 
-Support only the latest Node.js LTS line and latest stable TypeScript. Node.js 24 and pnpm 12.14.0 through Corepack are required. The repository pins Node.js 24.22.0 in `.node-version` and the package manager in `app/package.json`. Keep `@types/node` on the same major as the runtime: for Node 24 the allowed range is `^24.x`, currently `^24.19.2`; never upgrade it to Node 25 or 26 types without upgrading the runtime in the same change. Do not use npm or Yarn and do not add another lockfile. Automatic peer installation is disabled; declare every peer dependency the application actually uses. The pnpm workspace enforces exact runtime compatibility, strict peer dependencies, one-day release quarantine, no trust downgrades, strict dependency build review, and no exotic subdependencies; keep exceptions narrow and justified.
+Support only the latest Node.js LTS line and latest stable TypeScript. The current
+baseline is Node.js 24; `.node-version` and `app/package.json` own exact runtime
+and package-manager pins. Use Corepack pnpm; do not use npm, Yarn, or another
+lockfile. Keep `@types/node` on the runtime major and update both together.
+Automatic peer installation is disabled: declare every used peer dependency.
+Preserve exact runtime compatibility, strict peers, the one-day quarantine, no
+trust downgrades, dependency build review, and no exotic subdependencies. Keep
+exceptions narrow and justified.
 
 Run package scripts from `app/`, or use the root `Justfile`:
 
@@ -130,20 +198,6 @@ just container-build
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
 
-## Tests and coverage
-
-- Use `.agents/skills/adversarial-testing/SKILL.md` for every test change. State the highest-impact failure mode, test observable behavior and forbidden side effects, and ask which plausible mutation each test catches.
-- Do not optimize for coverage numbers or mock interactions alone.
-- Do not retest Fastify or third-party plugin APIs. Remove tests that only prove registration succeeds, a decorator exists, or a mock returns its configured value.
-- Use Vitest with explicit imports; globals are disabled.
-- Use fast-check through `@fast-check/vitest` for bounded properties under `app/tests/property/`. Routine tests use 100
-  successful cases; use `just fuzz` for a longer campaign and preserve the reported seed/path for exact replay.
-- Unit tests do not use real network, filesystem, Firebase, or other external services.
-- Direct GitHub client integration tests are opt-in through the API `GITHUB_TOKEN` and skipped otherwise. Tests must prove the running application's GitHub path does not consume it.
-- Cover success, validation, error, and boundary behavior for every change.
-- Global V8 coverage thresholds are 90% for lines, functions, branches, and statements across `src/**/*.ts`.
-- Coverage exceptions require a narrow `/* v8 ignore ... -- @preserve */` comment and a genuinely untestable boundary.
-
 ## Dependency modernization
 
 Update implementations, tests, and documentation with dependency upgrades; retain a below-latest version only for a verified compatibility or tooling constraint. Keep the one-day release quarantine.
@@ -155,7 +209,7 @@ run `just qa` plus the build. Apply the same review when upgrading Biome during 
 
 ## Biome
 
-Biome 2.5.15 is the formatter and linter. The root configuration enables recommended project, test, and type-aware
+Use the Biome version pinned in `app/package.json` for formatting and linting. The root configuration enables recommended project, test, and type-aware
 domains plus strict correctness, security, promise, and import rules. Its overload inference incorrectly reports
 Fastify's promise-returning `inject` and `listen` calls as synchronous, and async plugins as void callbacks. Disable
 `useAwaitThenable` only in the server entry point and tests, and `noMisusedPromises` only in the two affected auth test
@@ -167,14 +221,3 @@ Biome upgrade. Do not remove valid awaits or wrap framework calls merely to appe
 - `correctness.noUndeclaredDependencies` is an error; declare every imported package directly.
 - Keep imports organized and all diagnostics at zero.
 - The entropy-based `noSecrets` rule is intentionally not enabled because it produced false positives on public identifiers and fixtures; secret prevention remains a contributor and platform scanning responsibility.
-
-## Application validation
-
-For changes affecting the application, run the narrowest relevant test first, then:
-
-```bash
-just check
-(cd app && corepack pnpm build)
-```
-
-Run `just container-build` when package installation, build output, runtime startup, or Docker configuration changes. Update `README.md`, this file, test guidance, and the relevant plan log when commands or contracts change.
