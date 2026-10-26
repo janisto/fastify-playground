@@ -85,12 +85,13 @@ Negotiated responses include `Vary: Accept, Origin`. Successful modeled response
 `Link` header for schema discovery. Response instances do not contain the JSON Schema `$schema` keyword; standalone
 schema documents include the Draft 2020-12 dialect and local `$defs` for referenced components.
 
-Fastify 5.12.7 currently treats completion of an incoming HTTP request as a
-client disconnect when `handlerTimeout` is enabled. The native pnpm patch in
-`app/patches/` listens for response closure instead and cleans up that listener.
-This keeps normal profile/GitHub requests active while preserving deadlines and
-real disconnect cancellation. Recheck the patch and transport tests when
-upgrading Fastify.
+The application has no generic 15-second handler deadline and does not propagate
+client disconnects to authentication, persistence, or GitHub work. Fastify's native
+`handlerTimeout` and `request.signal` APIs are unused because they cancelled
+ordinary completed requests in real HTTP validation. GitHub's independent
+10-second operation budget remains enforced. An abandoned profile write can
+finish after disconnection; read and reconcile an uncertain outcome before
+retrying. Dependencies are installed unpatched.
 
 ### Pagination
 
@@ -377,8 +378,8 @@ not require database access.
 The `/v1/github` examples proxy public GitHub REST data without a server credential. This is intentional: attaching a
 broad deployment token to caller-selected owner and repository paths could expose private resources available to that
 token. Each upstream request sends the fixed GitHub media type, API version `2026-03-10`, user agent, and
-`Accept-Encoding: identity`; it has a 10-second overall deadline beneath the application's 15-second handler deadline,
-propagates request cancellation, follows at most three allowlisted same-origin redirects, enforces a 4 MiB streamed
+`Accept-Encoding: identity`; it has a 10-second overall deadline, follows at most three allowlisted same-origin
+redirects, and enforces a 4 MiB streamed
 response limit, validates strict JSON and the exact public payload shape, and maps failures to controlled Problem
 Details. Repository, tag, and activity
 routes translate GitHub pagination into the API's opaque cursor and Link contract.

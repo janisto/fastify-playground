@@ -62,7 +62,7 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
       },
     },
     async (request, reply) => {
-      const profile = await service.create(principalId(request.user), request.body, request.signal);
+      const profile = await service.create(principalId(request.user), request.body);
       return reply.status(201).header("Location", "/v1/profile").send(profile);
     },
   );
@@ -91,7 +91,7 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
         },
       },
     },
-    async (request) => service.get(principalId(request.user), request.signal),
+    async (request) => service.get(principalId(request.user)),
   );
 
   fastify.patch(
@@ -124,7 +124,7 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
         },
       },
     },
-    async (request) => service.update(principalId(request.user), request.body, request.signal),
+    async (request) => service.update(principalId(request.user), request.body),
   );
 
   fastify.delete(
@@ -150,7 +150,7 @@ const profileRoutes: FastifyPluginAsyncTypebox<ProfileRoutesOptions> = async (fa
       },
     },
     async (request, reply) => {
-      await service.delete(principalId(request.user), request.signal);
+      await service.delete(principalId(request.user));
       return reply.status(204).send(null);
     },
   );

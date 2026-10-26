@@ -44,7 +44,7 @@ describe("GitHub routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ login: "octocat" });
-    expect(spy).toHaveBeenCalledWith("octocat", expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("octocat");
 
     await fastify.close();
   });
@@ -77,7 +77,7 @@ describe("GitHub routes", () => {
     const response = await fastify.inject({ method: "GET", url: "/owners/managed_account" });
 
     expect(response.statusCode).toBe(200);
-    expect(spy).toHaveBeenCalledWith("managed_account", expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("managed_account");
     await fastify.close();
   });
 
@@ -113,7 +113,7 @@ describe("GitHub routes", () => {
       count: 1,
     });
     expect(response.headers.link).toBe('</v1/github/owners/octocat/repos?cursor=repos-page-2&limit=20>; rel="next"');
-    expect(spy).toHaveBeenCalledWith("octocat", { limit: 20 }, expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("octocat", { limit: 20 });
 
     await fastify.close();
   });
@@ -189,7 +189,7 @@ describe("GitHub routes", () => {
     expect(response.headers.link).toBe(
       '</v1/github/repos/managed_account/repo-name/activity?cursor=abc123&limit=20>; rel="next", </v1/github/repos/managed_account/repo-name/activity?cursor=previous123&limit=20>; rel="prev"',
     );
-    expect(spy).toHaveBeenCalledWith("managed_account", "repo-name", { limit: 20 }, expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("managed_account", "repo-name", { limit: 20 });
 
     await fastify.close();
   });
@@ -303,7 +303,7 @@ describe("GitHub routes", () => {
     expect(response.headers.link).toBe(
       '</v1/github/repos/octocat/Hello-World/tags?cursor=tags-page-2&limit=20>; rel="next"',
     );
-    expect(spy).toHaveBeenCalledWith("octocat", "Hello-World", { limit: 20 }, expect.any(AbortSignal));
+    expect(spy).toHaveBeenCalledWith("octocat", "Hello-World", { limit: 20 });
 
     await fastify.close();
   });

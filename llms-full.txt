@@ -168,6 +168,11 @@ Success is `204` with no body or Content-Type. A later GET or another DELETE ret
 
 ## Failures and recovery
 
+There is no generic 15-second server handler deadline, and client disconnects do
+not cancel backend work. GitHub reads retain their independent ten-second budget.
+An abandoned profile operation can still finish, so use the read-and-reconcile
+recovery guidance below rather than assuming disconnection prevented a write.
+
 JSON errors normally use `application/problem+json`. API errors can instead encode the same model as ordinary `application/cbor` when explicitly preferred. Catalog and guide errors always stay JSON; `/openapi.json` retains the API error negotiation. A missing profile has this complete error body:
 
 ```json

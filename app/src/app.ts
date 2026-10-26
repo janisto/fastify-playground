@@ -70,7 +70,6 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const fastify = Fastify({
     connectionTimeout: 10000,
     requestTimeout: 30000,
-    handlerTimeout: 15000,
     return503OnClosing: false,
     loggerInstance: logger,
     requestIdHeader: false,

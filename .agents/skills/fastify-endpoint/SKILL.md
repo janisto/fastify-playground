@@ -11,7 +11,7 @@ Read `AGENTS.md`, the affected module, `app/src/routes/v1.ts`, and neighboring r
 
 1. Trace the existing module boundary through `index.ts`, `routes.ts`, `schemas.ts`, and any service or external client.
 2. Define or update request, success, and reachable error schemas before changing the handler. Use `$typebox-schemas` for non-trivial schema work.
-3. Change business or upstream behavior in the service or client. Construct dependencies once at plugin registration and pass `request.signal` through every outbound layer.
+3. Change business or upstream behavior in the service or client. Construct dependencies once at plugin registration and preserve the GitHub client's ten-second operation budget. The app does not propagate HTTP disconnects; do not read Fastify's `request.signal` while that native behavior remains unverified for normal requests.
 4. Keep the route handler limited to HTTP input, service invocation, status and headers, and response mapping.
 5. Export new feature routes from the module index and register business modules under `/v1` in `app/src/routes/v1.ts`. Keep infrastructure routes unversioned.
 6. Apply `$adversarial-testing`, then cover the route at the narrowest boundary that proves its public behavior.

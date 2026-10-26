@@ -18,7 +18,6 @@ WORKDIR /app
 # Install dependencies first for layer caching.
 RUN corepack enable && corepack install --global pnpm@12.14.0
 COPY app/package.json app/pnpm-lock.yaml app/pnpm-workspace.yaml ./
-COPY app/patches/ ./patches/
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile
@@ -37,7 +36,6 @@ WORKDIR /app
 # Install production dependencies only
 RUN corepack enable && corepack install --global pnpm@12.14.0
 COPY app/package.json app/pnpm-lock.yaml app/pnpm-workspace.yaml ./
-COPY app/patches/ ./patches/
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --prod --frozen-lockfile

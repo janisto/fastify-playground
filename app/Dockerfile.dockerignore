@@ -4,8 +4,6 @@
 !app/package.json
 !app/pnpm-lock.yaml
 !app/pnpm-workspace.yaml
-!app/patches/
-!app/patches/**
 !app/tsconfig.json
 !app/src/
 !app/src/**

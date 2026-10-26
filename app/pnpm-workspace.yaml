@@ -14,5 +14,3 @@ allowBuilds:
   '@firebase/util': true
   esbuild: true
   protobufjs: false
-patchedDependencies:
-  fastify@5.12.7: patches/fastify@5.12.7.patch

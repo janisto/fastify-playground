@@ -62,7 +62,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async (request) => {
-      return service.getOwner(request.params.owner, request.signal);
+      return service.getOwner(request.params.owner);
     },
   );
 
@@ -97,7 +97,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     async (request, reply) => {
       const { owner } = request.params;
       const { cursor, limit = 20 } = request.query;
-      const result = await service.listOwnerRepos(owner, { limit, ...(cursor ? { cursor } : {}) }, request.signal);
+      const result = await service.listOwnerRepos(owner, { limit, ...(cursor ? { cursor } : {}) });
       const linkHeader = buildLinkHeader(
         `/v1/github/owners/${encodeURIComponent(owner)}/repos`,
         new URLSearchParams({ limit: String(limit) }),
@@ -137,7 +137,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async (request) => {
-      return service.getRepo(request.params.owner, request.params.repo, request.signal);
+      return service.getRepo(request.params.owner, request.params.repo);
     },
   );
 
@@ -173,15 +173,10 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       const { owner, repo } = request.params;
       const { cursor, limit = 20 } = request.query;
 
-      const result = await service.listRepoActivity(
-        owner,
-        repo,
-        {
-          limit,
-          ...(cursor ? { cursor } : {}),
-        },
-        request.signal,
-      );
+      const result = await service.listRepoActivity(owner, repo, {
+        limit,
+        ...(cursor ? { cursor } : {}),
+      });
 
       const query = new URLSearchParams({ limit: String(limit) });
       const linkHeader = buildLinkHeader(
@@ -227,7 +222,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async (request) => {
-      return service.listRepoLanguages(request.params.owner, request.params.repo, request.signal);
+      return service.listRepoLanguages(request.params.owner, request.params.repo);
     },
   );
 
@@ -262,7 +257,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     async (request, reply) => {
       const { owner, repo } = request.params;
       const { cursor, limit = 20 } = request.query;
-      const result = await service.listRepoTags(owner, repo, { limit, ...(cursor ? { cursor } : {}) }, request.signal);
+      const result = await service.listRepoTags(owner, repo, { limit, ...(cursor ? { cursor } : {}) });
       const linkHeader = buildLinkHeader(
         `/v1/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags`,
         new URLSearchParams({ limit: String(limit) }),

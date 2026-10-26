@@ -196,7 +196,7 @@ consumer-facing descriptions. Build containers from the repository root with
 ## Authentication, security, and logging
 
 - Verify Firebase ID tokens with Firebase Admin SDK. Do not add application-managed JWT verification.
-- The Firebase plugin owns the Admin app and exposes Authentication. Reuse an existing default Firebase app; otherwise initialize a uniquely named app per Fastify instance. Delete only the named app owned by that instance. The profile module obtains Firestore lazily from that app and keeps profile writes transactional and cancellation-aware.
+- The Firebase plugin owns the Admin app and exposes Authentication. Reuse an existing default Firebase app; otherwise initialize a uniquely named app per Fastify instance. Delete only the named app owned by that instance. The profile module obtains Firestore lazily from that app and keeps profile writes transactional.
 - Never commit, log, or include credentials, tokens, authorization headers, cookies, or PII in fixtures.
 - Use Application Default Credentials in production and emulators or `GOOGLE_APPLICATION_CREDENTIALS` locally.
 - Normal local development uses paired loopback Auth/Firestore emulators and an
@@ -213,14 +213,19 @@ consumer-facing descriptions. Build containers from the repository root with
 - Keep production 5xx response details generic while retaining structured server-side terminal failure metadata.
 - Treat upstream response bodies and transport errors as untrusted. Preserve internal error chaining without serializing it into terminal logs, and expose controlled public details for upstream failures.
 - Use **API `GITHUB_TOKEN`** for the optional application/test environment variable. Public GitHub proxy routes are deliberately unauthenticated upstream; the API `GITHUB_TOKEN` is only for opt-in tests that instantiate `GitHubClient` directly, and the running application must never read or attach it to caller-selected owner or repository paths.
-- Keep the application handler deadline at 15 seconds and GitHub's overall request deadline below it. Pass `request.signal` through routes and services, and validate every successful upstream payload before mapping it to the public schema.
+- Keep GitHub's overall operation deadline at ten seconds and validate every
+  successful upstream payload before mapping it to the public schema. The app
+  currently has no generic handler deadline or client-disconnect propagation;
+  keep that gap documented. Do not enable Fastify's `handlerTimeout` or read
+  `request.signal` without verifying normal requests over real HTTP.
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
 
-The pnpm-managed Fastify patch corrects normal request completion being treated
-as cancellation. On Fastify upgrades, verify real HTTP completion, deadlines,
-and client-disconnect cancellation before changing the patch. Preserve native
-`request.signal` propagation; do not bypass cancellation to make requests pass.
+Do not add dependency source patches, vendored dependency forks, or runtime
+monkey-patches. Keep routine Dependabot updates compatible with ordinary installs
+and auto-merge. Prefer supported native behavior and document upstream limitations.
+If a workaround changes an agreed guarantee or its ongoing maintenance cost is
+uncertain, present verified alternatives and ask the user before implementation.
 
 ## Dependency modernization
 
