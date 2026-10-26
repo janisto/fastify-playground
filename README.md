@@ -132,20 +132,24 @@ Application code logs through `fastify.log`, `request.log`, or `reply.log`. Requ
 
 ```
 .agents/skills/           Portable coding-agent workflows
+llms.txt, llms-full.txt  Curated API usage guides served by the application
+firebase.json           Local Auth and Firestore emulator configuration
+firestore.rules         Deny direct client database access
 app/
   src/
     app.ts              # Pure application factory
     server.ts           # Executable startup and signal boundary
     env.ts              # Environment validation (TypeBox)
     plugins/            # Application-owned Fastify plugins
-    routes/             # Route handlers (health, schemas)
+    routes/             # Discovery, health, schemas, and v1 registration
     modules/            # Feature modules (auth/, github/, hello/, items/, profile/)
       <name>/           # index.ts, routes.ts, schemas.ts, service.ts
     schemas/            # Shared TypeBox schemas (portable scalars, errors, pagination)
     utils/              # Utility functions
   tests/
     unit/               # Unit tests (mirror src/ structure)
-    integration/        # Full-stack integration tests
+    integration/        # Framework, transport, and startup integration tests
+    e2e/                # Real Firebase SDK/profile tests with local emulators
     property/           # Bounded fast-check properties
     mocks/              # Test mocks (firebase.ts)
 functions/              # Firebase Cloud Functions (placeholder)
@@ -166,7 +170,7 @@ Local application routes and tests need no Google account, Firebase project, ADC
 ```bash
 git clone https://github.com/janisto/fastify-playground.git
 cd fastify-playground
-fnm use && corepack enable
+fnm use --install-if-missing && corepack enable
 cp .env.example .env
 just install
 just serve
@@ -180,7 +184,7 @@ Access the API at http://127.0.0.1:3000 and Swagger UI at http://127.0.0.1:3000/
 just emulators
 ```
 
-This uses a pinned Firebase CLI and requires no Firebase login. See the [API usage guide](llms-full.txt#local-identity-and-profile-crud) for obtaining a local token and performing profile CRUD.
+This uses a pinned Firebase CLI and requires no Firebase login. See the [API usage guide](llms-full.txt) for obtaining a local token and performing profile CRUD.
 
 Start discovery from `GET /.well-known/api-catalog`, or retrieve `GET /openapi.json` directly. Resolve catalog links against its retrieval URL. Health responses advertise the catalog and OpenAPI; the catalog, OpenAPI, full guide, and Swagger UI link to the concise index. Existing schema links are preserved.
 
@@ -211,7 +215,7 @@ just typing           # Type-check source and tests
 just test             # Run isolated unit, integration, and property tests
 just test-e2e         # Real Firebase SDK/profile test; requires running emulators
 just test-all         # Isolated suite followed by real emulator coverage
-just cov              # Run the full suite with coverage
+just cov              # Run the isolated suite with coverage
 just qa               # Apply safe fixes, then run all non-mutating checks
 just check            # Run workflow, code, type, coverage, and production-audit gates
 just workflow-check   # Check workflow syntax and security
@@ -228,12 +232,13 @@ Direct package scripts run from `app/`:
 ```bash
 corepack pnpm qa            # Auto-fix lint/format, type check, and run tests
 corepack pnpm dev           # Start dev server with hot reload
-corepack pnpm test          # Run all tests
+corepack pnpm test          # Run isolated unit, integration, and property tests
 corepack pnpm test:coverage # Run tests with coverage report
 corepack pnpm check         # Run format, lint, and import checks
-corepack pnpm check:fix     # Auto-fix all issues
+corepack pnpm check:fix     # Apply safe formatting, lint, and import fixes
 corepack pnpm typecheck     # Type check source and tests
-corepack pnpm start         # Start the compiled server
+corepack pnpm build         # Compile source to app/dist
+corepack pnpm start         # Start the compiled server after building
 ```
 
 `just qa` and `just check` run the isolated suite; they do not start emulators or run `test-e2e`. `just test-e2e` fails if the local emulators are unavailable.
@@ -319,13 +324,15 @@ Copy `.env.example` to `.env` and customize as needed:
 cp .env.example .env
 ```
 
-| Variable | Default | Description |
+| Variable | Default when unset | Description |
 |----------|---------|-------------|
 | `NODE_ENV` | `development` | Environment mode (`development`, `production`, `test`) |
 | `PORT` | `3000` | Server port |
 | `HOST` | `0.0.0.0` | Server host |
 | `LOG_LEVEL` | `info` | Logging level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent`) |
-| `CORS_ORIGINS` | empty | JSON array or comma-separated exact browser origins; empty denies all browser origins |
+| `CORS_ORIGINS` | empty | JSON array or comma-separated exact browser origins; empty permits no cross-origin browser access |
+
+These are application defaults. The local `.env.example` explicitly selects `HOST=127.0.0.1` and `PORT=3000`. The container image selects `HOST=0.0.0.0`, `PORT=8080`, and production mode; `just container-up` passes local `.env` values when present, then overrides its host and port.
 
 Firebase Authentication and Firestore configuration:
 
@@ -342,7 +349,7 @@ The **API `GITHUB_TOKEN`** in `.env.example` is test-only. It raises the limit f
 
 ## Plugin Architecture
 
-Plugins are registered explicitly in `app.ts` with layered dependencies:
+Plugins are registered explicitly in `app/src/app.ts` with layered dependencies:
 
 | Layer | Plugins |
 |-------|---------|
@@ -352,7 +359,7 @@ Plugins are registered explicitly in `app.ts` with layered dependencies:
 | 4. Infrastructure | Firebase Admin, lifecycle, Swagger, process-pressure protection |
 | 5. Application | auth |
 | 6. Response Metadata | schema-registry, schema-discovery |
-| 7. Routes | health, schemas, v1 modules |
+| 7. Routes | API catalog and usage guides, health, schemas, v1 modules |
 
 Observability is registered once at the root before every application hook and route. Application-owned plugins use `fastify-plugin` when decorators or hooks must escape encapsulation.
 
@@ -390,11 +397,11 @@ GitHub's [unauthenticated primary rate limit](https://docs.github.com/en/rest/us
 
 - **Framework**: Vitest with V8 coverage
 - **Coverage threshold**: 90% (lines, functions, branches, statements)
-- **Coverage scope**: Full unit and integration suite across all `src/**/*.ts` files
-- **Unit tests**: `tests/unit/` with mocked external dependencies
-- **Integration tests**: `tests/integration/`; local transport/startup tests run normally, while direct real-GitHub client tests require the API `GITHUB_TOKEN` and otherwise skip
-- **Real emulator tests**: `tests/e2e/`, run separately with `just test-e2e`; production Firebase initialization, revocation-aware token verification, and profile CRUD are exercised without ADC
-- **Property tests**: `tests/property/`; routine runs use 100 successful cases per property
+- **Coverage scope**: Isolated unit, integration, and property tests, measured over `app/src/**/*.ts`; the separate emulator suite is excluded
+- **Unit tests**: `app/tests/unit/` with mocked external dependencies
+- **Integration tests**: `app/tests/integration/`; local transport/startup tests run normally, while direct real-GitHub client tests require the API `GITHUB_TOKEN` and otherwise skip
+- **Real emulator tests**: `app/tests/e2e/`, run separately with `just test-e2e`; production Firebase initialization, revocation-aware token verification, and profile CRUD are exercised without ADC
+- **Property tests**: `app/tests/property/`; routine runs use 100 successful cases per property
 
 Run a longer property-only campaign with `just fuzz`. Set `FUZZ_RUNS` to change the successful-case budget. Reproduce
 an exact fast-check failure with:
@@ -412,7 +419,7 @@ not commit random corpora.
 |---|---|---|
 | Startup rejects `CORS_ORIGINS` | An entry is not an exact HTTP(S) origin, contains credentials/path/query/fragment, or the JSON array contains a non-string | Use exact origins such as `https://app.example`; explicit default ports normalize to the origin default |
 | A request returns 401 without contacting Firebase | The authorization value is not case-insensitive `Bearer`, one or more ASCII spaces, and one token68 credential, or the field is repeated | Send one `Authorization: Bearer <token>` field with no extra fields or alternate whitespace |
-| A response is 406 | `Accept` excludes every representation the route can produce | Request `application/json`, or explicitly request `application/cbor` on routes that produce it |
+| A response is 406 | `Accept` excludes every representation the route can produce | Choose a success media type from the content-negotiation table, such as `application/linkset+json` for the catalog or `text/plain` for the guides |
 | A request body is 415 | `Content-Type` or `Content-Encoding` is malformed or not owned by the route; arbitrary `+cbor` and `application/problem+cbor` are unsupported | Send `application/json` (optionally `charset=utf-8`) or exact parameterless `application/cbor`, with no content coding or `identity` |
 | A GitHub proxy route returns 502 or 504 | GitHub returned invalid/upstream data, transport failed, or the 10-second upstream deadline elapsed | Retry after checking GitHub availability, the correlated terminal record, and controlled domain diagnostics; do not add a broad server token |
 | `/health` is healthy while `/status` is 503 | Liveness intentionally bypasses process pressure; readiness reports shutdown or excessive load | Keep probing `/health` for process liveness and use `/status` for traffic readiness |
