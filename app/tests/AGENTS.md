@@ -1,6 +1,8 @@
 # Test guidance
 
-Rules for tests under `app/tests/`. The root `AGENTS.md` also applies.
+Scope: `app/tests/`. The root `AGENTS.md` also applies.
+Repository paths are root-relative. Run commands from the repository root unless
+another working directory is explicitly stated.
 
 ## Layout
 

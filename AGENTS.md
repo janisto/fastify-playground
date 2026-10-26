@@ -17,8 +17,9 @@ human users and contributors. Do not duplicate agent instructions into it.
 - Keep instructions, comments, and documentation concise. Explain and obtain
   explicit approval before removing, merging, or relocating guidance, including
   obsolete rules, completed-task narration, and duplicates.
-- Keep comments, documentation, commits, and PR text self-contained; do not expose
-  private coordination repositories, paths, revisions, or discussions.
+- Keep public code, instructions, comments, documentation, commits, and PR text
+  self-contained. Do not disclose private coordination repositories, paths,
+  revisions, or discussions.
 
 ## Epistemic honesty and scope discipline
 
@@ -47,15 +48,48 @@ human users and contributors. Do not duplicate agent instructions into it.
 ## Commits and pull requests
 
 - Use [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
-  `type: imperative description`. Add a scope only when
-  it materially improves clarity. Types: `feat`, `fix`, `docs`, `test`, `refactor`,
-  `perf`, `build`, `ci`, `chore`, and `revert`.
+  `type: imperative description`. Add a scope only when it materially improves
+  clarity. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`,
+  `ci`, `chore`, and `revert`.
 - Use the same format for PR titles, suitable for the final merge commit. Keep PRs
   focused; describe the problem, resulting behavior, validation, and remaining
   risks.
-- Mark breaking changes with `!` and a `BREAKING CHANGE:` footer.
-- Work on task branches. Before committing, run `just qa` and `git diff --check`.
+- Mark breaking changes with `!` and a `BREAKING CHANGE:` footer explaining the
+  impact.
+- Work on task branches; never commit directly to the default branch.
+- Before committing, always run `just qa` and `git diff --check`.
+- Use one atomic PR when layers would require manual settings changes between
+  merges. A stack must be mergeable as a whole.
 - This repository has no `CHANGELOG.md`; do not create one or require entries.
+
+## Skills and validation
+
+### Required guidance
+
+- Use `.agents/skills/edit-agent-instructions/SKILL.md` when reviewing or editing
+  root or nested agent instructions.
+- Use `.agents/skills/adversarial-testing/SKILL.md` whenever planning, creating,
+  modifying, reviewing, debugging, or evaluating tests. Apply relevant language,
+  framework, and infrastructure testing guidance alongside it.
+- Use `.agents/skills/readme-maintenance/SKILL.md` for README audits and edits.
+  Assess README impact when API behavior/contracts, persistence, configuration,
+  setup, commands, architecture, tooling, deployment, CI, or supported versions
+  change. Edit the README only for stale or missing reader-facing claims.
+
+### Validation
+
+Before changing tests or application behavior requiring tests, read
+[app/tests/AGENTS.md](app/tests/AGENTS.md). Apply `adversarial-testing` alongside
+framework-specific guidance; test observable behavior and forbidden side effects.
+
+For changes affecting the application, run the narrowest relevant test first, then:
+
+```bash
+just check
+(cd app && corepack pnpm build)
+```
+
+Run `just container-build` when package installation, build output, runtime startup, or Docker configuration changes. Update `README.md`, this file, test guidance, and the relevant plan log when commands or contracts change.
 
 ## GitHub automation
 
@@ -74,13 +108,6 @@ manual and project-agnostic. Pushes, PRs, and merges must not deploy it.
 - Reference GitHub Actions by explicit full release tags such as
   `owner/action@v1.2.3`, not full commit SHAs or floating major-version tags.
   Dependabot updates those release tags.
-
-## Mandatory skills
-
-- Use `.agents/skills/edit-agent-instructions/SKILL.md` when reviewing or editing
-  root or nested agent instructions.
-- Use `.agents/skills/adversarial-testing/SKILL.md` for every task that plans, creates, modifies, reviews, debugs, or evaluates tests. Apply it alongside any more specific framework or infrastructure testing skill.
-- Use `.agents/skills/readme-maintenance/SKILL.md` for every README audit or change. Also use it to assess README impact whenever public behavior, configuration, setup, commands, architecture, deployment, CI, or supported versions change. A README edit is required only when the audit finds a stale or missing reader-facing claim.
 
 ## Repository layout
 
@@ -171,12 +198,6 @@ just container-build
 - `/health` is a pressure-bypassed process liveness probe. `/status` is application-owned JSON readiness for shutdown and process pressure; do not globally gate it or unrelated routes on an optional external dependency.
 - Keep the runtime container non-root and minimal. Do not add source maps or development dependencies without an operational need.
 
-## Tests and coverage
-
-Before changing tests or application behavior requiring tests, read
-[app/tests/AGENTS.md](app/tests/AGENTS.md). Apply `adversarial-testing` alongside
-framework-specific guidance; test observable behavior and forbidden side effects.
-
 ## Dependency modernization
 
 Update implementations, tests, and documentation with dependency upgrades; retain a below-latest version only for a verified compatibility or tooling constraint. Keep the one-day release quarantine.
@@ -200,14 +221,3 @@ Biome upgrade. Do not remove valid awaits or wrap framework calls merely to appe
 - `correctness.noUndeclaredDependencies` is an error; declare every imported package directly.
 - Keep imports organized and all diagnostics at zero.
 - The entropy-based `noSecrets` rule is intentionally not enabled because it produced false positives on public identifiers and fixtures; secret prevention remains a contributor and platform scanning responsibility.
-
-## Application validation
-
-For changes affecting the application, run the narrowest relevant test first, then:
-
-```bash
-just check
-(cd app && corepack pnpm build)
-```
-
-Run `just container-build` when package installation, build output, runtime startup, or Docker configuration changes. Update `README.md`, this file, test guidance, and the relevant plan log when commands or contracts change.
