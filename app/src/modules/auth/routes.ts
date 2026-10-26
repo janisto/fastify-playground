@@ -22,7 +22,8 @@ const authRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       preHandler: [fastify.authenticate],
       schema: {
         operationId: "getAuthenticatedUser",
-        description: "Returns the minimal identity from a verified Firebase ID token",
+        description:
+          "Verify the Firebase bearer ID token with revocation checking and return only its current userId. No profile is created or read, and other identity claims are not returned.",
         summary: "Get authenticated user",
         tags: ["Authentication"],
         security: [{ bearerAuth: [] }],

@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import type { OpenAPIV3_1 } from "openapi-types";
 import { CBOR_MEDIA_TYPE, JSON_MEDIA_TYPE, PROBLEM_JSON_MEDIA_TYPE } from "../utils/content-negotiation.js";
+import { addLinkHeader, LLMS_INDEX_LINK } from "../utils/link-header.js";
 import { PORTABLE_ERRORS, type PortableErrorCode } from "../utils/portable-error.js";
 
 interface SchemaWithId {
@@ -195,6 +196,15 @@ function alignOperation(operation: OpenAPIV3_1.OperationObject): void {
   }
 
   const success = operation.responses?.["200"];
+  if (operation.operationId === "getHealth" && success && !("$ref" in success)) {
+    success.headers = {
+      ...success.headers,
+      Link: {
+        description: "RFC 8288 response-schema, api-catalog, and OpenAPI service-desc links.",
+        schema: { type: "string" },
+      },
+    };
+  }
   if (operation.operationId && PAGINATED_OPERATION_IDS.has(operation.operationId) && success && !("$ref" in success)) {
     success.headers = {
       ...success.headers,
@@ -326,6 +336,11 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
       deepLinking: true,
       url: "/openapi.json",
     },
+    uiHooks: {
+      onRequest: async (_request, reply) => {
+        addLinkHeader(reply, LLMS_INDEX_LINK);
+      },
+    },
     staticCSP: true,
     transformStaticCSP: (header) => header,
   });
@@ -338,7 +353,10 @@ const swaggerPlugin: FastifyPluginAsync = async (fastify): Promise<void> => {
         produces: [JSON_MEDIA_TYPE],
       },
     },
-    async (_request, reply) => reply.type(JSON_MEDIA_TYPE).send(fastify.swagger()),
+    async (_request, reply) => {
+      addLinkHeader(reply, LLMS_INDEX_LINK);
+      return reply.type(JSON_MEDIA_TYPE).send(fastify.swagger());
+    },
   );
 };
 

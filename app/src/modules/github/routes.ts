@@ -41,7 +41,8 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       schema: {
         operationId: "getGitHubOwner",
         security: [],
-        description: "Returns public profile information for a GitHub user.",
+        description:
+          "Read selected public GitHub user fields through anonymous upstream access. No server or caller credential is forwarded; missing or non-public resources return github_not_found. No application data is changed.",
         summary: "Get a GitHub user",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
@@ -61,7 +62,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async (request) => {
-      return service.getOwner(request.params.owner, request.signal);
+      return service.getOwner(request.params.owner);
     },
   );
 
@@ -73,7 +74,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         operationId: "listGitHubOwnerRepositories",
         security: [],
         description:
-          "Returns a paginated list of public repositories for a GitHub user. Follow the cursor in the Link header.",
+          "Read one provider-ordered page of public user repositories anonymously. Follow next/prev Link targets without constructing or changing cursors or page size; no total is promised. Observe Retry-After on quota failures and use a bounded retry budget.",
         summary: "List user repositories",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
@@ -96,7 +97,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     async (request, reply) => {
       const { owner } = request.params;
       const { cursor, limit = 20 } = request.query;
-      const result = await service.listOwnerRepos(owner, { limit, ...(cursor ? { cursor } : {}) }, request.signal);
+      const result = await service.listOwnerRepos(owner, { limit, ...(cursor ? { cursor } : {}) });
       const linkHeader = buildLinkHeader(
         `/v1/github/owners/${encodeURIComponent(owner)}/repos`,
         new URLSearchParams({ limit: String(limit) }),
@@ -115,7 +116,8 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       schema: {
         operationId: "getGitHubRepository",
         security: [],
-        description: "Returns detailed information for a GitHub repository.",
+        description:
+          "Read selected fields of one publicly visible GitHub repository anonymously. Private or missing repositories return github_not_found. This performs an upstream read and changes no application data.",
         summary: "Get a repository",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
@@ -135,7 +137,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async (request) => {
-      return service.getRepo(request.params.owner, request.params.repo, request.signal);
+      return service.getRepo(request.params.owner, request.params.repo);
     },
   );
 
@@ -147,7 +149,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
         operationId: "listGitHubRepositoryActivity",
         security: [],
         description:
-          "Returns a paginated list of repository activities. Use the cursor from the Link header to navigate.",
+          "Read one newest-first page of public repository activity anonymously. Follow opaque next/prev Link targets with the same page size; the live provider collection may change between requests. Observe quota delay hints and bound retries.",
         summary: "List repository activity",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
@@ -171,15 +173,10 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       const { owner, repo } = request.params;
       const { cursor, limit = 20 } = request.query;
 
-      const result = await service.listRepoActivity(
-        owner,
-        repo,
-        {
-          limit,
-          ...(cursor ? { cursor } : {}),
-        },
-        request.signal,
-      );
+      const result = await service.listRepoActivity(owner, repo, {
+        limit,
+        ...(cursor ? { cursor } : {}),
+      });
 
       const query = new URLSearchParams({ limit: String(limit) });
       const linkHeader = buildLinkHeader(
@@ -204,7 +201,8 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       schema: {
         operationId: "listGitHubRepositoryLanguages",
         security: [],
-        description: "Returns the languages used in a repository with byte counts.",
+        description:
+          "Read public repository language byte counts anonymously, ordered by descending count and then name. This is a single upstream read without pagination or application mutation.",
         summary: "List repository languages",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
@@ -224,7 +222,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async (request) => {
-      return service.listRepoLanguages(request.params.owner, request.params.repo, request.signal);
+      return service.listRepoLanguages(request.params.owner, request.params.repo);
     },
   );
 
@@ -235,7 +233,8 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
       schema: {
         operationId: "listGitHubRepositoryTags",
         security: [],
-        description: "Returns a paginated list of tags for a repository. Follow the cursor in the Link header.",
+        description:
+          "Read one provider-ordered public tag page anonymously. Follow next/prev Link targets with the same page size; the response count describes this page, not the repository total. Respect Retry-After on quota failures and bound retries.",
         summary: "List repository tags",
         tags: ["GitHub"],
         produces: API_MEDIA_TYPES,
@@ -258,7 +257,7 @@ const githubRoutes: FastifyPluginAsyncTypebox = async (fastify) => {
     async (request, reply) => {
       const { owner, repo } = request.params;
       const { cursor, limit = 20 } = request.query;
-      const result = await service.listRepoTags(owner, repo, { limit, ...(cursor ? { cursor } : {}) }, request.signal);
+      const result = await service.listRepoTags(owner, repo, { limit, ...(cursor ? { cursor } : {}) });
       const linkHeader = buildLinkHeader(
         `/v1/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/tags`,
         new URLSearchParams({ limit: String(limit) }),

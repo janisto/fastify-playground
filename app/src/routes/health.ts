@@ -1,6 +1,7 @@
 import { type FastifyPluginAsyncTypebox, Type } from "@fastify/type-provider-typebox";
 import { ErrorModelSchema } from "../schemas/index.js";
 import { API_MEDIA_TYPES } from "../utils/content-negotiation.js";
+import { API_CATALOG_LINK, addLinkHeader, OPENAPI_DOCUMENT_LINK } from "../utils/link-header.js";
 
 export const HealthResponseSchema = Type.Object(
   {
@@ -54,7 +55,9 @@ const health: FastifyPluginAsyncTypebox = async (fastify): Promise<void> => {
         },
       },
     },
-    async () => {
+    async (_request, reply) => {
+      addLinkHeader(reply, API_CATALOG_LINK);
+      addLinkHeader(reply, OPENAPI_DOCUMENT_LINK);
       return { status: "healthy" as const };
     },
   );

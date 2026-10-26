@@ -1,6 +1,6 @@
 autoInstallPeers: false
 strictPeerDependencies: true
-nodeVersion: 24.22.0
+nodeVersion: 24.22.1
 engineStrict: true
 strictDepBuilds: true
 minimumReleaseAge: 1440

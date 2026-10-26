@@ -26,6 +26,7 @@ import sensiblePlugin from "./plugins/sensible.js";
 import swaggerPlugin from "./plugins/swagger.js";
 import underPressurePlugin, { type UnderPressurePluginOptions } from "./plugins/under-pressure.js";
 import varyHeaderPlugin from "./plugins/vary-header.js";
+import documentationRoutes from "./routes/documentation.js";
 import healthRoutes from "./routes/health.js";
 import schemasRoutes from "./routes/schemas.js";
 import v1Routes from "./routes/v1.js";
@@ -69,7 +70,6 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const fastify = Fastify({
     connectionTimeout: 10000,
     requestTimeout: 30000,
-    handlerTimeout: 15000,
     return503OnClosing: false,
     loggerInstance: logger,
     requestIdHeader: false,
@@ -119,6 +119,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
     // Layer 7: Routes
     // Infrastructure routes (unversioned)
+    await fastify.register(documentationRoutes);
     await fastify.register(healthRoutes);
     await fastify.register(schemasRoutes);
 

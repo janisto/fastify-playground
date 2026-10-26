@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   acceptsMediaType,
+  CATALOG_MEDIA_TYPE,
   CBOR_MEDIA_TYPE,
   contentTypeMatches,
   JSON_MEDIA_TYPE,
@@ -9,6 +10,7 @@ import {
   negotiateProblemMediaType,
   normalizeMediaType,
   PROBLEM_JSON_MEDIA_TYPE,
+  TEXT_MEDIA_TYPE,
 } from "../../../src/utils/content-negotiation.js";
 
 describe("content negotiation", () => {
@@ -100,5 +102,18 @@ describe("content negotiation", () => {
   it("matches Content-Type parameters but not unowned structured suffixes", () => {
     expect(contentTypeMatches("application/cbor; profile=example", CBOR_MEDIA_TYPE)).toBe(true);
     expect(contentTypeMatches("application/vnd.example+cbor", CBOR_MEDIA_TYPE)).toBe(false);
+  });
+  it.each([
+    ["text/plain", TEXT_MEDIA_TYPE, TEXT_MEDIA_TYPE],
+    ['text/plain; charset="UTF-8"', TEXT_MEDIA_TYPE, TEXT_MEDIA_TYPE],
+    ["text/plain; charset=latin1", TEXT_MEDIA_TYPE, null],
+    ["text/plain; charset=utf-8;q=0, text/plain;q=1", TEXT_MEDIA_TYPE, null],
+    ["application/linkset+json", CATALOG_MEDIA_TYPE, CATALOG_MEDIA_TYPE],
+    [CATALOG_MEDIA_TYPE, CATALOG_MEDIA_TYPE, CATALOG_MEDIA_TYPE],
+    ['application/linkset+json; profile="https://invalid.example"', CATALOG_MEDIA_TYPE, null],
+    [`${CATALOG_MEDIA_TYPE};q=0, */*;q=1`, CATALOG_MEDIA_TYPE, null],
+    ["application/json", CATALOG_MEDIA_TYPE, null],
+  ])("matches offered representation parameters for %s", (accept, available, expected) => {
+    expect(negotiateMediaType(accept, [available])).toBe(expected);
   });
 });

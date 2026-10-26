@@ -86,7 +86,31 @@ audit:
 [group('run')]
 [working-directory('app')]
 serve:
-    corepack pnpm dev
+    NODE_ENV=development \
+        FIREBASE_PROJECT_ID=demo-test \
+        FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:7010 \
+        FIRESTORE_EMULATOR_HOST=127.0.0.1:7030 \
+        corepack pnpm dev
+
+# Start local Auth and Firestore with a synthetic project (no Firebase login).
+[group('run')]
+[working-directory('app')]
+emulators:
+    corepack pnpm dlx firebase-tools@15.34.0 emulators:start --only auth,firestore --project demo-test --config ../firebase.json
+
+# Exercise the real Firebase SDK and production profile repository against local emulators.
+[group('test')]
+[working-directory('app')]
+test-e2e:
+    NODE_ENV=test \
+        FIREBASE_PROJECT_ID=demo-test \
+        FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:7010 \
+        FIRESTORE_EMULATOR_HOST=127.0.0.1:7030 \
+        corepack pnpm exec vitest run --config vitest.e2e.config.ts
+
+# Run isolated tests, then real emulator coverage (requires just emulators).
+[group('test')]
+test-all: test test-e2e
 
 # Send HTTP request to development server
 [group('run')]
@@ -117,12 +141,13 @@ container-build image="fastify-playground:latest" version="dev" runtime_img="":
     {{ CONTAINER_RUNTIME }} build \
         --build-arg VERSION={{ version }} \
         {{ if runtime_img != "" { "--build-arg RUNTIME_IMAGE=" + runtime_img } else { "" } }} \
-        -t {{ image }} ./app
+        -t {{ image }} --file app/Dockerfile .
 
 [group('container')]
 container-up image="fastify-playground:latest" name="fastify-playground" port=CONTAINER_PORT:
     {{ CONTAINER_RUNTIME }} run -d --rm --name {{ name }} \
         {{ if path_exists(".env") == "true" { "--env-file .env" } else { "" } }} \
+        --env PORT=8080 --env HOST=0.0.0.0 \
         -p {{ port }}:8080 {{ image }}
 
 [group('container')]

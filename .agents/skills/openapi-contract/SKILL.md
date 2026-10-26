@@ -31,6 +31,12 @@ Do not add a hand-maintained OpenAPI file or commit generated specifications.
 - Ensure every reference resolves, standalone schemas use local `$defs`, and runtime errors match `ErrorModelSchema`.
 - Ensure response instances do not receive the JSON Schema `$schema` keyword.
 - Avoid unrelated schema churn.
+- Keep the root API usage guides accurate, preserve operation IDs, and explain
+  ownership, side effects, pagination, and uncertain-write recovery where useful.
+- Preserve the index link on OpenAPI, catalog GET/HEAD, the full guide, and Swagger
+  UI; preserve both discovery links on JSON and CBOR health responses.
+- Catalog and guide successes use their own media types and JSON-only Problem
+  Details failures. HEAD metadata has no response body.
 
 ## Verification
 

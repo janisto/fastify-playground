@@ -114,6 +114,43 @@ describe("GCP current-principal profile", () => {
     vi.resetModules();
   });
 
+  it("completes profile writes over real HTTP after the request body has finished", async () => {
+    const repository = new DeterministicProfileRepository();
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp({ profileRepository: repository });
+    const headers = { authorization: "Bearer http-principal", "content-type": "application/json" };
+    try {
+      const origin = await app.listen({ host: "127.0.0.1", port: 0 });
+      const created = await fetch(`${origin}/v1/profile`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(CREATE_BODY),
+        signal: AbortSignal.timeout(2000),
+      });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toMatchObject({ id: "http-principal", firstName: "Ada", marketingOptIn: false });
+      const updated = await fetch(`${origin}/v1/profile`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ marketingOptIn: true }),
+        signal: AbortSignal.timeout(2000),
+      });
+      expect(updated.status).toBe(200);
+      expect(await updated.json()).toMatchObject({ id: "http-principal", marketingOptIn: true });
+      const deleted = await fetch(`${origin}/v1/profile`, {
+        method: "DELETE",
+        headers,
+        signal: AbortSignal.timeout(2000),
+      });
+      expect(deleted.status).toBe(204);
+      expect(await deleted.text()).toBe("");
+      expect(repository.committedWrites).toBe(3);
+      expect(repository.records.size).toBe(0);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("executes normalized CRUD, isolates two principals, and preserves no-op timestamps", async () => {
     const repository = new DeterministicProfileRepository();
     const instants = [

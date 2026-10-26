@@ -60,6 +60,16 @@ FUZZ_RUNS=1000 FUZZ_SEED=<seed> FUZZ_PATH=<path> just fuzz
 `FUZZ_PATH` is valid only with `FUZZ_SEED`. Promote a minimized failure to a named example test when it captures a
 stable contract, and retain the property to search adjacent input space. Do not commit generated random corpora.
 
+## Real Firebase emulators
+
+`tests/e2e/` is excluded from the default isolated suite. Start `just emulators`,
+then run `just test-e2e` from the root; `just test-all` runs both suites. Use the
+production app factory over a loopback HTTP listener and the Firestore repository with synthetic emulator-issued
+identities, forbid ADC access, and clean up only records created by the test.
+Missing emulators fail this explicit command; do not silently skip it or add
+production test branches. The separate Vitest configuration reuses the normal
+settings.
+
 ## Coverage
 
 `pnpm test:coverage` runs the full suite and measures all `src/**/*.ts` files, including the application entry point. Global thresholds are 90% for lines, functions, branches, and statements.

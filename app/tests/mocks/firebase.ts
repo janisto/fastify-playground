@@ -19,5 +19,5 @@ export const createFirebaseAuthMock = () => ({
  */
 export const createFirebaseAppMock = (name = "[DEFAULT]") => ({
   name,
-  options: {},
+  options: { projectId: "demo-test" },
 });

@@ -2,6 +2,8 @@ export const CBOR_MEDIA_TYPE = "application/cbor";
 export const JSON_MEDIA_TYPE = "application/json";
 export const PROBLEM_JSON_MEDIA_TYPE = "application/problem+json";
 export const SCHEMA_JSON_MEDIA_TYPE = "application/schema+json";
+export const TEXT_MEDIA_TYPE = "text/plain; charset=utf-8";
+export const CATALOG_MEDIA_TYPE = 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"';
 export const API_MEDIA_TYPES = [JSON_MEDIA_TYPE, CBOR_MEDIA_TYPE] as const;
 
 const QVALUE_PATTERN = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/;
@@ -94,7 +96,29 @@ interface ParsedParameters {
   quality: number;
 }
 
-function parseParameters(parameters: readonly string[], target: string): ParsedParameters | null {
+function offeredParameters(target: string): Map<string, string> {
+  const offered = new Map<string, string>();
+  for (const parameter of target.split(";").slice(1)) {
+    const separator = parameter.indexOf("=");
+    const value = decodeParameterValue(parameter.slice(separator + 1));
+    if (separator <= 0 || value === null) continue;
+    offered.set(parameter.slice(0, separator).trim().toLowerCase(), value);
+  }
+  return offered;
+}
+
+function parameterMatches(name: string, actual: string | null, expected: string | undefined): boolean {
+  if (actual === null || expected === undefined) return false;
+  return name === "charset" ? actual.toLowerCase() === expected.toLowerCase() : actual === expected;
+}
+
+function parseParameters(
+  parameters: readonly string[],
+  target: string,
+  withUtf8Charset: boolean,
+): ParsedParameters | null {
+  const offered = offeredParameters(target);
+  if (withUtf8Charset) offered.set("charset", "utf-8");
   let quality = 1;
   let qualitySeen = false;
   const mediaParameters = new Set<string>();
@@ -120,15 +144,8 @@ function parseParameters(parameters: readonly string[], target: string): ParsedP
     }
 
     const value = separator <= 0 ? null : decodeParameterValue(rawValue);
-    if (
-      value === null ||
-      name !== "charset" ||
-      !isJsonMediaType(target) ||
-      value.toLowerCase() !== "utf-8" ||
-      mediaParameters.has(name)
-    ) {
-      return null;
-    }
+    const expected = offered.get(name);
+    if (!parameterMatches(name, value, expected) || mediaParameters.has(name)) return null;
     mediaParameters.add(name);
   }
 
@@ -164,11 +181,10 @@ function matchMediaRange(
   if (parts === null) return null;
   const [rawRange, ...parameters] = parts;
   const range = normalizeMediaType(rawRange ?? "");
-  const parsedParameters = parseParameters(parameters, target);
+  const parsedParameters = parseParameters(parameters, target, withUtf8Charset);
   if (parsedParameters === null || !range.includes("/")) return null;
-  if (!withUtf8Charset && parsedParameters.mediaParameterCount > 0) return null;
 
-  const specificity = rangeSpecificity(range, target);
+  const specificity = rangeSpecificity(range, normalizeMediaType(target));
   if (specificity === null || (explicitOnly && specificity < 2)) return null;
   return { ...parsedParameters, specificity };
 }
@@ -181,7 +197,7 @@ function mediaTypeQuality(
 ): number | null {
   if (!acceptHeader) return null;
 
-  const target = normalizeMediaType(mediaType);
+  const target = mediaType;
   let bestMediaParameterCount = -1;
   let bestSpecificity = -1;
   let bestQuality = 0;
@@ -230,7 +246,7 @@ export function negotiateMediaType(
     for (const withUtf8Charset of forms) {
       const quality = mediaTypeQuality(acceptHeader, mediaType, explicitOnly.has(mediaType), withUtf8Charset);
       if (quality !== null && quality > selectedQuality) {
-        selected = withUtf8Charset ? `${normalizeMediaType(mediaType)}; charset=utf-8` : mediaType;
+        selected = withUtf8Charset ? `${mediaType}; charset=utf-8` : mediaType;
         selectedQuality = quality;
       }
     }

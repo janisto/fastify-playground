@@ -89,15 +89,6 @@ describe("App Integration", () => {
     vi.resetModules();
   });
 
-  it("enforces the application-wide handler deadline", async () => {
-    const { buildApp } = await import("../../src/app.js");
-    const fastify = await buildApp();
-
-    expect(fastify.initialConfig).toMatchObject({ handlerTimeout: 15_000 });
-
-    await fastify.close();
-  });
-
   it("reports readiness without requiring an unused external datastore", async () => {
     const { buildApp } = await import("../../src/app.js");
     const fastify = await buildApp();
