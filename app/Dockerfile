@@ -5,9 +5,9 @@
 # See: https://docs.docker.com/language/nodejs/build-images/
 
 # Builder image: includes Node.js toolchain for compilation
-ARG NODE_IMAGE=node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea
+ARG NODE_IMAGE=node:26.13.0-trixie-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39
 # Runtime image: minimal distroless Node.js image (no shell, no package manager)
-ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8
 # Build arguments for version injection
 ARG VERSION=dev
 
@@ -16,7 +16,8 @@ FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 # Install dependencies first for layer caching.
-RUN corepack enable && corepack install --global pnpm@12.14.0
+RUN npm install --global corepack@0.36.0 && \
+    corepack enable && corepack install --global pnpm@12.16.1
 COPY app/package.json app/pnpm-lock.yaml app/pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
@@ -34,7 +35,8 @@ FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 
 # Install production dependencies only
-RUN corepack enable && corepack install --global pnpm@12.14.0
+RUN npm install --global corepack@0.36.0 && \
+    corepack enable && corepack install --global pnpm@12.16.1
 COPY app/package.json app/pnpm-lock.yaml app/pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
