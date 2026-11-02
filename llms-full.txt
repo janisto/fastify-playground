@@ -7,7 +7,8 @@ This is the curated API usage guide for the Fastify reference application. It is
 From a checkout, install the Node.js version in `.node-version`, Corepack pnpm, and just, then run:
 
 ```sh
-fnm use
+fnm use --install-if-missing
+npm install --global corepack@0.36.0
 corepack enable
 cp .env.example .env
 just install

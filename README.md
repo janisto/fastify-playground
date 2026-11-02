@@ -2,11 +2,11 @@
 
 [![Application CI](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-ci.yml?branch=main&label=application%20CI&logo=githubactions&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-ci.yml)
 [![Code quality](https://img.shields.io/github/actions/workflow/status/janisto/fastify-playground/app-lint.yml?branch=main&label=code%20quality&logo=biome&logoColor=white)](https://github.com/janisto/fastify-playground/actions/workflows/app-lint.yml)
-[![Node.js 24.22.1](https://img.shields.io/badge/Node.js-24.22.1-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![pnpm 12.14.0](https://img.shields.io/badge/pnpm-12.14.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Node.js 26.13.0](https://img.shields.io/badge/Node.js-26.13.0-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![pnpm 12.16.1](https://img.shields.io/badge/pnpm-12.16.1-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![MIT license](https://img.shields.io/github/license/janisto/fastify-playground)](LICENSE)
 
-A reference REST API built with Fastify, TypeScript, and Node.js 24. It demonstrates generated OpenAPI, Firebase Authentication and Firestore-backed current-principal profiles, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
+A reference REST API built with Fastify, TypeScript, and Node.js 26. It demonstrates generated OpenAPI, Firebase Authentication and Firestore-backed current-principal profiles, TypeBox validation, structured logging, strict content negotiation, and deterministic shutdown.
 
 <img src="assets/ts.svg" alt="TypeScript logo" width="200">
 
@@ -157,11 +157,13 @@ functions/              # Firebase Cloud Functions (placeholder)
 
 ## Requirements
 
-- Node.js 24.22.1 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
-- pnpm 12.14.0 through Corepack
+- Node.js 26.13.0 (pinned in `.node-version`), managed with [fnm](https://github.com/Schniz/fnm): `brew install fnm`
+- pnpm 12.16.1 through Corepack 0.36.0
 - [just](https://github.com/casey/just) for repository workflows
 - [actionlint 1.7.12](https://github.com/rhysd/actionlint) and [zizmor 1.31.1](https://docs.zizmor.sh/) for local workflow checks
 - Java suitable for the [Firebase Emulator Suite](https://firebase.google.com/docs/emulator-suite/install_and_configure) when exercising local identity and profiles
+
+Node.js 26 does not bundle Corepack; the quick start installs it explicitly before enabling pnpm.
 
 Local application routes and tests need no Google account, Firebase project, ADC, or cloud access. Local profile development uses the synthetic `demo-test` project and Auth/Firestore emulators. Public GitHub proxy requests need outbound access to GitHub.
 
@@ -170,7 +172,9 @@ Local application routes and tests need no Google account, Firebase project, ADC
 ```bash
 git clone https://github.com/janisto/fastify-playground.git
 cd fastify-playground
-fnm use --install-if-missing && corepack enable
+fnm use --install-if-missing
+npm install --global corepack@0.36.0
+corepack enable
 cp .env.example .env
 just install
 just serve
@@ -194,10 +198,10 @@ The root `Justfile` loads `.env` for its recipes. Direct runtime commands such a
 
 | Category | Technology |
 |----------|------------|
-| Runtime | Node.js 24.22.1 (ES2024) |
+| Runtime | Node.js 26.13.0 (ES2024) |
 | Framework | Fastify 5.x with TypeScript 7 |
 | Observability | fastify-observability 2 with Pino 10 |
-| Package manager | pnpm 12.14.0 |
+| Package manager | pnpm 12.16.1 |
 | Authentication and persistence | Firebase Admin SDK Authentication and Firestore |
 | Schema Validation | TypeBox with @fastify/type-provider-typebox |
 | Testing | Vitest with V8 coverage (90% minimum) |
@@ -429,7 +433,7 @@ not commit random corpora.
 
 Biome enforces formatting, imports, project and test rules, and type-aware promise and correctness checks. TypeScript separately checks production and test code with exact optional properties and unchecked indexed access. `pnpm check:fix` applies safe fixes; `just check` runs all non-mutating quality gates.
 
-Biome 2.5.15 is pinned in the application and the standalone lint workflow. Its experimental overload inference needs
+Biome 2.6.4 is pinned in the application and the standalone lint workflow. Its experimental overload inference needs
 scoped exceptions for Fastify injection/listening and two async auth fixtures; the remaining promise checks stay
 enabled. Biome is maintained separately because patch releases can change diagnostics, configuration, and fixes.
 Dependabot excludes Biome from version updates. Other eligible minor/patch dependency updates can auto-merge after

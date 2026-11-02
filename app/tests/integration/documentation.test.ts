@@ -222,7 +222,12 @@ describe("public API consumer discovery", () => {
       headers: { origin: "https://client.example" },
     });
     expect(response.headers["access-control-allow-origin"]).toBe("https://client.example");
-    expect(response.headers["access-control-expose-headers"]).toContain("Link");
+    const exposedHeaders = String(response.headers["access-control-expose-headers"])
+      .split(",")
+      .map((header) => header.trim().toLowerCase());
+    expect(exposedHeaders).toEqual(
+      expect.arrayContaining(["link", "location", "x-request-id", "retry-after", "x-ratelimit-reset"]),
+    );
   });
 
   it.each(["/.env", "/AGENTS.md", "/package.json", "/app/src/app.ts", "/llms.txt/extra"])(

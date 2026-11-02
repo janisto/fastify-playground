@@ -1,9 +1,12 @@
 autoInstallPeers: false
 strictPeerDependencies: true
-nodeVersion: 24.22.1
+nodeVersion: 26.13.0
 engineStrict: true
 strictDepBuilds: true
 minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  # Node 26 typings require the upstream Transferable fix.
+  - thread-stream@4.2.1
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
 trustLockfile: false
@@ -11,6 +14,6 @@ trustPolicy: no-downgrade
 blockExoticSubdeps: true
 
 allowBuilds:
-  '@firebase/util': true
+  "@firebase/util": true
   esbuild: true
   protobufjs: false

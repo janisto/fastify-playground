@@ -96,9 +96,15 @@ Run `just container-build` when package installation, build output, runtime star
 This example is not deployed; GCP is a possible future target. Keep deployment
 manual and project-agnostic. Pushes, PRs, and merges must not deploy it.
 
+- Do not add or enable extra workflows, jobs, automated tasks, or scheduled
+  triggers without explicit user permission. Modernization, security work, and
+  consistency requests do not authorize extra automation. This repository
+  showcases conventions; minimize notifications and ongoing maintainer work.
 - Keep Dependabot security alerts and automated security updates disabled.
-  Preserve scheduled version updates and native audits; do not add replacement
-  alert bots or repeatedly triage unchanged upstream constraints.
+  Preserve quarterly Dependabot version updates and native audits; do not add
+  replacement alert bots or repeatedly triage unchanged upstream constraints.
+  Do not add GitHub Actions schedules or increase update frequency without
+  explicit user permission.
 - Keep auto-merge limited to verified Dependabot minor/patch updates behind required checks. Handle old excluded-tool
   PRs once; do not duplicate Dependabot ignore rules with package filters, enablement triggers, state queries, or
   revocation steps.
@@ -119,9 +125,10 @@ manual and project-agnostic. Pushes, PRs, and merges must not deploy it.
 - `plans/`: durable implementation and migration logs.
 
 Support only the latest Node.js LTS line and latest stable TypeScript. The current
-baseline is Node.js 24; `.node-version` and `app/package.json` own exact runtime
-and package-manager pins. Use Corepack pnpm; do not use npm, Yarn, or another
-lockfile. Keep `@types/node` on the runtime major and update both together.
+baseline is Node.js 26; `.node-version` and `app/package.json` own exact runtime
+and package-manager pins. Bootstrap Corepack as documented in `README.md`,
+then use Corepack pnpm for application dependencies; do not use npm, Yarn, or
+another lockfile for them. Keep `@types/node` on the runtime major and update both together.
 Automatic peer installation is disabled: declare every used peer dependency.
 Preserve exact runtime compatibility, strict peers, the one-day quarantine, no
 trust downgrades, dependency build review, and no exotic subdependencies. Keep
