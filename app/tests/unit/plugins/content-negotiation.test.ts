@@ -136,6 +136,8 @@ describe("Content negotiation plugin", () => {
   it.each([
     ["application/json;charset=utf-8;q=0, application/json;q=1", "application/json"],
     ["application/json;q=0, application/json;charset=utf-8;q=1", "application/json; charset=utf-8"],
+    ["application/json;q=1;charset=utf-8", "application/json; charset=utf-8"],
+    ["application/json;q=0;charset=utf-8, application/json;q=1", "application/json"],
   ])("emits the exact selected JSON form for %s", async (accept, expected) => {
     const fastify = await buildServer();
     fastify.get(
@@ -151,22 +153,25 @@ describe("Content negotiation plugin", () => {
     await fastify.close();
   });
 
-  it("returns 406 before parsing the body or calling the handler", async () => {
-    const fastify = await buildServer();
-    const handler = vi.fn(async () => ({ message: "created" }));
-    fastify.post("/test", { schema: { produces: API_MEDIA_TYPES, response: { 201: { type: "object" } } } }, handler);
+  it.each(["text/html", "application/json;q=1;charset=iso-8859-1", "application/cbor;q=1;charset=utf-8"])(
+    "returns 406 for %s before parsing the body or calling the handler",
+    async (accept) => {
+      const fastify = await buildServer();
+      const handler = vi.fn(async () => ({ message: "created" }));
+      fastify.post("/test", { schema: { produces: API_MEDIA_TYPES, response: { 201: { type: "object" } } } }, handler);
 
-    const response = await fastify.inject({
-      method: "POST",
-      url: "/test",
-      headers: { accept: "text/html", "content-type": "application/cbor" },
-      payload: Buffer.from(cborEncode({ broken: true })).subarray(0, 1),
-    });
+      const response = await fastify.inject({
+        method: "POST",
+        url: "/test",
+        headers: { accept, "content-type": "application/cbor" },
+        payload: Buffer.from(cborEncode({ broken: true })).subarray(0, 1),
+      });
 
-    expect(response.statusCode).toBe(406);
-    expect(handler).not.toHaveBeenCalled();
-    await fastify.close();
-  });
+      expect(response.statusCode).toBe(406);
+      expect(handler).not.toHaveBeenCalled();
+      await fastify.close();
+    },
+  );
 
   it("strictly negotiates a JSON Schema representation", async () => {
     const fastify = await buildServer();

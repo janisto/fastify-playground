@@ -81,7 +81,7 @@ Use OpenAPI for complete schemas and the exact operation IDs. GitHub projections
 
 ## Requests and representations
 
-- Application successes with a body default to `application/json`. To request binary output, explicitly prefer `Accept: application/cbor`. Quality weights and exclusions apply; ties and wildcards favor JSON. An unsupported success representation returns `406 not_acceptable` before operation work. DELETE's empty `204` ignores `Accept`.
+- Application successes with a body default to `application/json`. To request binary output, explicitly prefer `Accept: application/cbor`. Quality weights and exclusions apply; ties and wildcards favor JSON. Media parameters are matched before and after `q`; unsupported charsets, profiles, or other parameters do not match. An unsupported success representation returns `406 not_acceptable` before operation work. DELETE's empty `204` ignores `Accept`.
 - Body-bearing operations are only greeting POST, profile POST, and profile PATCH. Send exactly one `Content-Type: application/json` (optionally `charset=utf-8`) or parameterless `application/cbor`. Omit `Content-Encoding` or use a single `identity` value. Exactly 1,000,000 content bytes are allowed; the next byte returns `413 payload_too_large`.
 - JSON and CBOR use the same domain member names and shapes. Reject duplicate members, malformed content, unknown request fields, and non-finite values. A CBOR request contains exactly one item.
 - Domain properties use exact lower camel case, including `firstName` and `marketingOptIn`. Money uses integer `amountMinor` in USD cents, not binary floating point. Timestamps use UTC RFC 3339 strings with exactly millisecond precision and `Z`.

@@ -174,19 +174,31 @@ describe("public API consumer discovery", () => {
     if (status === 405 && url.includes("api-catalog")) expect(response.headers.allow).toContain("HEAD");
   });
 
-  it.each(["/.well-known/api-catalog?unknown=1", "/.well-known/api-catalog"])(
-    "never emits a HEAD error body for %s",
-    async (url) => {
-      const response = await app.inject({ method: "HEAD", url, headers: { accept: "application/cbor" } });
-      expect(response.statusCode).toBe(url.includes("?") ? 400 : 406);
-      expect(response.headers["content-type"]).toContain("application/problem+json");
-      expect(response.rawPayload.byteLength).toBe(0);
+  it.each([
+    ["/.well-known/api-catalog?unknown=1", "application/cbor", 400],
+    ["/.well-known/api-catalog", "application/cbor", 406],
+    ["/.well-known/api-catalog", 'application/linkset+json;q=1;profile="https://invalid.example"', 406],
+  ] as const)(
+    "returns corresponding GET error metadata without a HEAD body for %s with %s",
+    async (url, accept, status) => {
+      const get = await app.inject({ method: "GET", url, headers: { accept } });
+      const head = await app.inject({ method: "HEAD", url, headers: { accept } });
+      expect(get.statusCode).toBe(status);
+      expect(head.statusCode).toBe(status);
+      expect(head.headers["content-type"]).toContain("application/problem+json");
+      expect(head.headers["content-length"]).toBe(String(get.rawPayload.byteLength));
+      expect(head.rawPayload.byteLength).toBe(0);
     },
   );
 
   it("matches the catalog profile and rejects unsupported aliases and parameters", async () => {
     await Promise.all(
-      ["application/linkset+json", CATALOG_TYPE, "*/*"].map(async (accept) => {
+      [
+        "application/linkset+json",
+        CATALOG_TYPE,
+        'application/linkset+json;q=1;profile="https://www.rfc-editor.org/info/rfc9727"',
+        "*/*",
+      ].map(async (accept) => {
         const response = await app.inject({ method: "GET", url: "/.well-known/api-catalog", headers: { accept } });
         expect(response.statusCode).toBe(200);
         expect(response.headers["content-type"]).toBe(CATALOG_TYPE);
@@ -196,6 +208,9 @@ describe("public API consumer discovery", () => {
       [
         "application/json",
         'application/linkset+json; profile="https://invalid.example"',
+        'application/linkset+json;q=1;profile="https://invalid.example"',
+        'application/linkset+json;q=0;profile="https://www.rfc-editor.org/info/rfc9727", */*;q=1',
+        "application/linkset+json;q=1;unknown=ignored",
         "application/linkset+json;q=0",
         "text/html",
       ].map(async (accept) => {

@@ -138,10 +138,6 @@ function parseParameters(
       qualitySeen = true;
       continue;
     }
-    if (qualitySeen) {
-      if (separator >= 0 && decodeParameterValue(rawValue) === null) return null;
-      continue;
-    }
 
     const value = separator <= 0 ? null : decodeParameterValue(rawValue);
     const expected = offered.get(name);
