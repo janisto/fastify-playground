@@ -239,6 +239,45 @@ describe("GCP current-principal profile", () => {
     await app.close();
   });
 
+  it.each([
+    ["POST", "application/json;charset=iso-8859-1;q=1"],
+    ["PATCH", "application/json;charset=iso-8859-1;q=1"],
+    ["POST", "application/json;q=1;charset=iso-8859-1"],
+    ["PATCH", "application/json;q=1;charset=iso-8859-1"],
+    ["POST", "application/json;q=1;profile=unsupported"],
+    ["PATCH", "application/json;q=1;profile=unsupported"],
+    ["POST", "application/cbor;q=1;charset=utf-8"],
+    ["PATCH", "application/cbor;q=1;charset=utf-8"],
+  ] as const)("rejects %s with %s before profile authentication or persistence", async (method, accept) => {
+    const repository = new DeterministicProfileRepository();
+    if (method === "PATCH") repository.records.set("principal", storedProfile("principal"));
+    const before = clone([...repository.records]);
+    const { buildApp } = await import("../../src/app.js");
+    const app = await buildApp({ profileRepository: repository });
+    try {
+      const response = await app.inject({
+        method,
+        url: "/v1/profile",
+        headers: { authorization: "Bearer principal", "content-type": "application/json", accept },
+        payload: JSON.stringify(method === "POST" ? CREATE_BODY : { marketingOptIn: true }),
+      });
+      expect(response.statusCode).toBe(406);
+      expect(response.headers["content-type"]).toBe("application/problem+json");
+      expect(response.json()).toEqual({
+        title: "Not Acceptable",
+        status: 406,
+        detail: "No acceptable response representation is available",
+        code: "not_acceptable",
+      });
+      expect(firebaseAuth.verifyIdToken).not.toHaveBeenCalled();
+      expect(repository.calls).toBe(0);
+      expect(repository.committedWrites).toBe(0);
+      expect([...repository.records]).toEqual(before);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("rejects authentication, query, and complete-body failures before persistence", async () => {
     const repository = new DeterministicProfileRepository();
     const { buildApp } = await import("../../src/app.js");
