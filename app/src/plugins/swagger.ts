@@ -201,6 +201,7 @@ function alignOperation(operation: OpenAPIV3_1.OperationObject): void {
       ...success.headers,
       Link: {
         description: "RFC 8288 response-schema, api-catalog, and OpenAPI service-desc links.",
+        required: true,
         schema: { type: "string" },
       },
     };

@@ -152,7 +152,11 @@ describe("public API consumer discovery", () => {
       );
       const document = await app.inject({ method: "GET", url: "/openapi.json" });
       expect(document.json()).toMatchObject({
-        paths: { "/health": { get: { responses: { "200": { headers: { Link: { schema: { type: "string" } } } } } } } },
+        paths: {
+          "/health": {
+            get: { responses: { "200": { headers: { Link: { required: true, schema: { type: "string" } } } } } },
+          },
+        },
       });
     },
   );
